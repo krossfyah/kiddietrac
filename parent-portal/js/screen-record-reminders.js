@@ -42,7 +42,7 @@
       + row('Lesson plan', 'A plan exists for the educator\'s room or centre this week.', chk('rr-lessons', s.check_lessons))
       + row('Menu', 'This week\'s menu is written and published.', chk('rr-menu', s.check_menu))
       + '<div style="font-size:13px;font-weight:800;color:#0F172A;margin:16px 0 2px;">Copies and escalation</div>'
-      + row('Copy the director and agency admins', 'They are on the same email (CC).', chk('rr-cc', s.cc_managers))
+      + row('Copy the people chosen for escalated reminders', 'They are on the same email (CC). Choose who in Settings › Notifications › Escalated daily records.', chk('rr-cc', s.cc_managers))
       + row('Escalate after', 'Days with incomplete records within the window. The email then says it has been escalated under your documentation policy.', num('rr-esc', s.escalate_after) + ' days in ' + num('rr-win', s.window_days, 90) + ' days')
       + (ed ? '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="rr-save" class="kt-btn kt-btn-primary" data-kt-iconized="1">Save</button><span id="rr-msg" style="font-size:13px;"></span></div>'
             : '<div style="font-size:12.5px;color:#64748B;margin-top:12px;">Only agency administrators can change these settings.</div>')

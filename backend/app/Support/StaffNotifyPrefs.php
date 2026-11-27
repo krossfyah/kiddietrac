@@ -60,6 +60,9 @@ final class StaffNotifyPrefs
             ['cold_reach'], ['push'], ['sales_rep', 'platform_admin']],
         'staff_hr' => ['Team HR reminders', 'Your team\'s overdue onboarding tasks and courses, reviews to write or sign, and new job applicants (KiddieTrac HR). Your own HR reminders always reach you.',
             ['hr'], ['push'], self::MGMT],
+        // Escalated daily records (2026-11-26, App\Support\RecordEscalation): the copy managers get. The educator's own reminder always reaches them.
+        'staff_records' => ['Escalated daily records', 'An educator\'s daily records reminder was escalated: a copy of the email, and the bell and phone notification if your agency chose them. Your own reminders always reach you.',
+            ['records_escalated'], ['push', 'email'], ['agency_admin', 'centre_director', 'auditor', 'platform_admin']],
         // Feed only (StaffSubmissionsFeed, 2026-11-26): no bell type of its own; the switch hides these items from the bell.
         'staff_submissions' => ['Staff submissions', 'In the bell: drills, hazards, medication doses, field trips, report cards sent for approval, shared notes, signed forms, policies acknowledged, certificates uploaded and HR tasks your team completes.',
             [], ['push'], self::MGMT],

@@ -9,7 +9,9 @@ use App\Support\Audience;
 use App\Support\Closures;
 use App\Support\Live;
 use App\Support\Notify;
+use App\Support\RecordEscalation;
 use App\Support\RecordReminders;
+use App\Support\StaffNotifyPrefs;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -48,6 +50,7 @@ final class RecordRemindCommand extends Command
             $cfg = RecordReminders::settings((int) $a->id);
             if (! $cfg['enabled']) continue;
             if (\App\Support\Suppression::isAgency((int) $a->id)) continue;
+            $esc = RecordEscalation::settings((int) $a->id);   // who is copied / told when escalated
             $tz = $a->timezone ?: 'America/Toronto';
             $date = $this->option('date') ? Carbon::parse((string) $this->option('date'), $tz) : Carbon::now($tz);
             if (! $this->option('force') && ! $this->option('date')) {
@@ -83,18 +86,24 @@ final class RecordRemindCommand extends Command
                 $hist = RecordReminders::history((int) $ed->id, $cid, $tz, $date, $cfg, $weekCache);
                 [$subject, $html, $escalated] = RecordReminders::email((int) $a->id, $ed, $place, $date, $ev, $hist, $cfg, (string) $a->name);
 
+                /* WHO IS COPIED (2026-11-26, App\Support\RecordEscalation). It was every role row (agency_admin on the
+                   agency + centre_director on the centre), so the super admin holding agency_admin for access got every
+                   iLearn copy. Now: the agency's chosen roles and people, never a platform admin / integration account /
+                   reseller grant. Email on every reminder (as before); the bell and phone only once it is escalated.
+                   Each person can switch it off for themselves (StaffNotifyPrefs topic staff_records). */
                 $cc = [];
-                if ($cfg['cc_managers']) {
-                    $cc = Audience::excludeService(Audience::excludeOff(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-                        ->where('ra.active', true)->whereNull('u.deleted_at')
-                        ->where(fn ($w) => $w->where(fn ($x) => $x->where('ra.centre_id', $cid)->where('ra.role', 'centre_director'))
-                            ->orWhere(fn ($x) => $x->where('ra.agency_id', $a->id)->where('ra.role', 'agency_admin')))))
-                        ->where('u.id', '!=', $ed->id)->pluck('u.email')
+                $tell = $cfg['cc_managers'] ? RecordEscalation::recipients((int) $a->id, $cid, (int) $ed->id, $esc) : [];
+                if ($tell && $esc['channels']['email']) {
+                    $cc = collect($tell)->pluck('email')
                         ->map(fn ($m) => mb_strtolower(trim((string) $m)))->filter(fn ($m) => filter_var($m, FILTER_VALIDATE_EMAIL))
                         ->reject(fn ($m) => $m === mb_strtolower(trim((string) $ed->email)))->unique()->values()->all();
+                    $cc = StaffNotifyPrefs::filterEmails($cc, 'staff_records', (int) $a->id);
                 }
-                $this->line(sprintf('  %s %s %s (%s): %s | %d day(s) in %d | cc %d', $escalated ? 'ESC ' : 'send', $ed->first_name, $ed->last_name, $place,
-                    implode(', ', array_keys($ev['missing'])), $hist['days'], $cfg['window_days'], count($cc)));
+                $bellTo = $escalated && $esc['channels']['bell'] ? $tell : [];
+                $this->line(sprintf('  %s %s %s (%s): %s | %d day(s) in %d | cc %d%s', $escalated ? 'ESC ' : 'send', $ed->first_name, $ed->last_name, $place,
+                    implode(', ', array_keys($ev['missing'])), $hist['days'], $cfg['window_days'], count($cc),
+                    $cfg['cc_managers'] ? ' [' . (implode(', ', array_map(fn ($p) => '#' . $p->id . ' ' . $p->first_name, $tell)) ?: 'NOBODY to copy') . ']'
+                        . ($bellTo ? ' bell' . ($esc['channels']['push'] ? '+push' : '') . ' ' . count($bellTo) : '') : ''));
                 if ($dry) continue;
 
                 $emailed = false;
@@ -111,6 +120,14 @@ final class RecordRemindCommand extends Command
                     'title' => ($escalated ? 'Escalated: ' : '') . 'Daily records for ' . $date->format('D j M'),
                     'body' => 'Not completed: ' . implode(', ', array_map(fn ($m) => $m['label'], $ev['missing'])) . '. ' . $hist['days'] . ' day(s) in the last ' . $cfg['window_days'] . '.',
                     'data' => json_encode(['link' => '#care-log'])]);
+                foreach ($bellTo as $p) {
+                    Notify::write(['agency_id' => (int) $a->id, 'user_id' => (int) $p->id, 'type' => 'records_escalated',
+                        'title' => 'Escalated: daily records for ' . ($ed->first_name ?: 'an educator') . ($place ? ' (' . $place . ')' : ''),
+                        'body' => 'Not completed on ' . $date->format('D j M') . ': ' . implode(', ', array_map(fn ($m) => $m['label'], $ev['missing'])) . '. '
+                            . $hist['days'] . ' day(s) in the last ' . $cfg['window_days'] . '.',
+                        'data' => json_encode(['link' => '#educator-rooms?tab=records', 'educator_id' => (int) $ed->id, 'centre_id' => $cid]),
+                        'push' => (bool) $esc['channels']['push']]);
+                }
                 $this->log($a->id, $cid, $ed->id, $date, array_keys($ev['missing']), $hist['days'], $escalated, $emailed);
             }
         }

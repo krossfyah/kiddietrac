@@ -73,6 +73,7 @@
       { key: 'summaries', label: '📨 Daily summaries', paint: section(paintSummaryTiming) },
       { key: 'moments', label: '🌈 Instant moments', paint: section(paintMoments) },
       { key: 'staffnotify', label: '📲 Required for staff', paint: section(paintStaffNotify) },
+      { key: 'escalation', label: '🚩 Escalated daily records', paint: section(paintEscalation) },
       { key: 'topics', label: '💉 Immunizations & drills', paint: section(paintTopics) },
       { key: 'certs', label: '🎓 Staff certifications', paint: section(paintCerts) },
       // Sleep checks moved to Settings → Room Controls → Sleep checks (2026-10-15).
@@ -254,6 +255,87 @@
       Api.post('/admin/staff-notify-settings', { required: body.querySelector('#sn-on').checked, roles: picked })
         .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; readiness(); })
         .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Escalated daily records: who gets them (2026-11-26, Anthony: "escalated daily records - super admin should not
+     be receiving this from ilearn - is there a setting you can wire up to set who gets this"). App\\Support\\RecordEscalation,
+     sent by records:remind. Super admins, integration accounts and reseller access never receive it, even if chosen.
+     Saving with nobody, or with no way to tell them, is refused by the server. ── */
+  async function paintEscalation(body) {
+    var res;
+    try { res = await Api.get('/admin/record-escalation'); } catch (e) { return; }
+    var s = res.settings || {}, roles = res.roles || {}, chans = res.channels || {}, staff = res.staff || [];
+    var picked = {};
+    (s.user_ids || []).forEach(function (id) { picked[id] = true; });
+    var lab = function (attrs, label, on) {
+      return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;"><input type="checkbox" ' + attrs
+        + (on ? ' checked' : '') + '> ' + esc(label) + '</label>';
+    };
+    var block = function (title, hint, inner) {
+      return '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;"><div style="font-size:14px;color:#334155;font-weight:600;">' + title + '</div>'
+        + (hint ? '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + hint + '</div>' : '') + inner + '</div>';
+    };
+    var people = staff.map(function (p) {
+      return '<label data-esc-person-row="' + esc((p.name + ' ' + (p.roles || []).join(' ')).toLowerCase()) + '" style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;color:#334155;">'
+        + '<input type="checkbox" data-esc-person="' + p.id + '"' + (picked[p.id] ? ' checked' : '') + '> <span style="min-width:0;flex:1;">' + esc(p.name)
+        + ' <span style="font-size:11.5px;color:#64748B;">' + esc((p.roles || []).join(', ')) + '</span></span></label>';
+    }).join('');
+    body.innerHTML = '<div class="kt-card" style="max-width:760px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🚩 Escalated daily records: who gets them</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">When an educator\'s daily records reminder is escalated '
+      + '(Settings › Room Controls › Daily records), the people chosen here are told. Directors only hear about educators at their own centre. '
+      + 'A person picked by name hears only about the centres they work at, unless they are an agency admin. KiddieTrac super admins, integration accounts '
+      + 'and reseller access never receive it. Each person can still switch it off for themselves in Settings › Notifications › Notify me about.</div>'
+      + block('Roles', '', '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;">' + Object.keys(roles).map(function (r) {
+          return lab('data-esc-role="' + esc(r) + '"', roles[r], (s.roles || []).indexOf(r) >= 0);
+        }).join('') + '</div>')
+      + block('These people', 'Only your agency\'s own staff are listed.',
+          '<input id="esc-find" type="search" placeholder="Search staff" style="margin-top:10px;width:100%;max-width:320px;height:30px;padding:4px 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">'
+          + '<div id="esc-people" style="margin-top:8px;max-height:220px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:8px;padding:4px 8px;">'
+          + (people || '<div style="font-size:13px;color:#64748B;padding:6px 0;">No staff yet.</div>') + '</div>')
+      + block('How they are told', 'Email copies go on every daily records reminder. The bell and phone notification come only once a reminder is escalated. A phone notification also adds the bell.',
+          '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;">' + Object.keys(chans).map(function (c) {
+            return lab('data-esc-ch="' + esc(c) + '"', chans[c], !!(s.channels || {})[c]);
+          }).join('') + '</div>')
+      + (res.copies_on === false ? '<div style="margin-top:10px;font-size:12.5px;color:#B45309;">Copies are switched off in Room Controls › Daily records, so nobody is copied until "Copy the people chosen for escalated reminders" is ticked there.</div>' : '')
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="esc-save" class="kt-btn kt-btn-primary">Save</button><span id="esc-msg" style="font-size:13px;"></span></div>'
+      + '<div style="margin-top:22px;font-size:14px;font-weight:800;color:#0F172A;">Who this reaches now</div>'
+      + '<div id="esc-preview" style="margin-top:8px;"></div></div>';
+
+    function paintPreview(list) {
+      var el = body.querySelector('#esc-preview');
+      el.innerHTML = (list || []).length ? (list || []).map(function (c) {
+        return '<div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #F1F5F9;font-size:13px;">'
+          + '<div style="font-weight:700;color:#0F172A;flex:0 0 220px;min-width:0;">' + esc(c.centre) + '</div>'
+          + '<div style="color:' + (c.people.length ? '#334155' : '#B91C1C') + ';flex:1 1 240px;">' + (c.people.length ? esc(c.people.join(', ')) : 'Nobody at this centre yet.') + '</div></div>';
+      }).join('') : '<div style="font-size:13px;color:#64748B;">No open centres.</div>';
+    }
+    paintPreview(res.preview);
+
+    body.querySelector('#esc-find').addEventListener('input', function () {
+      var q = this.value.trim().toLowerCase();
+      [].forEach.call(body.querySelectorAll('[data-esc-person-row]'), function (r) {
+        r.style.display = !q || r.getAttribute('data-esc-person-row').indexOf(q) >= 0 ? '' : 'none';
+      });
+    });
+    var bell = body.querySelector('[data-esc-ch="bell"]'), push = body.querySelector('[data-esc-ch="push"]');
+    if (bell && push) {
+      push.addEventListener('change', function () { if (push.checked) bell.checked = true; });
+      bell.addEventListener('change', function () { if (!bell.checked) push.checked = false; });
+    }
+    body.querySelector('#esc-save').addEventListener('click', function () {
+      var msg = body.querySelector('#esc-msg'); msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      var ch = {};
+      [].forEach.call(body.querySelectorAll('[data-esc-ch]'), function (c) { ch[c.getAttribute('data-esc-ch')] = c.checked; });
+      Api.post('/admin/record-escalation', {
+        roles: [].map.call(body.querySelectorAll('[data-esc-role]:checked'), function (c) { return c.getAttribute('data-esc-role'); }),
+        user_ids: [].map.call(body.querySelectorAll('[data-esc-person]:checked'), function (c) { return +c.getAttribute('data-esc-person'); }),
+        channels: ch,
+      }).then(function (r) {
+        msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved';
+        Api.get('/admin/record-escalation').then(function (x) { paintPreview(x.preview); }).catch(function () {});
+      }).catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
     });
   }
 

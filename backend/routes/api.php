@@ -2774,6 +2774,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Immunization + drill notices per role (2026-11-09, App\Support\StaffTopicNotify): admins only, checked in the controller.
         Route::get ('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsShow']);
         Route::post('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsSave'])->middleware('throttle:30,1,r-topic-notifications');
+        // Escalated daily records: who gets them (2026-11-26, App\Support\RecordEscalation): admins only, checked in the controller.
+        Route::get ('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationShow']);
+        Route::post('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationSave'])->middleware('throttle:30,1,r-record-escalation');
         // Settings -> Notifications -> Staff certifications (2026-11-03): expiry alert steps, who is told, email.
         Route::get ('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'show']);
         Route::post('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'save'])->middleware('throttle:30,1,r-cert-alerts');

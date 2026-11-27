@@ -68,6 +68,18 @@ Once that count reaches your **Escalate after** number, the email changes:
 
 Before that, the email tells the educator how many such days lead to escalation.
 
+## Who is copied
+
+Agency admins choose who is copied in **Settings → Notifications → 🚩 Escalated daily records**.
+
+- **Roles:** agency admins, the directors of the educator's own centre, and auditors. The default is agency admins plus the centre's directors.
+- **These people:** pick named staff from your agency. A person picked by name only hears about centres they work at, unless they are an agency admin.
+- **How they are told:** email (a copy on every reminder), the bell in KiddieTrac and a phone notification (only once a reminder is escalated).
+
+KiddieTrac super admins, integration accounts and reseller access are never copied, even if they hold an admin role in your agency. You cannot save the setting with nobody chosen. **Who this reaches now** shows, centre by centre, exactly who would be told. Each person can still switch it off for themselves in **Settings → Notifications → Notify me about → Escalated daily records**.
+
+[[open: #notification-settings?tab=escalation | Choose who gets escalated reminders]]
+
 ## What the educator receives
 
 - An email from your agency, with the director and agency admins on copy (if you ticked

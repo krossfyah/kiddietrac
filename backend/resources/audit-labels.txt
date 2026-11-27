@@ -1190,6 +1190,7 @@ post demo/companion | Opened the parent's phone beside a website demo staff phon
 post admin/moment-notify-settings | Changed instant moment notifications to families
 post admin/staff-notify-settings | Changed required app notifications for staff
 post admin/topic-notifications | Changed who hears about immunizations and drills
+post admin/record-escalation | Changed who gets escalated daily records
 post admin/notify-readiness/instructions | Sent notification setup instructions to staff
 post educator-points/thanks/note | Drafted the letter for a thank-you award
 post me/content-reports | Reported a message

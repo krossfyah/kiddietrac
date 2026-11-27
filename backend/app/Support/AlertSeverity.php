@@ -27,7 +27,7 @@ final class AlertSeverity
 
     private const WARNING_TYPES = [
         'headcount_due', 'clock_reminder', 'checkin_reminder', 'children_still_in', 'late_pickup',
-        'walk_quiet', 'walk_auto_closed', 'countersign_reminder', 'records_reminder', 'immunization_reminder',
+        'walk_quiet', 'walk_auto_closed', 'countersign_reminder', 'records_reminder', 'records_escalated', 'immunization_reminder',
         'time_off_reminder', 'bio_reminder', 'compliance', 'pfcc_copay_unpaid', 'incident', 'medication_due',
     ];
 

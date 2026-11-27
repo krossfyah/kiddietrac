@@ -46,6 +46,39 @@ class AgencySignatories
         return $userId > 0 && ! in_array($userId, self::outsiderIds(), true);
     }
 
+    /**
+     * The agency's OWN staff, for "pick a person" lists (2026-11-26, escalated daily records):
+     * [{id, name, roles: [labels]}]. Active role rows on the agency (agency_admin, auditor) or on its open centres
+     * (centre_director, educator, home_visitor); never an outsider, a reseller grant, a service login or a
+     * switched-off / deleted account.
+     */
+    public static function ownStaff(int $agencyId): array
+    {
+        if ($agencyId <= 0) {
+            return [];
+        }
+        $centres = Live::centreIds($agencyId);
+        $out = self::outsiderIds();
+        $label = ['agency_admin' => 'Agency admin', 'auditor' => 'Auditor', 'centre_director' => 'Director', 'educator' => 'Educator', 'home_visitor' => 'Home visitor'];
+        $rows = Audience::excludeService(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', 1)->whereNull('ra.granted_by_reseller_id')
+            ->where('u.status', 'active')->whereNull('u.deleted_at')
+            ->when($out, fn ($w) => $w->whereNotIn('u.id', $out))
+            ->where(function ($w) use ($agencyId, $centres) {
+                $w->where(fn ($x) => $x->whereIn('ra.role', ['agency_admin', 'auditor'])->where('ra.agency_id', $agencyId))
+                  ->orWhere(fn ($x) => $x->whereIn('ra.role', ['centre_director', 'educator', 'home_visitor'])->whereIn('ra.centre_id', $centres ?: [0]));
+            }))
+            ->orderBy('u.first_name')->orderBy('u.last_name')->get(['u.id', 'u.first_name', 'u.last_name', 'ra.role']);
+        $people = [];
+        foreach ($rows as $r) {
+            $id = (int) $r->id;
+            $people[$id] = $people[$id] ?? ['id' => $id, 'name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')), 'roles' => []];
+            $l = $label[$r->role] ?? null;
+            if ($l && ! in_array($l, $people[$id]['roles'], true)) $people[$id]['roles'][] = $l;
+        }
+        return array_values($people);
+    }
+
     /** ['directors' => [full names], 'admins' => [full names]] - everyone, no cap. Someone who is both is listed once, as admin. */
     public static function forAgency(int $agencyId): array
     {

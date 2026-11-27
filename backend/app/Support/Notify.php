@@ -59,7 +59,7 @@ final class Notify
         'checkin' => 'checkin', 'checkin_reminder' => 'checkin', 'pickup_alarm' => 'checkin', 'attendance' => 'checkin', 'transfer' => 'checkin',
         'clock' => 'staff', 'clock_reminder' => 'staff', 'break_overrun' => 'staff', 'time_off' => 'staff', 'time_off_reminder' => 'staff',
         'schedule' => 'staff', 'award' => 'staff', 'educator_reward' => 'staff', 'bio_reminder' => 'staff',
-        'portal_tip' => 'staff', 'staff_notify_setup' => 'staff', 'records_reminder' => 'staff', 'compliance' => 'staff',
+        'portal_tip' => 'staff', 'staff_notify_setup' => 'staff', 'records_reminder' => 'staff', 'records_escalated' => 'staff', 'compliance' => 'staff',
         'report_card_request' => 'staff', 'report_card_reminder' => 'staff', 'report_card' => 'forms',
         'headcount_due' => 'headcount', 'headcount_strike' => 'headcount',
         'announcement' => 'announcement', 'closure' => 'announcement', 'menu' => 'announcement',

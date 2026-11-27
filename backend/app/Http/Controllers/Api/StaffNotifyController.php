@@ -126,6 +126,57 @@ final class StaffNotifyController extends Controller
         return response()->json(['ok' => true, 'settings' => $after]);
     }
 
+    /* Escalated daily records: who gets them (2026-11-26, App\Support\RecordEscalation). Admins only. */
+    public function escalationShow(Request $request): JsonResponse
+    {
+        abort_unless($this->isAdmin($request), 403, 'Only agency administrators can change this.');
+        $aid = $this->agencyId($request);
+        abort_unless($aid > 0, 404);
+        $s = \App\Support\RecordEscalation::settings($aid);
+        return response()->json(['settings' => $s, 'roles' => \App\Support\RecordEscalation::ROLES,
+            'channels' => \App\Support\RecordEscalation::CHANNELS, 'staff' => \App\Support\AgencySignatories::ownStaff($aid),
+            'preview' => $this->escalationPreview($aid, $s), 'copies_on' => (bool) \App\Support\RecordReminders::settings($aid)['cc_managers']]);
+    }
+
+    /** Centre by centre, exactly who an escalated reminder would reach today. */
+    private function escalationPreview(int $aid, array $s): array
+    {
+        $ids = \App\Support\Live::centreIds($aid);
+        $out = [];
+        foreach (DB::table('centres')->whereIn('id', $ids ?: [0])->orderBy('name')->get(['id', 'name']) as $c) {
+            $out[] = ['centre' => (string) $c->name, 'people' => array_values(array_map(fn ($p) => trim($p->first_name . ' ' . $p->last_name),
+                \App\Support\RecordEscalation::recipients($aid, (int) $c->id, 0, $s)))];
+        }
+        return $out;
+    }
+
+    public function escalationSave(Request $request): JsonResponse
+    {
+        abort_unless($this->isAdmin($request), 403, 'Only agency administrators can change this.');
+        $aid = $this->agencyId($request);
+        abort_unless($aid > 0, 404);
+        $data = $request->validate([
+            'roles' => 'present|array', 'roles.*' => 'string|in:' . implode(',', array_keys(\App\Support\RecordEscalation::ROLES)),
+            'user_ids' => 'present|array', 'user_ids.*' => 'integer',
+            'channels' => 'required|array', 'channels.email' => 'required|boolean', 'channels.bell' => 'required|boolean', 'channels.push' => 'required|boolean',
+        ]);
+        $before = \App\Support\RecordEscalation::settings($aid);
+        try {
+            $after = \App\Support\RecordEscalation::save($aid, $data);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => ['recipients' => [$e->getMessage()]]], 422);
+        }
+        try {
+            \App\Support\Audit::write([
+                'action' => 'settings.record_escalation_updated', 'agency_id' => $aid, 'user_id' => $request->user()->id,
+                'summary' => 'Changed who gets escalated daily records: ' . \App\Support\RecordEscalation::describe($aid, $before)
+                    . ' → ' . \App\Support\RecordEscalation::describe($aid, $after),
+                'payload' => json_encode(['before' => $before, 'after' => $after]),
+            ]);
+        } catch (\Throwable $e) {}
+        return response()->json(['ok' => true, 'settings' => $after, 'preview' => $this->escalationPreview($aid, $after)]);
+    }
+
     public function readiness(Request $request): JsonResponse
     {
         $aid = $this->agencyId($request);

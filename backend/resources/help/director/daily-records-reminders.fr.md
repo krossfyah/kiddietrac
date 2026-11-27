@@ -68,6 +68,18 @@ Dès que ce nombre atteint votre valeur **Escalader après**, le courriel change
 
 Avant cela, le courriel indique à l’éducateur combien de jours de ce type entraînent une escalade.
 
+## Qui est en copie
+
+Les administrateurs de l’agence choisissent qui est en copie dans **Paramètres → Notifications → 🚩 Registres quotidiens escaladés**.
+
+- **Rôles :** les administrateurs de l’agence, les directeurs du centre de l’éducateur et les auditeurs. Par défaut : les administrateurs de l’agence et les directeurs du centre.
+- **Ces personnes :** choisissez des membres nommés du personnel de votre agence. Une personne choisie par son nom n’est informée que pour les centres où elle travaille, sauf si elle est administratrice de l’agence.
+- **Comment ils sont informés :** courriel (une copie de chaque rappel), la cloche dans KiddieTrac et une notification sur le téléphone (seulement lorsqu’un rappel est escaladé).
+
+Les super-administrateurs de KiddieTrac, les comptes d’intégration et les accès de revendeurs ne sont jamais en copie, même s’ils ont un rôle d’administrateur dans votre agence. Le paramètre ne peut pas être enregistré sans personne. **Qui est informé maintenant** montre, centre par centre, exactement qui serait informé. Chaque personne peut toujours le désactiver pour elle-même dans **Paramètres → Notifications → Me prévenir pour → Registres quotidiens escaladés**.
+
+[[open: #notification-settings?tab=escalation | Choisir qui reçoit les rappels escaladés]]
+
 ## Ce que reçoit l’éducateur
 
 - Un courriel de votre agence, avec le directeur et les administrateurs de l’agence en copie (si vous

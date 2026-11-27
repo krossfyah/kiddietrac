@@ -66,7 +66,7 @@ final class NotifyAudience
         // staff: the job
         'clock' => 'staff', 'clock_reminder' => 'staff', 'time_off' => 'staff', 'time_off_reminder' => 'staff',
         'award' => 'staff', 'educator_reward' => 'staff', 'bio_reminder' => 'staff', 'staff_notify_setup' => 'staff',
-        'records_reminder' => 'staff', 'compliance' => 'staff', 'report_card_request' => 'staff',
+        'records_reminder' => 'staff', 'records_escalated' => 'staff', 'compliance' => 'staff', 'report_card_request' => 'staff',
         'report_card_reminder' => 'staff', 'headcount_due' => 'staff', 'headcount_strike' => 'staff',
         'ratio_breach' => 'staff', 'children_still_in' => 'staff', 'team_message' => 'staff', 'sms_reply' => 'staff',
         'voicemail' => 'staff', 'content_report' => 'staff', 'countersign_reminder' => 'staff', 'walk_quiet' => 'staff',
@@ -120,6 +120,7 @@ final class NotifyAudience
         'staff_clock' => 'staff', 'staff_absences' => 'staff', 'staff_countersign' => 'staff', 'staff_compliance' => 'staff',
         'staff_payments' => 'staff', 'staff_billing_copies' => 'staff', 'staff_pickup' => 'staff', 'staff_closures' => 'staff',
         'staff_schedule' => 'staff', 'staff_tips' => 'staff', 'staff_cold_reach' => 'staff', 'staff_tickets' => 'staff',
+        'staff_records' => 'staff',   // escalated daily records copies (RecordEscalation, 2026-11-26)
         'staff_submissions' => 'staff',   // StaffSubmissionsFeed: what the team submitted, in the admin bell (2026-11-26)
     ];
 

@@ -160,7 +160,7 @@ final class NotificationSounds
         'ManagedFormController' => 'forms', 'CountersignReminders' => 'forms', 'WithdrawalController' => 'forms',
         'ClockReminderCommand' => 'staff', 'HeadcountRemindCommand' => 'headcount', 'TimeOffReminders' => 'staff',
         'BioReminders' => 'staff', 'EducatorRewardsController' => 'staff', 'PortalTipsCommand' => 'staff',
-        'DashboardExtrasController' => 'staff',
+        'DashboardExtrasController' => 'staff', 'RecordRemindCommand' => 'staff',
     ];
 
     private static array $cache = [];

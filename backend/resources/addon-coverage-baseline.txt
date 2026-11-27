@@ -60,6 +60,7 @@ route admin/presence
 route admin/privacy-notice
 route admin/prospect-ndas
 route admin/quick-notify
+route admin/record-escalation
 route admin/record-reminders
 route admin/ref-prefix
 route admin/roles

@@ -68,6 +68,18 @@ Cuando ese conteo alcanza el número de **Escalar después de**, el correo cambi
 
 Antes de eso, el correo le dice al educador cuántos días de este tipo llevan al escalamiento.
 
+## Quién recibe copia
+
+Los administradores de la agencia eligen quién recibe copia en **Configuración → Notificaciones → 🚩 Registros diarios escalados**.
+
+- **Roles:** los administradores de la agencia, los directores del centro del educador y los auditores. De forma predeterminada: los administradores de la agencia y los directores del centro.
+- **Estas personas:** elija miembros del personal de su agencia por nombre. Una persona elegida por nombre solo recibe avisos de los centros donde trabaja, salvo que sea administradora de la agencia.
+- **Cómo se les avisa:** correo electrónico (una copia de cada recordatorio), la campana en KiddieTrac y una notificación en el teléfono (solo cuando un recordatorio se escala).
+
+Los superadministradores de KiddieTrac, las cuentas de integración y los accesos de revendedores nunca reciben copia, aunque tengan un rol de administrador en su agencia. No se puede guardar la configuración sin nadie elegido. **A quién llega ahora** muestra, centro por centro, exactamente a quién se avisaría. Cada persona puede desactivarlo para sí misma en **Configuración → Notificaciones → Avisarme sobre → Registros diarios escalados**.
+
+[[open: #notification-settings?tab=escalation | Elegir quién recibe los recordatorios escalados]]
+
 ## Qué recibe el educador
 
 - Un correo de su agencia, con el director y los administradores de la agencia en copia (si lo
