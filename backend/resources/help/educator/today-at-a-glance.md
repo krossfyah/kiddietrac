@@ -1,58 +1,82 @@
 ---
-title: Today at a glance — your day brief
+title: Your Home and Today screens
 category: Getting Started
 order: 3
 screens: home, today
 ---
 
-# Today at a glance — your day brief
+# Your Home and Today screens
 
-At the very top of your **Today** screen is a warm summary banner — **"Today at a glance"** — followed by a row of quick cards. It's designed to answer one question the moment you walk in: *what needs my attention right now?*
+Two screens run your day. **Home** (*My classroom*) is a set of tiles that open every part of KiddieTrac you use. **Today** is your room for the day: a short brief of what needs your attention, your ratio, your score card, and the children with their check-in buttons.
 
-## What the banner tells you
+[[open: #home | Open Home]]
+[[open: #today | Open Today]]
 
-The banner shows **your name** (or the provider/room you're looking at, with a switcher when you
-have more than one) and a headline that sums up the day, for example *"1 thing needs your attention today"* or *"You're all set — have a great day!"*. It's a gentle nudge, not a to-do avalanche.
+## Finding your way on a phone
 
-## The quick cards
+The bar at the bottom of the screen is always there:
 
-Below the banner, each card is a tappable shortcut. What you see depends on your day, but typically includes:
+| Button | What it opens |
+|---|---|
+| **Home** | Your tiles (*My classroom*) |
+| **Daily log** | Log meals, naps, diapers and activities |
+| **One-Tap** (raised, centre) | **Show the centre's code** for parents to scan, or **Scan a pickup pass** with the camera |
+| **Message Centre** | Messages with families and staff |
+| **Inbox** | Your notices and alerts |
 
-| Card | What it shows | Tap to… |
-|---|---|---|
-| **Attendance** | How many children are in, not in yet, or left | Jump to the roster |
-| **Lesson plan** | Whether this week's plan is set | Open lesson plans |
-| **Meals logged** | How many meals recorded today | Review the log |
-| **News** | Recent announcements | Read them |
-| **New enrolments** | Children in the pipeline | See who's joining |
+The ⚙️ gear at the top right opens your settings. On a computer, the menu on the left holds the same screens.
 
-Tapping a card takes you straight to that part of the app — so the brief doubles as a fast launcher for your morning.
+## Using Home
 
-## Your day score and the ratio
+1. Tap **Home** in the bottom bar.
+2. Under **Quick access**, tap a tile — for example **Today**, **My tasks**, **Child records**, **Observations**, **Drill log** or **Clock in/out**.
+3. To come back, tap **Home** again.
 
-Under the cards, the **day score** card shows how the day is going (moments, children,
-observations, time on the floor). The live **ratio card** sits on the right of it: green when
-you're within ratio, amber at the limit, red if the room goes over. It updates as children are
-checked in and out.
+**🏃 Sign out** is at the bottom of the Home screen.
 
-## How to use it
+## Starting your day on Today
 
-- **Start here every morning.** A five-second read tells you who's missing, whether the plan is ready, and what's outstanding.
-- **Clear the amber items.** Cards highlighting something to do (a missing lesson plan, children not checked in) are your first jobs.
-- **Don't obsess over it.** It's a helper, not a scoreboard. Green means you're in good shape.
+1. Tap the **Today** tile ("Rooms & children").
+2. Read the **☀️ Today at a glance** banner: your name, a headline such as *"1 thing needs your attention today"*, and the room picker if you have more than one room.
+3. Tap any card under the banner (for example **Attendance**, **Lesson plan** or **Meals logged**) to jump straight to that screen.
+4. Check the ratio card: green when you are within ratio, amber at the limit, red when the room is over.
 
-## Where the numbers come from
+Under **📊 Score card** you see how the day is going (moments, children, observations, time on the floor). **Forms today** lists the daily forms still owed.
 
-Everything in the brief is pulled live from what you and the room have logged — attendance from check-ins, meals from the care log, the lesson plan from this week's plan, and so on. So the more consistently you log through the day, the more useful (and accurate) tomorrow's brief will be.
+## Checking children in and out
 
-## On mobile and tablet
+Under **🧒 Children**, each child has a card. Use the filter at the top (**All**, **At Centre**, **Not arrived**, **Not at Centre**) to narrow the list.
 
-The brief sits right at the top on both phone and tablet, with the roster directly beneath it — so your whole morning routine is one screen, no scrolling required.
+1. When a child arrives, tap **✓ Check in** on their card.
+2. If the family says the child is not coming, tap **🏠 Absent** and pick the reason (**🤒 Unwell**, **🏖 Holiday**, **🩺 Appointment** or **📝 Other**).
+3. If the family says they will be late, tap **⏰ Late drop-off** and set the time — Safe Arrival waits until then.
+4. During the day, tap **➕ Log** on a child's card to log a meal, nap, diaper, activity or note.
+5. At pickup, tap **← Check out**. If the family will be late collecting, tap **⏰ Late pickup** first.
 
-## Common questions
+[[show: #today @ ✓ Check in | Show me]]
 
-**"My brief is empty or says everything's fine but I know a plan is missing."**
-The brief reflects what's in the system. If a plan exists but isn't showing, it may be set on the centre level or for a different week — check **Lesson plans**.
+> 💡 A child reported absent shows **✓ Check in anyway** — use it only if they arrived after all.
 
-**"Can I turn it off?"**
-It's a core part of the Today screen and stays put — but when everything's in order it simply says you're all set and stays out of your way.
+The list refreshes by itself every 30 seconds, so check-ins by parents (One-Tap) and other educators appear on their own.
+
+## Who can do what
+
+| Role | What they see |
+|---|---|
+| Educator | Home tiles, and Today for the rooms they are assigned to |
+| Centre director / agency admin | Their own Home launcher and the Daily Overview for the whole centre or agency |
+
+## FAQs and when something goes wrong
+
+??? Today says "No rooms assigned". | You are not assigned to a room yet. Ask your director to add you to your room.
+??? The brief says I'm all set, but I know something is missing. | The brief reflects what is in KiddieTrac. If a lesson plan exists for a different week or centre, it will not count — check **Lesson plans**.
+??? A tile I need is not on Home. | Some screens depend on your agency's plan or your province's rules. Ask your director if you need one.
+??? A check-in did not show. | Wait a few seconds (the list refreshes every 30 seconds) or open **Today** again. If it still is not there, check in again.
+??? It says "Could not load". | The connection dropped. Check your internet and open **Today** again.
+
+## Related screens
+
+[[open: #care-log | Daily log]]
+[[open: #headcounts | Headcounts]]
+[[open: #safe-arrival | Safe Arrival]]
+[[checking-children-in-and-out]]

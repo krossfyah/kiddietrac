@@ -1,28 +1,61 @@
 ---
 title: Signaler un danger
-category: Home visits
-order: 6
 ---
 
 # Signaler un danger
 
-Vous êtes souvent le premier à remarquer quelque chose de dangereux au domicile d’un prestataire ou dans un centre — une barrière brisée, une rampe d’escalier desserrée, une odeur de gaz, un déversement qui ne sèche pas. Signalez-le pour que la direction puisse s’en occuper et, au besoin, en informer les parents.
+Vous êtes souvent la première personne à voir quelque chose de dangereux chez une responsable ou dans un centre — une barrière brisée, un dégât d’eau qui ne sèche pas, une planche branlante, une odeur de gaz : signalez-le dans **🚧 Signaler un danger** pour que votre direction s’en occupe et, au besoin, avise les parents. Votre direction est avisée tout de suite.
 
-## Le signaler
+[[open: #hazards | Ouvrir Signaler un danger]]
 
-1. Ouvrez **Signaler un danger** depuis votre écran d’accueil ou votre menu.
-2. Choisissez le **centre** concerné.
-3. Indiquez en quoi consiste le danger, où il se trouve, et sélectionnez sa gravité (faible, moyenne ou élevée).
-4. Vérifiez la date et l’heure de la découverte.
-5. Ajoutez ce qui a déjà été fait (par exemple, « barrière attachée, enfants gardés à l’intérieur »).
-6. Appuyez sur **Signaler le danger**.
+## S’y rendre
 
-[[open: #hazards | Signaler un danger]]
+1. Sur un téléphone, touchez **Accueil** dans la barre du bas (Accueil · Mes rapports · New visit · Centre de messages · Boîte de réception).
+2. Touchez la tuile **🚧 Signaler un danger**.
+3. Sur un ordinateur, ouvrez **Dangers** dans le menu de gauche, sous **Opérations**.
 
-Les directeurs du centre et les administrateurs de votre agence reçoivent immédiatement un avis et un courriel. Sous le formulaire, vous voyez les dangers encore ouverts et ce qui a été fait à leur sujet.
+## Signaler un danger
 
-## Quand les parents sont informés
+> ⚠️ Éloignez d’abord les enfants du danger. Signalez-le dès qu’ils sont en sécurité.
 
-Si la direction envoie aux parents un avis au sujet d’un danger, ou leur indique qu’il est réglé, vous en recevez aussi une copie — un avis dans l’application et un courriel marqué **Copie**. C’est exactement ce que les parents lisent.
+1. Dans **Centre**, vérifiez le centre concerné.
+2. Dans **Hazard**, dites ce que c’est en quelques mots (par exemple « Planche de clôture brisée »).
+3. Dans **Où**, indiquez la salle ou l’endroit.
+4. Choisissez la **Gravité** : faible, moyenne ou élevée.
+5. Vérifiez **Identified** — la date et l’heure où il a été trouvé (c’est maintenant par défaut).
+6. Dans **De quoi s’agit-il**, décrivez ce que vous avez vu.
+7. Dans **Mesures prises**, dites ce que vous avez déjà fait (par exemple « zone bloquée avec du ruban, enfants rentrés »).
+8. Sous **Photo (optional)**, prenez une photo. Sur un téléphone, l’appareil photo s’ouvre.
+9. Touchez **Signaler un danger**. Le message vert **Danger signalé** indique que votre direction a été avisée.
 
-> **Astuce :** Assurez d’abord la sécurité des enfants, puis signalez. En cas de blessure, le prestataire ou la direction doit aussi remplir un rapport d’incident.
+[[show: #hazards @ Report hazard | Me montrer]]
+
+## Voir la suite
+
+Sous le formulaire, **Dangers ouverts dans votre centre** liste les dangers encore ouverts, avec leur gravité, l’endroit, le moment où ils ont été trouvés et les **Mesures prises** jusqu’ici. Touchez **📷 Photo** pour voir une photo. Quand tout est réglé, l’écran affiche *Nothing open. Thank you for keeping an eye out.*
+
+## Quand les parents sont avisés
+
+Si votre direction envoie aux parents un avis sur un danger, ou leur dit qu’il est réglé, vous en recevez une copie — un avis dans l’application et un courriel marqué **Copy**. C’est exactement ce que lisent les parents : vous savez quoi répondre si une responsable ou un parent pose la question. Les parents ne reçoivent jamais de texto au sujet des dangers.
+
+## Qui peut faire quoi
+
+| Rôle | Ce qu’il peut faire |
+|---|---|
+| Visiteuse ou visiteur à domicile | Signaler un danger et voir les dangers ouverts des centres visités |
+| Direction de centre | Voir tous les dangers de ses centres, les modifier, consigner les mesures, **Mark resolved** et envoyer l’avis aux parents |
+| Administration de l’agence | La même chose pour tous les centres |
+
+## FAQ et quand ça ne va pas
+
+??? Le message « Say what the hazard is. » s’affiche. | La case **Hazard** est vide. Écrivez quelques mots et touchez de nouveau **Signaler un danger**.
+??? Quelqu’un s’est blessé. | Signalez le danger, et demandez à la responsable ou à la direction de remplir un rapport d’incident pour la blessure.
+??? C’est urgent, comme une odeur de gaz? | Faites sortir tout le monde et appelez de l’aide d’abord (911 ou la compagnie de gaz). Signalez-le dans KiddieTrac une fois tout le monde en sécurité.
+??? La photo ne se téléverse pas. | Vérifiez votre connexion et essayez une photo plus petite. Vous pouvez envoyer le signalement sans photo et montrer le problème à votre direction en personne.
+??? Je l’ai signalé, mais ce n’est toujours pas réglé. | Votre direction le voit dans les dangers ouverts jusqu’à ce qu’il soit réglé. Parlez-lui en personne ou dans le **Centre de messages** si c’est encore dangereux.
+
+## Écrans liés
+
+[[open: #new-home-visit | Nouvelle visite]]
+[[open: #chat | Centre de messages]]
+[[filing-a-home-visit-report]]

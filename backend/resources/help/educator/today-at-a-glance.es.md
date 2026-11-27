@@ -1,53 +1,79 @@
 ---
-title: Hoy de un vistazo — el resumen de su día
-category: Getting Started
-order: 3
+title: Sus pantallas Inicio y Hoy
 ---
 
-# Hoy de un vistazo — el resumen de su día
+# Sus pantallas Inicio y Hoy
 
-En la parte superior de su pantalla **Hoy** hay un banner de resumen cálido — **«Hoy de un vistazo»** — seguido de una fila de tarjetas rápidas. Está pensado para responder una sola pregunta nada más llegar: *¿qué necesita mi atención ahora mismo?*
+Dos pantallas guían su día. **Inicio** (*Mi aula*) es un conjunto de mosaicos que abren todas las partes de KiddieTrac que usa. **Hoy** es su sala del día: un breve resumen de lo que necesita su atención, su proporción, su tarjeta de puntos y los niños con sus botones de entrada.
 
-## Qué le dice el banner
+[[open: #home | Abrir Inicio]]
+[[open: #today | Abrir Hoy]]
 
-El banner muestra **su nombre** (o el proveedor/sala que está viendo, con un selector cuando tiene más de uno) y un titular que resume el día, por ejemplo *«1 cosa necesita su atención hoy»* o *«¡Todo en orden — que tenga un gran día!»*. Es un empujoncito amable, no una avalancha de tareas.
+## Cómo moverse en el teléfono
 
-## Las tarjetas rápidas
+La barra de abajo siempre está ahí:
 
-Debajo del banner, cada tarjeta es un atajo táctil. Lo que ve depende de su día, pero normalmente incluye:
+| Botón | Qué abre |
+|---|---|
+| **Inicio** | Sus mosaicos (*Mi aula*) |
+| **Registro diario** | Anotar comidas, siestas, pañales y actividades |
+| **One-Tap** (elevado, al centro) | **Show the centre’s code** para que los padres lo escaneen, o **Scan a pickup pass** con la cámara |
+| **Centro de mensajes** | Mensajes con familias y personal |
+| **Bandeja de entrada** | Sus avisos y alertas |
 
-| Tarjeta | Qué muestra | Toque para… |
-|---|---|---|
-| **Asistencia** | Cuántos niños están, aún no han llegado o se han ido | Ir a la lista |
-| **Plan de clase** | Si el plan de esta semana está definido | Abrir los planes de clase |
-| **Comidas registradas** | Cuántas comidas se registraron hoy | Revisar el registro |
-| **Noticias** | Anuncios recientes | Leerlos |
-| **Nuevas matrículas** | Niños en proceso de inscripción | Ver quién se incorpora |
+El engranaje ⚙️ arriba a la derecha abre sus ajustes. En la computadora, el menú de la izquierda tiene las mismas pantallas.
 
-Tocar una tarjeta le lleva directamente a esa parte de la app, así que el resumen sirve también como lanzador rápido para su mañana.
+## Usar Inicio
 
-## La puntuación del día y la proporción
+1. Toque **Inicio** en la barra de abajo.
+2. Bajo **Acceso rápido**, toque un mosaico, por ejemplo **Hoy**, **Mis tareas**, **Expedientes de los niños**, **Observaciones**, **Registro de simulacros** o **Fichar**.
+3. Para volver, toque **Inicio** otra vez.
 
-Debajo de las tarjetas, la tarjeta de **puntuación del día** muestra cómo va la jornada (momentos, niños, observaciones, tiempo con los niños). La **tarjeta de proporción** en vivo está a su derecha: verde cuando está dentro de la proporción, ámbar en el límite, roja si la sala la supera. Se actualiza a medida que los niños entran y salen.
+**🏃 Cerrar sesión** está al final de la pantalla Inicio.
 
-## Cómo usarlo
+## Empezar el día en Hoy
 
-- **Empiece aquí cada mañana.** Una lectura de cinco segundos le dice quién falta, si el plan está listo y qué queda pendiente.
-- **Despeje los elementos ámbar.** Las tarjetas que destacan algo por hacer (un plan de clase que falta, niños sin registrar entrada) son sus primeras tareas.
-- **No se obsesione.** Es una ayuda, no un marcador. Verde significa que va bien.
+1. Toque el mosaico **Hoy** («Salas y niños»).
+2. Lea el encabezado **☀️ Hoy de un vistazo**: su nombre, un titular como *"1 cosa necesita su atención hoy"* y el selector de sala si tiene más de una.
+3. Toque cualquier tarjeta debajo del encabezado (por ejemplo **Asistencia**, **Plan de clase** o **Comidas registradas**) para ir directo a esa pantalla.
+4. Revise la tarjeta de proporción: verde si está dentro de la proporción, ámbar en el límite, roja si la sala se pasa.
 
-## De dónde salen los números
+En **📊 Score card** ve cómo va el día (momentos, niños, observaciones, tiempo en sala). **Formularios de hoy** muestra los formularios diarios pendientes.
 
-Todo en el resumen se obtiene en vivo de lo que usted y la sala han registrado: la asistencia de las entradas, las comidas del registro de cuidados, el plan de clase del plan de esta semana, etc. Así que cuanto más constante sea al registrar durante el día, más útil (y exacto) será el resumen de mañana.
+## Registrar entradas y salidas
 
-## En móvil y tableta
+Bajo **🧒 Niños**, cada niño tiene una tarjeta. Use el filtro de arriba (**Todos**, **En el centro**, **No ha llegado**, **No está en el centro**) para acortar la lista.
 
-El resumen está arriba del todo tanto en teléfono como en tableta, con la lista justo debajo, de modo que toda su rutina de la mañana cabe en una pantalla, sin desplazarse.
+1. Cuando llega un niño, toque **✓ Registrar entrada** en su tarjeta.
+2. Si la familia dice que no vendrá, toque **🏠 Ausente** y elija el motivo (**🤒 Unwell**, **🏖 Feriado**, **🩺 Cita** u **📝 Otro**).
+3. Si la familia dice que llegará tarde, toque **⏰ Late drop-off** y ponga la hora: Safe Arrival espera hasta entonces.
+4. Durante el día, toque **➕ Registrar** en la tarjeta de un niño para anotar una comida, siesta, pañal, actividad o nota.
+5. A la salida, toque **← Registrar salida**. Si la familia recogerá tarde, toque primero **⏰ Recogida tardía**.
 
-## Preguntas frecuentes
+[[show: #today @ ✓ Check in | Muéstreme]]
 
-**«Mi resumen está vacío o dice que todo está bien, pero sé que falta un plan.»**
-El resumen refleja lo que hay en el sistema. Si existe un plan pero no aparece, puede estar definido a nivel de centro o para otra semana: revise **Planes de clase**.
+> 💡 Un niño reportado ausente muestra **✓ Registrar entrada de todos modos**: úselo solo si al final llegó.
 
-**«¿Puedo desactivarlo?»**
-Es una parte central de la pantalla Hoy y se queda, pero cuando todo está en orden simplemente dice que todo está listo y no estorba.
+La lista se actualiza sola cada 30 segundos, así que las entradas hechas por los padres (One-Tap) y por otros educadores aparecen solas.
+
+## Quién puede hacer qué
+
+| Rol | Qué ve |
+|---|---|
+| Educador | Los mosaicos de Inicio, y Hoy para sus salas asignadas |
+| Director de centro / administrador | Su propio lanzador de Inicio y el resumen diario de todo el centro o la agencia |
+
+## Preguntas frecuentes y cuando algo sale mal
+
+??? Hoy dice "Sin salas asignadas". | Todavía no tiene una sala asignada. Pida a su director que le añada.
+??? El resumen dice que todo está bien, pero sé que falta algo. | El resumen refleja lo que hay en KiddieTrac. Un plan de clase de otra semana u otro centro no cuenta: revise **Planes de clase**.
+??? Falta un mosaico que necesito en Inicio. | Algunas pantallas dependen del plan de su agencia o de las reglas de su provincia. Pregunte a su director.
+??? Una entrada no aparece. | Espere unos segundos (la lista se actualiza cada 30 segundos) o vuelva a abrir **Hoy**. Si sigue sin aparecer, registre la entrada otra vez.
+??? Dice "No se pudo cargar". | Se cortó la conexión. Revise su internet y vuelva a abrir **Hoy**.
+
+## Pantallas relacionadas
+
+[[open: #care-log | Registro diario]]
+[[open: #headcounts | Recuentos]]
+[[open: #safe-arrival | Safe Arrival]]
+[[checking-children-in-and-out]]

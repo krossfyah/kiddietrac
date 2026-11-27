@@ -1,24 +1,61 @@
 ---
-title: Informar de un riesgo
-category: Safety
-order: 2
+title: Informar de un peligro
 ---
 
-# Informar de un riesgo
+# Informar de un peligro
 
-Si ve algo inseguro en el centro — una puerta rota, un derrame que no se seca, una tabla suelta, olor a gas — infórmelo para que su dirección pueda ocuparse y, si es necesario, avisar a las familias.
+Si ve algo peligroso en el centro — una reja rota, un derrame que no se seca, una tabla floja, olor a gas — infórmelo en **🚧 Informar de un riesgo** para que su director se encargue y, si hace falta, avise a los padres. Su director recibe el aviso de inmediato.
 
-1. Abra **Informar de un riesgo** desde su menú o su pantalla de inicio.
-2. Indique qué es y dónde está, y elija su gravedad.
-3. Añada lo que ya ha hecho (por ejemplo, «acordoné la zona, los niños pasaron al interior»).
-4. Pulse **Informar del riesgo**.
+[[open: #hazards | Abrir Informar de un riesgo]]
 
-[[open: #hazards | Informar de un riesgo]]
+## Cómo llegar
 
-Las direcciones de su centro y los administradores de su agencia reciben un aviso y un correo electrónico de inmediato. Debajo del formulario puede ver los riesgos que siguen abiertos en su centro y lo que se ha hecho al respecto.
+1. En el teléfono, toque **Inicio** en la barra de abajo (Inicio · Registro diario · One-Tap · Centro de mensajes · Bandeja de entrada).
+2. Toque el mosaico **🚧 Informar de un riesgo**.
+3. En la computadora, abra **Peligros** en el menú de la izquierda, bajo **Operaciones**.
 
-## Cuándo se avisa a las familias
+## Informar de un peligro
 
-Si su dirección envía a las familias un aviso sobre un riesgo, o les comunica que se ha resuelto, usted también recibe una copia: un aviso en la app y un correo electrónico marcado como **Copia**. Es exactamente lo que leen las familias, así que sabrá qué responder si alguna le pregunta a la hora de la recogida.
+> ⚠️ Primero aleje a los niños del peligro. Infórmelo en cuanto estén a salvo.
 
-Primero aleje a los niños del riesgo; infórmelo en cuanto estén a salvo. Si hay una lesión, use también **Incidentes**.
+1. En **Centro**, revise el centro donde está.
+2. En **Hazard**, diga qué es en pocas palabras (por ejemplo, "Tabla de la cerca rota").
+3. En **Dónde**, diga la sala o el área.
+4. Elija la **Gravedad**: baja, media o alta.
+5. Revise **Identified**: la fecha y hora en que se encontró (empieza en la hora actual).
+6. En **Qué es**, describa lo que vio.
+7. En **Medidas tomadas**, diga lo que ya hizo (por ejemplo, "área cerrada con cinta, niños adentro").
+8. En **Photo (optional)**, tome una foto. En el teléfono se abre la cámara.
+9. Toque **Reportar peligro**. El mensaje verde **Peligro reportado** dice que se avisó a su director.
+
+[[show: #hazards @ Report hazard | Muéstreme]]
+
+## Ver lo que pasó después
+
+Debajo del formulario, **Peligros abiertos en su centro** muestra los peligros todavía abiertos, con su gravedad, dónde y cuándo se encontraron y las **Medidas tomadas** hasta ahora. Toque **📷 Foto** para ver una foto. Cuando todo está resuelto, dice *Nothing open. Thank you for keeping an eye out.*
+
+## Cuando se avisa a los padres
+
+Si su director envía a los padres un aviso sobre un peligro, o les dice que está resuelto, usted también recibe una copia: un aviso en la aplicación y un correo marcado **Copy**. Es exactamente lo que leen los padres, así sabe qué decir si un padre pregunta a la salida. A los padres nunca se les envía un mensaje de texto sobre peligros.
+
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer |
+|---|---|
+| Educador | Informar de un peligro y ver los peligros abiertos de su centro |
+| Director de centro | Ver todos los peligros de sus centros, editarlos, anotar las medidas, **Mark resolved** y enviar el aviso a los padres |
+| Administrador de la agencia | Lo mismo para todos los centros |
+
+## Preguntas frecuentes y cuando algo sale mal
+
+??? Dice "Say what the hazard is." | La casilla **Hazard** está vacía. Escriba unas palabras y toque **Reportar peligro** otra vez.
+??? Alguien se lastimó. | Informe el peligro y también registre la lesión en **Incidentes**.
+??? ¿Es urgente, como olor a gas? | Saque a todos y pida ayuda primero (911 o la compañía de gas). Infórmelo en KiddieTrac cuando todos estén a salvo.
+??? La foto no se sube. | Revise su conexión y pruebe con una foto más pequeña. Puede enviar el aviso sin foto y mostrárselo a su director en persona.
+??? Lo informé pero sigue sin arreglarse. | Su director lo ve entre los peligros abiertos hasta que se resuelva. Pregúntele en persona o en el **Centro de mensajes** si sigue siendo peligroso.
+
+## Pantallas relacionadas
+
+[[open: #incidents | Incidentes]]
+[[open: #chat | Centro de mensajes]]
+[[when-something-happens]]

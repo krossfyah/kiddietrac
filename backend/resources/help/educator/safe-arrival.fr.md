@@ -1,39 +1,77 @@
 ---
 title: Safe Arrival — quand un enfant n’est pas arrivé
-category: Safety
-order: 6
 ---
 # Safe Arrival — quand un enfant n’est pas arrivé
 
-Lorsque votre agence a activé Safe Arrival, KiddieTrac surveille les enfants attendus aujourd’hui mais dont l’arrivée n’a pas été enregistrée. Il interroge d’abord les parents, et votre agence peut aussi leur faire **téléphoner**. S’ils ne répondent pas, **vous** recevez une alerte — *« ⚠️ Safe Arrival : Maya n’est pas là »* — afin que quelqu’un appelle.
+Quand votre agence utilise Safe Arrival, KiddieTrac surveille les enfants attendus aujourd’hui qui n’ont pas été inscrits à l’arrivée. Il demande d’abord aux parents, et votre agence peut aussi les faire **appeler**. Si personne ne répond, **vous** recevez une alerte — *« ⚠️ Safe Arrival : Maya n’est pas là »* — pour que quelqu’un appelle. Le tableau **Arrivée sécuritaire** montre les enfants de vos salles prévus aujourd’hui.
 
 [[open: #safe-arrival | Ouvrir Safe Arrival]]
 
+## Se rendre au tableau
+
+1. Touchez l’alerte Safe Arrival sur votre téléphone ou dans votre **Boîte de réception** — elle ouvre le tableau.
+2. Ou, sur un téléphone, touchez **Accueil** dans la barre du bas (Accueil · Journal quotidien · One-Tap · Centre de messages · Boîte de réception), puis la tuile **Arrivée sécuritaire**.
+3. Sur un ordinateur, ouvrez **Arrivée sécuritaire** dans le menu de gauche, sous **Opérations**.
+
+Le tableau a deux onglets : **Aujourd’hui** et **🕘 Historique**. Sous la courte ligne Activé/Désactivé, cinq compteurs montrent **ATTENDUS AUJOURD’HUI**, **ARRIVED**, **ABSENT**, **NOT DUE YET** et **NEEDS ATTENTION**. Touchez **↻ Actualiser** pour les dernières données; le tableau s’actualise aussi tout seul.
+
 ## Quand vous recevez une alerte
 
-- [ ] Touchez l’alerte — elle ouvre le tableau **Safe Arrival** de vos salles.
-- [ ] Sous **Requiert de l’attention**, touchez le numéro 📞 d’un tuteur pour l’appeler.
-- [ ] Consignez ce que vous avez appris : **Consigner une absence** (avec le motif), **Parent joint** avec une note comme *« en route, arrivée à 10 h 15 »*, ou **Autre…**.
+1. Regardez sous **Requiert de l’attention**. Chaque carte montre la salle, l’heure prévue, quand les parents ont été joints et quand le personnel a été alerté.
+2. Touchez le 📞 numéro d’un parent sur la carte pour l’appeler.
+3. Consignez ce que vous avez appris :
+   - **Consigner une absence** — choisissez le **Motif** (**Malade**, **Rendez-vous**, **Congé**, **Famille** ou **Autre**) et ajoutez une note;
+   - **Parent joint** — avec une note comme *« en route, arrive vers 10 h 15 »*;
+   - **Other…** — autre chose, avec une note.
+4. Enregistrez. Le cas est gardé avec votre nom et votre note, et la carte quitte **Requiert de l’attention**.
 
-Le dossier est enregistré avec votre nom et votre note. Lorsque l’enfant arrive et que son arrivée est enregistrée, il se ferme tout seul.
+Quand l’enfant arrive et est inscrit, le cas se ferme tout seul.
 
-> **Important :** Une alerte signifie que les parents ont été interrogés et que personne n’a répondu. Veuillez appeler — n’attendez pas que l’enfant se présente.
+> ⚠️ Une alerte veut dire que les parents ont été joints et que personne n’a répondu. Appelez — n’attendez pas que l’enfant arrive.
 
-## Quand un parent répond à l’appel téléphonique
+[[show: #safe-arrival @ Needs attention | Me montrer]]
 
-Si votre agence utilise l’appel téléphonique Safe Arrival, le parent appuie sur une touche et on vous indique son choix :
+## Quand un parent vous dit que l’enfant sera en retard
+
+1. Trouvez l’enfant sous **Tous les autres aujourd’hui** (ou sur sa carte **Requiert de l’attention**).
+2. Touchez **⏰ Late drop-off**.
+3. Réglez **Expected by** à l’heure donnée par le parent et ajoutez une **Note (facultatif)** (par exemple « Maman a appelé, rendez-vous chez le médecin »).
+4. Touchez **Enregistrer**. Personne n’est joint ni alerté avant cette heure. Si l’enfant n’est toujours pas inscrit à ce moment, Safe Arrival vérifie comme d’habitude.
+
+Pour changer l’heure, touchez **Modifier** sur la ligne; **Take it back** remet l’heure de vérification habituelle.
+
+## Quand un parent répond à l’appel
+
+Si votre agence utilise l’appel Safe Arrival, le parent appuie sur une touche et on vous dit ce qu’il a choisi :
 
 - **« Safe Arrival : Maya est absente aujourd’hui »** — l’absence est consignée. Rien à faire.
-- **« Safe Arrival : Maya est en route »** — elle est toujours attendue. Enregistrez son arrivée lorsqu’elle se présente. Si elle n’est toujours pas arrivée un peu plus tard, vous recevrez quand même une alerte.
-- **« 🚨 Safe Arrival : Maya déposée mais PAS enregistrée à l’arrivée »** — **agissez maintenant.** Le parent dit que l’enfant est au centre, mais elle ne figure pas au registre. Trouvez-la et enregistrez son arrivée. Si on ne la trouve pas, suivez votre procédure en cas d’enfant disparu.
+- **« Safe Arrival : Maya est en route »** — elle est toujours attendue. Inscrivez-la à son arrivée. Si elle n’est toujours pas arrivée un peu plus tard, vous recevrez quand même une alerte.
+- **« 🚨 Safe Arrival : Maya déposée mais PAS inscrite »** — **agissez tout de suite.** Le parent dit que l’enfant est au centre, mais elle n’est pas au registre. Trouvez-la et inscrivez-la. Si vous ne la trouvez pas, suivez votre procédure d’enfant disparu.
 
-> **Important :** Un enfant n’est jamais enregistré comme arrivé parce qu’un parent a appuyé sur une touche. Seule l’arrivée enregistrée par le personnel ou par le parent à la porte l’ajoute à votre décompte.
+> ⚠️ Un enfant n’est jamais inscrit parce qu’un parent a appuyé sur une touche. Seule une inscription par le personnel ou par le parent à la porte le met dans votre compte.
 
-## Ce que vous voyez
+## En fin de journée
 
-Le tableau affiche les enfants de **vos salles** prévus aujourd’hui : qui est arrivé et à quelle heure, qui est absent et pourquoi, et qui n’est pas encore attendu. Un parent qui a indiqué avoir déposé l’enfant figure tout en haut, en rouge; **En route (parent)** indique qui arrive en retard. Le tableau s’actualise chaque minute.
+Si votre agence vérifie aussi les départs, **🕔 End of day — still signed in** liste les enfants encore inscrits après leur heure de départ. Pour chacun, consignez **Picked up at…** (avec l’heure), **Toujours là**, **⏰ Retard de ramassage** ou **Other…**.
 
-??? Pourquoi ai-je reçu une alerte pour un enfant en vacances ? | Personne n’a signalé l’absence. Consignez-la avec **Consigner une absence** pour que les parents ne soient plus interrogés et que la liste soit exacte.
-??? Un enfant est arrivé mais apparaît toujours en retard. | Son arrivée n’a pas encore été enregistrée. Enregistrez-la et le dossier se ferme.
+## Qui peut faire quoi
 
-Voir aussi : [Enregistrer l’arrivée et le départ des enfants](checking-children-in-and-out).
+| Rôle | Ce qu’il peut faire |
+|---|---|
+| Éducatrice ou éducateur | Voir le tableau de ses salles, appeler les familles, consigner les absences et les arrivées tardives |
+| Direction de centre | La même chose pour son centre; elle peut aussi être alertée |
+| Administration de l’agence | Tout, plus **⚙️ Paramètres** (heures, appels, qui est alerté) |
+
+## FAQ et quand ça ne va pas
+
+??? Pourquoi ai-je reçu une alerte pour un enfant en vacances? | Personne n’a signalé l’absence. Consignez-la avec **Consigner une absence** pour que les parents ne soient plus joints et que la liste soit juste.
+??? Un enfant est arrivé mais apparaît toujours en retard. | Il n’a pas encore été inscrit. Inscrivez-le et le cas se ferme.
+??? La carte indique « No guardian on file. » ou « no phone ». | Appelez le bureau du centre ou votre direction, qui peut trouver d’autres contacts dans la fiche de l’enfant.
+??? Le message « Off. Nobody is being checked automatically. » s’affiche. | Safe Arrival est désactivé pour votre agence. Le tableau montre quand même qui n’est pas arrivé : vérifiez-le vous-même après l’arrivée des enfants.
+??? Un enfant affiche « Counted … Please sign them in. » | Il a été coché dans un comptage, mais jamais inscrit. Inscrivez-le maintenant pour que vos présences soient justes.
+
+## Écrans liés
+
+[[open: #today | Aujourd’hui]]
+[[open: #headcounts | Comptages]]
+[[checking-children-in-and-out]]
