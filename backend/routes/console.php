@@ -610,6 +610,14 @@ Schedule::command('kt:notify-audience-check --quiet-ok')->dailyAt('05:50')->time
 Schedule::command('kt:child-scope-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
 // Each role sees only its own screens: admin routes guarded, deny list, one tile badge (2026-11-06 role sweep).
 Schedule::command('kt:screen-guard-check --quiet-ok')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+/* LEAK GUARD (2026-11-27, Anthony: "leaks should have a guard to constantly check for cross leaks"). kt:leak-probe calls
+   every GET API route in-process as canary people of test agencies 6 and 18 and fails on the other agency's canary
+   data; kt:leak-integrity finds rows filed under the wrong agency. Hourly: a 1/24 slice of the routes (each route is
+   probed at least once a day on top of the nightly full run) and the live sentinel's hits are alerted. Platform-only
+   alerts (TicketAlerts + a ticket). Niced; off the :00 tick. See App\Support\LeakGuard. */
+Schedule::command('kt:leak-probe --hourly --quiet-ok')->cron('47 * * * *')->unlessBetween('01:55', '03:30')->timezone('America/Toronto')->withoutOverlapping(55)->runInBackground()->onOneServer();
+Schedule::command('kt:leak-integrity --quiet-ok')->dailyAt('02:10')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
+Schedule::command('kt:leak-probe --all --quiet-ok')->dailyAt('02:20')->timezone('America/Toronto')->withoutOverlapping(240)->runInBackground()->onOneServer();
 /* Raw escape codes (\u{...}) in code strings and in the last day's email (2026-10-09:
    "the year\u{2019}s" reached 59 inboxes). MailText repairs mail at send time; this
    finds the source. See KtTextCheck. */

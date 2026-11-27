@@ -100,6 +100,10 @@ return Application::configure(basePath: dirname(__DIR__))
                logs disagreements. Never blocks. Kill switch: platform setting
                permissions.mode (off | shadow). */
             \App\Http\Middleware\PermissionShadow::class,
+            /* Leak guard sentinel, LOG ONLY (2026-11-27): a response carrying an agency the signed-in person does not
+               belong to, or another agency's canary marker, is recorded in leak_sentinel_hits. Never blocks, never
+               stores a body. Kill switch: KT_LEAK_SENTINEL=off. See App\Support\LeakGuard. */
+            \App\Http\Middleware\LeakSentinel::class,
             /* LAST, so it sees the final JSON whatever the rest of the pipeline did:
                every protected /storage URL leaving the API is replaced with a signed,
                expiring one. Uploaded files were served by Apache with no auth, no

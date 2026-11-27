@@ -48,6 +48,8 @@ final class ServerHealth
             'requests' => self::requests(),
             'certificates' => self::certificates(),
             'backups' => self::backups(),
+            // Leak guard (2026-11-27): last probe / integrity run and the live sentinel's hits. App\Support\LeakGuard.
+            'leak_guard' => \App\Support\LeakGuard::status(),
         ];
         $out['alerts'] = self::alerts($out);
 
@@ -415,6 +417,13 @@ final class ServerHealth
         if (! ($s['scheduler']['running'] ?? false)) $add('red', 'Scheduled jobs do not appear to be running (no check-in in the last 15 minutes).');
         if (($s['requests']['server_errors'] ?? 0) >= 20) $add('amber', $s['requests']['server_errors'] . ' server errors in the last 24 hours.');
         if (($s['requests']['failed_loads'] ?? 0) >= 50) $add('amber', $s['requests']['failed_loads'] . ' requests never reached the server in the last 24 hours (the host turned them away, or the person\'s connection dropped).');
+        $lg = $s['leak_guard'] ?? [];
+        foreach (['probe' => 'route probe', 'integrity' => 'data check'] as $k => $label) {
+            if (! empty($lg[$k]['findings'])) $add('red', 'Leak guard ' . $label . ': ' . $lg[$k]['findings'] . ' cross-agency finding(s) in the last run.');
+            elseif (! empty($lg[$k]['blind'])) $add('amber', 'Leak guard ' . $label . ' could not see its own test records (' . $lg[$k]['blind'] . ' roles) - it may be missing leaks.');
+        }
+        if (! empty($lg['sentinel_7d'])) $add('red', 'Leak guard sentinel: ' . $lg['sentinel_7d'] . ' live response(s) in 7 days carried data of an agency the person does not belong to.');
+        if (array_key_exists('probe', $lg) && (! $lg['probe'] || strtotime((string) $lg['probe']['at']) < time() - 3 * 3600)) $add('amber', 'Leak guard: the route probe has not run in the last 3 hours.');
         foreach ($s['certificates'] ?? [] as $c) {
             if ($c['days_left'] === null) $add('amber', 'Could not read the certificate for ' . $c['host'] . '.');
             elseif ($c['days_left'] < 14) $add('red', 'The certificate for ' . $c['host'] . ' expires in ' . $c['days_left'] . ' days.');

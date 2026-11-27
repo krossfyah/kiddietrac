@@ -803,3 +803,5 @@ route quick-notes/link-search
 route quick-notes/pictures
 route quick-notes/reminders
 screen notes
+job kt:leak-probe
+job kt:leak-integrity

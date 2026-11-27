@@ -73,6 +73,10 @@ class PlaySparkController extends Controller
             ->where('c.agency_id', $a)->orderBy('c.name')->orderBy('r.name')->get(['r.id', 'r.name', 'c.name as centre']);
         $roomId = (int) $request->query('room_id', 0);
         if (! $roomId || ! $rooms->contains('id', $roomId)) {
+            /* A room that is not one of yours is NEVER used (leak guard, 2026-11-27): the fallback below only replaced
+               the asked-for room when another room had children signed in, so ?room_id=<any room> returned that room's
+               context and its children's names - across centres and agencies. Forget it first, then pick. */
+            $roomId = 0;
             // the room with the most children signed in now, else the first
             $best = 0;
             foreach ($rooms as $rm) {

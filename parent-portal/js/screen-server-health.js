@@ -379,6 +379,25 @@
         + '</tbody></table></div>';
     }
 
+    /* Leak guard (2026-11-27): canary route probe (hourly slice + nightly full), data check, live sentinel. */
+    var lg = d.leak_guard || {};
+    if (!lg.error) {
+      var lgRow = function (label, r, what) {
+        if (!r) return '<tr><td style="font-weight:700;">' + esc(label) + '</td><td colspan="3" style="color:#94A3B8;">Not run yet</td></tr>';
+        var bad = r.findings > 0, col = bad ? '#DC2626' : (r.blind ? '#D97706' : '#16A34A');
+        return '<tr><td style="font-weight:700;">' + esc(label) + '</td><td>' + esc(new Date(String(r.at).replace(' ', 'T') + 'Z').toLocaleString()) + (r.mode ? ' · ' + esc(r.mode) : '') + '</td>'
+          + '<td>' + num(r.routes) + ' ' + what + (r.calls ? ' · ' + num(r.calls) + ' calls' : '') + (r.secs != null ? ' · ' + num(r.secs) + ' s' : '') + '</td>'
+          + '<td style="font-weight:800;color:' + col + ';">' + (bad ? r.findings + ' finding(s)' : (r.blind ? 'Blind: ' + r.blind + ' role(s)' : 'Clean')) + '</td></tr>';
+      };
+      var lgLines = [].concat((lg.probe && lg.probe.lines) || [], (lg.integrity && lg.integrity.lines) || [], lg.sentinel_lines || []);
+      html += '<div class="sh-h">Leak guard</div><div class="kt-card"><table data-kt-no-filter><thead><tr><th>Check</th><th>Last run</th><th>Checked</th><th>Result</th></tr></thead><tbody>'
+        + lgRow('Route probe (latest)', lg.probe, 'routes') + lgRow('Route probe (full, nightly)', lg.probe_full, 'routes') + lgRow('Data check', lg.integrity, 'checks')
+        + '<tr><td style="font-weight:700;">Live sentinel</td><td>Every response (sampled)</td><td>Last 7 days</td><td style="font-weight:800;color:' + (lg.sentinel_7d ? '#DC2626' : '#16A34A') + ';">' + (lg.sentinel_7d ? lg.sentinel_7d + ' hit(s)' : 'Clean') + '</td></tr>'
+        + '</tbody></table>'
+        + (lgLines.length ? '<div class="sh-s" style="margin-top:8px;font-size:12px;color:#991B1B;line-height:1.6;">' + lgLines.slice(0, 20).map(esc).join('<br>') + '</div>' : '')
+        + '</div>';
+    }
+
     html += '<div class="sh-h">Certificates</div><div class="kt-card"><table><thead><tr><th>Address</th><th>Expires</th><th>Days left</th><th>Issuer</th></tr></thead><tbody>'
       + (d.certificates || []).map(function (c) {
           var col = c.days_left == null || c.matches === false ? '#DC2626' : c.days_left < 14 ? '#DC2626' : c.days_left < 30 ? '#D97706' : '#16A34A';
