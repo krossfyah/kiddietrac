@@ -679,6 +679,15 @@ final class WebDemoShowcase
      * waiting, a manual adjustment with its reason, and Lucas's three single sick days so the absence report flags
      * repeated short absences. All rows go in the ledger of this builder, so a rerun replaces them.
      */
+    /** Payroll engine P2 (2026-11-27): TD1s, a year of pay runs, payslips and the remittance report (App\Support\Payroll\PayrollDemo). */
+    private function payrollStory(int $agencyId, int $olivia): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('payroll_runs')) return;
+        foreach (\App\Support\Payroll\PayrollDemo::story($agencyId, [], $olivia) as $t => $ids) {
+            $this->made[$t] = array_merge($this->made[$t] ?? [], $ids);
+        }
+    }
+
     private function hrStory(int $agencyId, int $maya, int $elena, int $olivia, string $now): void
     {
         if (! \Illuminate\Support\Facades\Schema::hasTable('hr_leave_ledger')) return;
@@ -801,6 +810,7 @@ final class WebDemoShowcase
         $this->hrHsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia);   // HR Phase 4, batch 7
         $this->hrRota8Story($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 8
         $this->hrLeaveMathsStory($agencyId, $byName->all(), $centreOf->all(), $now);   // HR Phase 4, batch 9
+        $this->payrollStory($agencyId, $olivia);   // Payroll engine P2: the demo payroll year
     }
 
     /**

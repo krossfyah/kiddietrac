@@ -1380,6 +1380,19 @@ post hr/payroll/tax/people/{id}/paper | Recorded a TD1 the employee signed on pa
 post hr/payroll/tax/people/{id}/preview | Previewed one pay's payroll deductions for an employee (nothing saved)
 post hr/payroll/tax/forms/{id}/withdraw | Withdrew a TD1 that was still waiting for its signature
 post hr/me/tax-forms | Filled in their own TD1 tax claim and sent it to My forms to e-sign
+put hr/payroll/engine | Switched the payroll engine on or off, accepted the "check with your accountant" notice, or changed the employer payroll details (CRA / Revenu Quebec numbers, remitter type, workers' compensation rate)
+post hr/payroll/runs | Started a pay run (or an adjustment to a finalized one)
+post hr/payroll/runs/{id}/refresh | Recalculated a draft pay run from the clock
+post hr/payroll/runs/{id}/people | Added a staff member to an adjustment pay run
+put hr/payroll/runs/{id}/lines/{lineId} | Changed one person's line in a draft pay run (left out, bonus, taxable benefit, after-tax deduction, note)
+post hr/payroll/runs/{id}/submit | Sent a pay run for review
+post hr/payroll/runs/{id}/return | Sent a pay run back to draft
+post hr/payroll/runs/{id}/approve | Approved a pay run
+post hr/payroll/runs/{id}/finalize | Finalized a pay run and issued its payslips
+delete hr/payroll/runs/{id} | Discarded a pay run that was not finalized
+post hr/payroll/ytd-openings/import | Imported opening year-to-date payroll balances
+put hr/payroll/ytd-openings/{userId} | Entered or changed a staff member's opening year-to-date payroll balance
+delete hr/payroll/ytd-openings/{id} | Removed a staff member's opening year-to-date payroll balance
 post hr/letters/send | Sent an HR letter for e-signature
 post hr/documents/{id}/accept | Accepted a company HR document
 post hr/time-off/{id}/note | Attached a note or photo to a time-off request

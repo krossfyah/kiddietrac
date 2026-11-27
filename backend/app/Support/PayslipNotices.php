@@ -177,7 +177,8 @@ final class PayslipNotices
 
         // The payslip itself, through the same method every portal screen uses (iLearn's own PDF when it sent one).
         $pdf = null;
-        if ($cfg['email_attach_pdf']) {
+        // Payroll engine payslips (P2): the notice says who and when, never what - no amounts and no attachment.
+        if ($cfg['email_attach_pdf'] && ($doc->source ?? '') !== 'engine') {
             try {
                 $req = Request::create('/', 'GET');
                 $u = \App\Models\User::find((int) $doc->user_id);
@@ -252,6 +253,9 @@ final class PayslipNotices
        message from the resend dialog. */
     public static function render(int $aid, object $doc, string $first, string $agencyName, string $kind, bool $attached, bool $wantPdf, string $note = ''): array
     {
+        if (($doc->source ?? '') === 'engine') {
+            return self::renderEngine($aid, $doc, $first, $agencyName, $kind, $note);
+        }
         $money = fn ($v) => '$' . number_format((float) $v, 2);
         $num = fn ($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
         $has = fn ($v) => $v !== null && abs((float) $v) > 0.004;
@@ -358,5 +362,33 @@ final class PayslipNotices
         ]);
         $subject = ($kind === 'updated' ? 'Updated payslip' : 'Your payslip') . ' for ' . $period . ' — ' . $agencyName;
         return [$subject, $html];
+    }
+
+    /**
+     * PAYROLL ENGINE PAYSLIP NOTICE (P2, 2026-11-27): who and when, never what. No amounts in the body, the subject, the
+     * preheader or a hero, and no PDF attached by the automatic notice: the pay itself is in the app (My HR > My payslips,
+     * My pay), behind the person's own sign-in.
+     */
+    private static function renderEngine(int $aid, object $doc, string $first, string $agencyName, string $kind, string $note = ''): array
+    {
+        $period = self::period($doc);
+        $b = json_decode((string) ($doc->breakdown ?? ''), true) ?: [];
+        $payDate = ! empty($b['run']['pay_date']) ? Carbon::parse($b['run']['pay_date'])->format('M j, Y') : null;
+        $lead = ($kind === 'updated' ? 'An updated payslip' : 'Your payslip') . ' for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> is ready'
+            . ($payDate ? ' (pay date ' . e($payDate) . ')' : '') . '.';
+        $body = '<p style="margin:0 0 8px;">Hi ' . ($first !== '' ? e($first) : 'there') . ',</p>'
+            . '<p style="margin:0;">' . $lead . '</p>'
+            . ($note !== '' ? '<p style="margin:12px 0 0;">' . nl2br(e($note)) . '</p>' : '')
+            . '<p style="margin:12px 0 14px;">For your privacy the amounts are not in this email. Sign in to see your pay, every deduction and your year to date.</p>'
+            . InvoiceMail::payButton($aid, 'https://app.kiddietrac.com/dashboard.html#my-hr', 'Open my payslip')
+            . '<p class="kt-muted" style="font-size:12.5px;color:#64748B;margin:16px 0 0;">Your payslips are always in the app under <strong>My HR &rarr; My payslips</strong>. Questions about your pay? Contact the office.</p>';
+        $html = EmailTemplate::wrap($aid, $body, [
+            'eyebrow' => 'PAYSLIP',
+            'title' => 'Payslip ready',
+            'subtitle' => $agencyName,
+            'preheader' => ($kind === 'updated' ? 'An updated payslip' : 'Your payslip') . ' for ' . $period . ' is ready in the app.',
+        ]);
+
+        return [($kind === 'updated' ? 'Updated payslip' : 'Your payslip is ready') . ' — ' . $period . ' — ' . $agencyName, $html];
     }
 }

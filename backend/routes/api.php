@@ -2260,6 +2260,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/payroll-documents/backfill',    [\App\Http\Controllers\Api\PayrollDocumentController::class, 'backfill']);
         Route::post('/payroll-documents/{id}/status', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'setStatus'])->where('id', '[0-9]+');
         Route::post('/payroll-documents/{id}/email',  [\App\Http\Controllers\Api\PayrollDocumentController::class, 'email'])->where('id', '[0-9]+');
+        // Payroll Engine P2 (2026-11-27): office view - admins / directors read a payslip in the portal without its password.
+        Route::get ('/payroll-documents/{id}/view',   [\App\Http\Controllers\Api\PayrollDocumentController::class, 'officeView'])->where('id', '[0-9]+')->middleware('throttle:120,1,payslipview');
         Route::get ('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'index']);
         Route::get ('/payee-invoices/hours',        [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'hours']);
         Route::post('/payee-invoices',              [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'store']);
@@ -2648,6 +2650,32 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/hr/payroll/tax/forms/{id}/withdraw',    [\App\Http\Controllers\Api\PayrollTaxController::class, 'withdraw'])->whereNumber('id');
         Route::get ('/hr/me/tax-forms',                       [\App\Http\Controllers\Api\PayrollTaxController::class, 'mine']);
         Route::post('/hr/me/tax-forms',                       [\App\Http\Controllers\Api\PayrollTaxController::class, 'submit'])->middleware('throttle:10,1,paytd1');
+    });
+
+    // ---- KiddieTrac Payroll Engine P2 (2026-11-27): the switch + employer details, pay runs, payslips, opening YTD, remittances ----
+    // PayrollRunController decides who (switch/openings = admins; runs = pay viewers, directors own centres; my payslips = the person).
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/hr/payroll/engine', [\App\Http\Controllers\Api\PayrollRunController::class, 'engine']);
+        Route::put   ('/hr/payroll/engine', [\App\Http\Controllers\Api\PayrollRunController::class, 'saveEngine']);
+        Route::get   ('/hr/payroll/runs', [\App\Http\Controllers\Api\PayrollRunController::class, 'runs']);
+        Route::post  ('/hr/payroll/runs', [\App\Http\Controllers\Api\PayrollRunController::class, 'create'])->middleware('throttle:30,1,payruncreate');
+        Route::get   ('/hr/payroll/runs/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'show'])->whereNumber('id');
+        Route::post  ('/hr/payroll/runs/{id}/refresh', [\App\Http\Controllers\Api\PayrollRunController::class, 'refresh'])->whereNumber('id');
+        Route::post  ('/hr/payroll/runs/{id}/people', [\App\Http\Controllers\Api\PayrollRunController::class, 'addPerson'])->whereNumber('id');
+        Route::put   ('/hr/payroll/runs/{id}/lines/{lineId}', [\App\Http\Controllers\Api\PayrollRunController::class, 'saveLine'])->whereNumber('id')->whereNumber('lineId');
+        Route::post  ('/hr/payroll/runs/{id}/submit', [\App\Http\Controllers\Api\PayrollRunController::class, 'submit'])->whereNumber('id');
+        Route::post  ('/hr/payroll/runs/{id}/return', [\App\Http\Controllers\Api\PayrollRunController::class, 'sendBack'])->whereNumber('id');
+        Route::post  ('/hr/payroll/runs/{id}/approve', [\App\Http\Controllers\Api\PayrollRunController::class, 'approve'])->whereNumber('id');
+        Route::post  ('/hr/payroll/runs/{id}/finalize', [\App\Http\Controllers\Api\PayrollRunController::class, 'finalize'])->whereNumber('id');
+        Route::delete('/hr/payroll/runs/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'discard'])->whereNumber('id');
+        Route::get   ('/hr/payroll/remittance', [\App\Http\Controllers\Api\PayrollRunController::class, 'remittance']);
+        Route::get   ('/hr/payroll/ytd-openings', [\App\Http\Controllers\Api\PayrollRunController::class, 'openings']);
+        Route::post  ('/hr/payroll/ytd-openings/import', [\App\Http\Controllers\Api\PayrollRunController::class, 'importOpenings']);
+        Route::put   ('/hr/payroll/ytd-openings/{userId}', [\App\Http\Controllers\Api\PayrollRunController::class, 'saveOpening'])->whereNumber('userId');
+        Route::delete('/hr/payroll/ytd-openings/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'deleteOpening'])->whereNumber('id');
+        Route::get   ('/hr/payroll/payslips/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'payslip'])->whereNumber('id');
+        Route::get   ('/hr/me/payslips', [\App\Http\Controllers\Api\PayrollRunController::class, 'myPayslips']);
+        Route::get   ('/hr/me/payslips/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'myPayslip'])->whereNumber('id');
     });
 
     // ---- KiddieTrac HR add-on (2026-11-27, feature `hr`: EnforcePlanFeatures::MAP owns hr/ and exports/hr-absence) ----

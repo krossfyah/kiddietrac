@@ -402,6 +402,50 @@ class PayrollDocumentController extends Controller
         return response()->json($d, $res->getStatusCode());
     }
 
+    /**
+     * GET /provider/payroll-documents/{id}/view — OFFICE VIEW (2026-11-27, Anthony: "need ability for admins/directors to view
+     * payslips without the password ... password only applies when sending the payslip to the staff member or downloading
+     * it to anyone's computer").
+     *
+     * For agency admins and centre directors (payrollScope: directors only their own centres' staff; everyone else 403)
+     * reading a payslip inside the portal's document viewer. iLearn's own PDF is password-protected and KiddieTrac does not
+     * hold the password, so this serves the payslip drawn here from the stored figures instead (the same fallback pdf()
+     * uses when iLearn is unreachable), with no password. Fetched with the bearer token like every payslip (never a public
+     * or signed link), never cached, inline only. The viewer's Download fetches pdf() - the protected copy - instead of
+     * saving this stream. Emails and the person's own payslips are untouched. Audited as payslip.viewed.
+     */
+    public function officeView(Request $request, int $id)
+    {
+        $agencyId = $this->agency($request);
+        $centres = $this->payrollScope($request, $agencyId);
+        $doc = DB::table('payroll_documents')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($doc && $this->inScope($centres, $doc), 404, 'Not found.');
+
+        $request->attributes->set('kt_office_view', true);
+        $res = $this->pdf($request, $id);
+        $res->headers->set('Cache-Control', 'no-store, private, max-age=0');
+        $res->headers->set('Pragma', 'no-cache');
+        $res->headers->set('X-Content-Type-Options', 'nosniff');
+        $res->headers->set('Content-Disposition', 'inline; filename="payslip-view.pdf"');
+        $res->headers->set('X-KT-Office-View', '1');
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id,
+            'agency_id' => $agencyId,
+            'action' => 'payslip.viewed',
+            'entity_type' => 'payroll_document',
+            'entity_id' => $id,
+            'payload' => json_encode([
+                'summary' => 'Viewed the payslip for ' . ($doc->payee_name ?: 'a staff member') . ' covering ' . trim($doc->period_start . ' to ' . $doc->period_end)
+                    . ' in the portal (office view, no password)' . (! empty($doc->pdf_url) ? ' - drawn by KiddieTrac from the iLearn figures' : '') . '.',
+                'document_id' => $id,
+                'source' => $doc->source,
+            ]),
+        ]);
+
+        return $res;
+    }
+
     /** Re-run the backfill for this agency. Idempotent, so it is safe to press twice. */
     public function backfill(Request $request): JsonResponse
     {
@@ -564,7 +608,15 @@ class PayrollDocumentController extends Controller
            FALLS BACK RATHER THAN FAILS. If the far end is down, slow, or has been
            reconfigured, the locally-drawn payslip below is still a correct payslip. A
            worse document beats an error page on payday. */
-        if (! empty($doc->pdf_url)) {
+        /* PAYROLL ENGINE (P2, 2026-11-27): a payslip a pay run wrote is drawn from what the run froze on it (every deduction,
+           year to date, employer side). Every other payslip carries on below exactly as before. */
+        if (\App\Support\Payroll\Payslip::isEngine($doc)) {
+            return \App\Support\Payroll\Payslip::pdf($doc);
+        }
+
+        /* OFFICE VIEW (2026-11-27): officeView() asks for the locally drawn copy, so an admin or director reads an iLearn
+           payslip without its password. Downloads, emails and the person's own copy never set this. */
+        if (! empty($doc->pdf_url) && $request->attributes->get('kt_office_view') !== true) {
             try {
                 $res = \Illuminate\Support\Facades\Http::timeout(20)
                     ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
