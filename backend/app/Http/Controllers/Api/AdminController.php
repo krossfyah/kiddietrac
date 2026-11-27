@@ -3898,15 +3898,8 @@ final class AdminController extends Controller
         if ($email === '') return 'An email address is needed to give a pick-up login.';
         $r = \App\Support\PickupLogin::grant($agencyId, $familyId, $ecId, $email, (string) ($d['name'] ?? $ec->name ?? ''), $d['relationship'] ?? ($ec->relationship ?? null), (int) $request->user()->id);
         if (! $r) return 'That email address does not look right.';
-        if ($invite && ! empty($r['temp'])) {
-            $this->sendAccountEmail($email, (string) ($d['name'] ?? 'there'),
-                'Your KiddieTrac pick-up login',
-                "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
-                . "Email: {$email}\n"
-                . "Temporary password: {$r['temp']}\n\n"
-                . "We recommend changing your password after you sign in, via 'Forgot password'.",
-                $agencyId);
+        if ($invite && ! empty($r['new'])) {
+            $this->sendPickupWelcome($request, (int) $r['user_id'], $email, (string) ($d['name'] ?? 'there'), (int) $agencyId);
         }
         return null;
     }
@@ -4312,9 +4305,9 @@ final class AdminController extends Controller
                         if (\App\Support\TempGuardians::isTemporary((int) $agencyId, $uid)) {
                             $linkedTemp[] = ['id' => $uid, 'email' => $existing->email, 'name' => trim(($existing->first_name ?? '') . ' ' . ($existing->last_name ?? ''))];
                             if (($existing->status ?? '') === 'not_invited') {
-                                $temp = Str::random(12);
-                                DB::table('users')->where('id', $uid)->update(['password' => Hash::make($temp), 'status' => 'invited', 'updated_at' => now()]);
-                                $newGuardians[] = ['uid' => $uid, 'email' => $existing->email, 'first_name' => $existing->first_name ?: ($g['first_name'] ?? ''), 'temp' => $temp];
+                                // Invited with a set-password link below; the password itself is left alone (2026-11-27).
+                                DB::table('users')->where('id', $uid)->update(['status' => 'invited', 'updated_at' => now()]);
+                                $newGuardians[] = ['uid' => $uid, 'email' => $existing->email, 'first_name' => $existing->first_name ?: ($g['first_name'] ?? '')];
                             }
                         }
                         // Blanks only. A value that is already set is never overwritten.
@@ -4328,11 +4321,11 @@ final class AdminController extends Controller
                             DB::table('users')->where('id', $uid)->update($fill + ['updated_at' => now()]);
                         }
                     } else {
-                        $temp = Str::random(12);
                         $uid = (int) DB::table('users')->insertGetId([
                             // users.email is NOT NULL: a guardian without one is stored blank.
                             'email' => $email === '' ? '' : $g['email'],
-                            'password' => Hash::make($temp),
+                            // Nobody knows it: the welcome carries a set-password link (2026-11-27).
+                            'password' => \App\Support\SetPasswordLink::unusablePassword(),
                             'first_name' => $g['first_name'],
                             'last_name' => $g['last_name'] ?? '',
                             'phone' => $g['phone'] ?? null,
@@ -4348,7 +4341,7 @@ final class AdminController extends Controller
                             'updated_at' => now(),
                         ]);
                         if ($email !== '') {
-                            $newGuardians[] = ['uid' => $uid, 'email' => $g['email'], 'first_name' => $g['first_name'], 'temp' => $temp];
+                            $newGuardians[] = ['uid' => $uid, 'email' => $g['email'], 'first_name' => $g['first_name']];
                         }
                     }
 
@@ -4470,8 +4463,8 @@ final class AdminController extends Controller
                         // A pick-up login (parent view minus billing); the invite goes with the others below.
                         if (! empty($ec['give_login']) && ! empty($ec['email'])) {
                             $pl = \App\Support\PickupLogin::grant((int) $agencyId, (int) $famId, $ecId, (string) $ec['email'], (string) $ec['name'], $ec['relationship'] ?? null, null);
-                            if ($pl && ! empty($pl['temp'])) {
-                                $pickupInvites[] = ['email' => $ec['email'], 'name' => $ec['name'], 'temp' => $pl['temp']];
+                            if ($pl && ! empty($pl['new'])) {
+                                $pickupInvites[] = ['uid' => (int) $pl['user_id'], 'email' => $ec['email'], 'name' => $ec['name']];
                             }
                         }
                     }
@@ -4508,29 +4501,25 @@ final class AdminController extends Controller
 
         $invited = 0;
         foreach (($sendWelcome ? $newGuardians : []) as $g) {
+            // A one-time "Set your password" link, never a password (2026-11-27).
             $ok = $this->sendAccountEmail(
                 $g['email'],
                 $g['first_name'] ?: 'there',
                 'Welcome to Kiddietrac — set up your family account',
                 "You've been added to Kiddietrac by your childcare provider.\n\n"
-                . "Sign in at https://app.kiddietrac.com to activate your account:\n\n"
-                . "Email: {$g['email']}\n"
-                . "Temporary password: {$g['temp']}\n\n"
+                . "Your sign-in email: {$g['email']}\n\n"
+                . "Use the button below to choose your own password, then sign in with your email and that password. "
+                . "The link works once and expires in " . \App\Support\SetPasswordLink::DAYS . " days; after that, use \"Forgot password\" on the sign-in page.\n\n"
                 . "On your first sign-in you'll be guided through a short setup to review your family "
-                . "details, add anything missing, and upload a profile photo. We recommend changing your "
-                . "password afterwards via 'Forgot password'."
+                . "details, add anything missing, and upload a profile photo.",
+                null,
+                'Set your password',
+                \App\Support\SetPasswordLink::issue((int) $g['uid'], (string) $g['email'], $request->ip())
             );
             if ($ok) $invited++;
         }
         foreach (($sendWelcome ? $pickupInvites : []) as $pi) {
-            $ok = $this->sendAccountEmail($pi['email'], $pi['name'] ?: 'there',
-                'Your KiddieTrac pick-up login',
-                "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
-                . "Email: {$pi['email']}\n"
-                . "Temporary password: {$pi['temp']}\n\n"
-                . "We recommend changing your password after you sign in, via 'Forgot password'.",
-                $agencyId);
+            $ok = $this->sendPickupWelcome($request, (int) $pi['uid'], (string) $pi['email'], (string) ($pi['name'] ?: 'there'), (int) $agencyId);
             if ($ok) $invited++;
         }
 
@@ -6840,6 +6829,28 @@ final class AdminController extends Controller
         $forceTemp = $request->boolean('force_temp_password');
         $issueTemp = $forceTemp || ! ($isClaimed && $hasSignedIn);
 
+        /* NO PASSWORD IN AN EMAIL (2026-11-27, Anthony). An account nobody has signed in to used to be given a
+           temporary password by email. It now gets a one-time "Set your password" link (App\Support\SetPasswordLink:
+           7 days, works once) and its password is NOT changed, so a temporary password already sent keeps working.
+           force_temp_password still makes one, shown to the admin only and never emailed. */
+        if ($issueTemp && ! $forceTemp) {
+            $name = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+            $emailed = $sendEmail && $this->sendWelcomeLink($request, $user, $userId, $name, (int) $agencyId);
+            $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+                'name' => $name, 'email' => $user->email, 'channel' => 'email',
+                'mode' => 'set_password_link', 'email_sent' => $emailed,
+                'reason' => 'account_not_signed_in_yet',
+            ]);
+
+            return response()->json([
+                'message' => $emailed
+                    ? 'They have not signed in yet, so a link to set their password was emailed (works once, for ' . \App\Support\SetPasswordLink::DAYS . ' days). Nothing else changed.'
+                    : 'Could not send the link. Their account is unchanged.',
+                'mode' => 'set_password_link',
+                'email_sent' => $emailed,
+            ]);
+        }
+
         if (! $issueTemp) {
             $emailed = $this->sendResetLink($request, $user, $userId);
 
@@ -6886,25 +6897,13 @@ final class AdminController extends Controller
             DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
         });
 
+        // Shown to the admin to pass on; never emailed (2026-11-27).
         $emailed = false;
-        if ($sendEmail) {
-            $emailed = $this->sendAccountEmail(
-                $user->email,
-                trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
-                'Your Kiddietrac password has been reset',
-                "Your administrator has reset your Kiddietrac password.\n\n" .
-                "Temporary password: {$tempPassword}\n\n" .
-                "Sign in at https://app.kiddietrac.com with this password. " .
-                "You will be asked to choose your own straight away — the temporary one " .
-                "stops working as soon as you do." .
-                $this->signInHint($user)
-            );
-        }
 
         $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
             'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
             'email' => $user->email,
-            'channel' => $sendEmail ? 'email' : 'shown_to_admin',
+            'channel' => 'shown_to_admin',
             'mode' => 'temp_password',
             'forced' => $forceTemp,
             'email_sent' => $emailed,
@@ -6912,7 +6911,8 @@ final class AdminController extends Controller
         ]);
 
         return response()->json([
-            'message'       => $emailed ? 'Password reset; email sent.' : 'Password reset.',
+            'message'       => 'Temporary password made. Share it with them directly; nothing was emailed.',
+            'mode'          => 'temp_password',
             'temp_password' => $tempPassword,
             'email_sent'    => $emailed,
         ]);
@@ -7076,6 +7076,26 @@ final class AdminController extends Controller
      * The welcome email with a one-time "Set your password" link (2026-11-27). Changes nothing on the account
      * except moving a never-invited one to 'invited'; its password (and any temporary one already sent) still works.
      */
+    /** A new pick-up person's first email: a one-time "Set your password" link, never a password (2026-11-27). */
+    private function sendPickupWelcome(Request $request, int $userId, string $email, string $name, int $agencyId): bool
+    {
+        try {
+            $link = \App\Support\SetPasswordLink::issue($userId, $email, $request->ip());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Pick-up welcome link failed', ['user' => $userId, 'error' => $e->getMessage()]);
+            return false;
+        }
+
+        return $this->sendAccountEmail($email, $name ?: 'there',
+            'Your KiddieTrac pick-up login',
+            "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
+            . "Once you are in, you can see the children you can pick up and check them in and out with One-Tap.\n\n"
+            . "Your sign-in email: {$email}\n\n"
+            . "Use the button below to choose your own password, then sign in with your email and that password. "
+            . "The link works once and expires in " . \App\Support\SetPasswordLink::DAYS . " days; after that, use \"Forgot password\" on the sign-in page.",
+            $agencyId, 'Set your password', $link);
+    }
+
     private function sendWelcomeLink(Request $request, object $user, int $userId, string $name, ?int $agencyId): bool
     {
         try {

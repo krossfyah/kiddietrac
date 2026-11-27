@@ -24,8 +24,9 @@ use Illuminate\Support\Str;
 final class PickupLogin
 {
     /**
-     * Give the contact a login on this family. Returns ['user_id', 'temp' => password|null
-     * (only for a brand-new account), 'reused' => bool], or null when the address is unusable.
+     * Give the contact a login on this family. Returns ['user_id', 'new' => bool (a brand-new account, which
+     * the caller emails a one-time set-password link: App\Support\SetPasswordLink), 'reused' => bool], or null
+     * when the address is unusable. No temporary password is made any more (2026-11-27, Anthony).
      */
     public static function grant(int $agencyId, int $familyId, int $ecId, string $email, string $name, ?string $relationship, ?int $byUserId): ?array
     {
@@ -44,15 +45,13 @@ final class PickupLogin
                     ->whereColumn('g.user_id', 'u.id')->whereNull('f.deleted_at')->where('c.agency_id', $agencyId));
             })->first(['u.id']);
 
-        $temp = null;
         if ($existing) {
             $uid = (int) $existing->id;
         } else {
             $parts = preg_split('/\s+/', trim($name), 2) ?: [];
-            $temp = Str::random(12);
             $uid = (int) DB::table('users')->insertGetId([
                 'email' => $email,
-                'password' => Hash::make($temp),
+                'password' => \App\Support\SetPasswordLink::unusablePassword(),
                 'first_name' => mb_substr($parts[0] ?? 'Pick-up', 0, 80),
                 'last_name' => mb_substr($parts[1] ?? '', 0, 80),
                 'locale' => 'en-CA', 'timezone' => 'America/Toronto',
@@ -88,7 +87,7 @@ final class PickupLogin
         } catch (\Throwable $e) {
         }
 
-        return ['user_id' => $uid, 'temp' => $temp, 'reused' => (bool) $existing];
+        return ['user_id' => $uid, 'new' => ! $existing, 'reused' => (bool) $existing];
     }
 
     /** guardians.relationship is an ENUM; an emergency contact's free text maps onto it. */

@@ -2472,13 +2472,13 @@
     var ask = sendsLink
       ? 'Send ' + (u.name || u.email) + ' a password reset link? Their current password keeps '
         + 'working until they choose a new one.'
-      : 'Reset ' + (u.name || u.email) + "'s password? A new temporary password will be emailed to "
-        + (u.email || 'them') + '.';
+      : ((u.name || u.email) + ' has not signed in yet, so this emails ' + (u.email || 'them')
+        + ' a link to set their own password (works once, for 7 days). Nothing else changes.');
     if (!await _confirm(ask)) return;
     try {
       var r = await Api.post('/admin/users/' + u.id + '/reset-password', { send_email: true });
       // The server says which it actually did; trust that over the guess made above.
-      var link = r && r.mode === 'reset_link';
+      var link = r && (r.mode === 'reset_link' || r.mode === 'set_password_link');
       _toast(r && r.email_sent ? '✅' : '⚠️',
         r && r.email_sent ? (link ? 'Reset link sent' : 'Password reset & emailed')
                           : (link ? 'Could not send the reset link' : 'Reset done — email failed'),
@@ -4033,14 +4033,15 @@
 
     const resetBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '🔑 Reset password');
     resetBtn.addEventListener('click', async () => {
-      if (!await KT.confirm('Reset ' + user.name + "'s password? A new temporary password will be emailed to " + user.email + '.')) return;
+      if (!await KT.confirm('Reset ' + user.name + "'s password? If they have signed in before they get a reset link; if not, a link to set their own password. Any password they have keeps working until they choose a new one.")) return;
       resetBtn.disabled = true; resetBtn.textContent = 'Resetting...';
       try {
         const r = await Api.post('/admin/users/' + user.id + '/reset-password', { send_email: true });
         status.style.color = '#16A34A';
         status.textContent = r.email_sent
-          ? '✓ Password reset and emailed.'
-          : ('✓ Password reset. Email failed — share manually: ' + r.temp_password);
+          ? ('✓ ' + (r.message || 'Link emailed.'))
+          : (r.temp_password ? ('Share this temporary password directly: ' + r.temp_password)
+                             : ('Email failed — ' + (r.message || 'nothing was changed.')));
       } catch (e) {
         status.style.color = '#DC2626';
         status.textContent = 'Reset failed: ' + (e.message || 'error');

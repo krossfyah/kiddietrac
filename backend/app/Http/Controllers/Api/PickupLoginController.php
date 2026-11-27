@@ -361,14 +361,16 @@ final class PickupLoginController extends Controller
         }
 
         $family = (string) DB::table('families')->where('id', $contact->family_id)->value('family_name');
-        $emailed = $r['temp']
+        // A new account gets a one-time "Set your password" link, never a password (2026-11-27).
+        $emailed = ! empty($r['new'])
             ? $this->accountEmail($email, (string) $contact->name, 'Your KiddieTrac pick-up login',
                 "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person"
                 . ($family !== '' ? " for the {$family} family" : '') . ".\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
-                . "Email: {$email}\n"
-                . "Temporary password: {$r['temp']}\n\n"
-                . "We recommend changing your password after you sign in, via 'Forgot password'.", $agencyId)
+                . "Once you are in, you can see the children you can pick up and check them in and out with One-Tap.\n\n"
+                . "Your sign-in email: {$email}\n\n"
+                . "Use the button below to choose your own password, then sign in with your email and that password. "
+                . "The link works once and expires in " . \App\Support\SetPasswordLink::DAYS . " days; after that, use \"Forgot password\" on the sign-in page.", $agencyId,
+                'Set your password', \App\Support\SetPasswordLink::issue((int) $r['user_id'], $email, $request->ip()))
             : $this->accountEmail($email, (string) $contact->name, 'You can now pick up with KiddieTrac',
                 "Your childcare provider has added you as an authorised pick-up person"
                 . ($family !== '' ? " for the {$family} family" : '') . ".\n\n"
@@ -405,8 +407,8 @@ final class PickupLoginController extends Controller
     }
 
     /**
-     * Send a guardian who has never signed in their login (a fresh temporary password).
-     * Someone already signing in is left alone — their working password is never replaced
+     * Send a guardian who has never signed in their login: a one-time "Set your password" link (2026-11-27; it
+     * emailed a fresh temporary password). Their password is not changed. Someone already signing in is left alone — their working password is never replaced
      * (the lesson in AdminController::resendWelcome); they can use "Forgot password".
      */
     public function staffInviteGuardian(Request $request, int $user): JsonResponse
@@ -425,13 +427,13 @@ final class PickupLoginController extends Controller
             return response()->json(['message' => 'There is no email address on file for this guardian. Add one in Families → Edit first.'], 422);
         }
 
-        $temp = Str::random(12);
-        DB::table('users')->where('id', $user)->update(['password' => Hash::make($temp), 'status' => 'invited', 'updated_at' => now()]);
+        DB::table('users')->where('id', $user)->update(['status' => 'invited', 'updated_at' => now()]);
         $name = trim($u->first_name . ' ' . $u->last_name);
         $emailed = $this->accountEmail($u->email, $name, 'Welcome to KiddieTrac',
-            "Welcome to KiddieTrac!\n\nYour account is ready at https://app.kiddietrac.com\n\n"
-            . "Email: {$u->email}\nTemporary password: {$temp}\n\n"
-            . "Sign in with it, then change it under your profile.", $agencyId);
+            "Welcome to KiddieTrac!\n\nYour account is ready. Your sign-in email: {$u->email}\n\n"
+            . "Use the button below to choose your own password, then sign in with your email and that password. "
+            . "The link works once and expires in " . \App\Support\SetPasswordLink::DAYS . " days; after that, use \"Forgot password\" on the sign-in page.", $agencyId,
+            'Set your password', \App\Support\SetPasswordLink::issue((int) $user, (string) $u->email, $request->ip()));
         $this->audit((int) $request->user()->id, $agencyId, 'family.guardian_login_invited', $fid, [
             'user_id' => $user, 'summary' => 'Sent ' . $name . ' (' . $u->email . ') their KiddieTrac login.',
         ]);
@@ -470,12 +472,13 @@ final class PickupLoginController extends Controller
         return [$contact, $this->staffFamily($request, (int) $contact->family_id)];
     }
 
-    private function accountEmail(string $to, string $name, string $subject, string $body, int $agencyId): bool
+    private function accountEmail(string $to, string $name, string $subject, string $body, int $agencyId,
+        ?string $ctaLabel = null, ?string $ctaUrl = null): bool
     {
         try {
             $m = new \App\Mail\AccountNotice(
                 recipientName: $name ?: 'there', subjectLine: $subject, bodyText: $body,
-                ctaLabel: 'Sign in to KiddieTrac', ctaUrl: config('app.url', 'https://app.kiddietrac.com'),
+                ctaLabel: $ctaLabel ?: 'Sign in to KiddieTrac', ctaUrl: $ctaUrl ?: config('app.url', 'https://app.kiddietrac.com'),
                 agencyId: $agencyId,
                 showApp: true,   // every one of these is a pick-up login's first email: Google Play card (2026-10-28)
             );
