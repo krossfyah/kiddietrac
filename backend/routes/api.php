@@ -2660,6 +2660,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/claims/report',                  [\App\Http\Controllers\Api\HrClaimController::class, 'report']);
         Route::post  ('/hr/claims/{id}/decide',             [\App\Http\Controllers\Api\HrClaimController::class, 'decide'])->whereNumber('id');
         Route::put   ('/hr/claims/settings',                [\App\Http\Controllers\Api\HrClaimController::class, 'saveSettings']);
+        // KiddieTrac HR Phase 3, item 10 (2026-11-26): the planning view (cost only for pay viewers, ratio gaps, availability conflicts) + approving swaps.
+        Route::get   ('/hr/schedule/plan',                  [\App\Http\Controllers\Api\HrScheduleController::class, 'plan']);
+        Route::post  ('/hr/swaps/{id}/decide',              [\App\Http\Controllers\Api\HrScheduleController::class, 'decide'])->whereNumber('id');
     });
 
     // ---- KiddieTrac HR phase 2 (2026-11-28): hiring, onboarding, performance, courses. All under hr/ (the HR add-on). ----
@@ -2681,6 +2684,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/hr/claims',                         [\App\Http\Controllers\Api\HrClaimController::class, 'store'])->middleware('throttle:30,1,hrclaims');
         Route::post  ('/hr/claims/{id}/withdraw',           [\App\Http\Controllers\Api\HrClaimController::class, 'withdraw'])->whereNumber('id');
         Route::get   ('/hr/claims/{id}/receipt',            [\App\Http\Controllers\Api\HrClaimController::class, 'receipt'])->whereNumber('id');
+        // KiddieTrac HR Phase 3, item 10 (2026-11-26): my shifts, weekly availability, one-off unavailability, shift giveaways / swaps (App\Support\HrAvailability).
+        Route::get   ('/hr/me/schedule',                    [\App\Http\Controllers\Api\HrScheduleController::class, 'mine']);
+        Route::post  ('/hr/me/availability',                [\App\Http\Controllers\Api\HrScheduleController::class, 'saveAvailability']);
+        Route::post  ('/hr/me/unavailability',              [\App\Http\Controllers\Api\HrScheduleController::class, 'addUnavailable'])->middleware('throttle:30,1,hrunav');
+        Route::post  ('/hr/me/unavailability/{id}/remove',  [\App\Http\Controllers\Api\HrScheduleController::class, 'removeUnavailable'])->whereNumber('id');
+        Route::get   ('/hr/swaps/options',                  [\App\Http\Controllers\Api\HrScheduleController::class, 'swapOptions']);
+        Route::post  ('/hr/swaps',                          [\App\Http\Controllers\Api\HrScheduleController::class, 'offer'])->middleware('throttle:30,1,hrswaps');
+        Route::post  ('/hr/swaps/{id}/accept',              [\App\Http\Controllers\Api\HrScheduleController::class, 'accept'])->whereNumber('id');
+        Route::post  ('/hr/swaps/{id}/cancel',              [\App\Http\Controllers\Api\HrScheduleController::class, 'cancel'])->whereNumber('id');
         Route::get(    '/hr/onboarding/{id}',                         [\App\Http\Controllers\Api\HrOnboardingController::class, 'show'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/done',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'done'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/upload',            [\App\Http\Controllers\Api\HrOnboardingController::class, 'upload'])->whereNumber('id')->middleware('throttle:30,1,hronbup');

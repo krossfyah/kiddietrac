@@ -8,6 +8,8 @@
    Lazy: loaded before screen-hr.js and screen-hr-talent.js (their "d" dependency), never on its own.
    Item 9 (2026-11-26): HR > Claims and My HR "Expense and mileage claims" (expense with receipt photo, or mileage at the
    agency's km rate); approved claims are paid on the next manual payslip as a reimbursement line.
+   Item 10 (2026-11-26): HR > Rota (the planned week: cost for pay viewers, ratio warnings, availability conflicts, shift
+   changes to approve) and My HR "My shifts and availability" (weekly availability, can't-work dates, give away / swap).
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -280,6 +282,11 @@
       + '.hrt-sec{font-weight:800;font-size:14px;margin:16px 0 8px;color:#0F172A;}'
       + 'html.kt-dark #appMain .hrt-chips button.hrt-chip{background:#0F172A;border-color:#334155;color:#E2E8F0;}'
       + 'html.kt-dark #appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}html.kt-dark #appMain .hrt-chips button.hrt-chip .n{background:#1E293B;color:#CBD5E1;}html.kt-dark .hrt-sec{color:#F1F5F9;}';
+    st.textContent += '#appMain .hrt-chips .hrt-stat{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#F8FAFC;font-size:12.5px;font-weight:700;line-height:1;white-space:nowrap;color:#334155;}'
+      + '#appMain .hrt-chips .hrt-stat .n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;border-radius:999px;background:#fff;color:#0F172A;font-size:11.5px;}'
+      + '#appMain .hrt-chips .hrt-stat.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E;}'
+      + 'html.kt-dark #appMain .hrt-chips .hrt-stat{background:#0F172A;border-color:#334155;color:#E2E8F0;}html.kt-dark #appMain .hrt-chips .hrt-stat .n{background:#1E293B;color:#E2E8F0;}'
+      + 'html.kt-dark #appMain .hrt-chips .hrt-stat.warn{background:#422006;border-color:#92400E;color:#FDE68A;}';
     document.head.appendChild(st);
   }
 
@@ -472,10 +479,211 @@
     });
   }
 
+  /* ── Item 10 (2026-11-26): HR > Rota (planning view) and My HR "My shifts and availability" ───────────────── */
+  var DOW = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' };
+  var RS = { centre: null, week: null };
+  function t12(hm) { var m = /^(\d{2}):(\d{2})/.exec(hm || ''); if (!m) return ''; var h = +m[1], ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + m[2] + ' ' + ap; }
+  function span(s) { return '<span data-no-i18n>' + esc(t12(s.start) + ' – ' + t12(s.end)) + '</span>'; }
+  function wday(d) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); if (!m) return ''; var x = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][x.getUTCDay()] + ' ' + MON[+m[2] - 1] + ' ' + (+m[3]); }
+  function addDays(d, n) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); var x = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)); return x.toISOString().slice(0, 10); }
+  function hrs(n) { n = Math.round((+n || 0) * 100) / 100; return n + ' h'; }
+  var SW_ST = { open: ['#FEF3C7', '#92400E', 'Waiting for a colleague'], accepted: ['#E0F2FE', '#075985', 'Waiting for approval'], approved: ['#DCFCE7', '#166534', 'Approved'], declined: ['#FEE2E2', '#991B1B', 'Declined'], cancelled: ['#F1F5F9', '#475569', 'Cancelled'] };
+  function swPill(s) { var p = SW_ST[s] || SW_ST.open; return pill(p[0], p[1], p[2]); }
+  function swWhat(w) {
+    var s = w.shift || {};
+    var h = '<b>' + (w.kind === 'swap' ? 'Swap' : 'Giveaway') + '</b> <span class="hr-sub" data-no-i18n>' + esc(wday(s.date)) + '</span> ' + span(s);
+    if (w.swap_shift) h += '<div class="hr-sub">for <span data-no-i18n>' + esc(wday(w.swap_shift.date)) + '</span> ' + span(w.swap_shift) + '</div>';
+    return h;
+  }
+
+  async function drawRota(host) {
+    chipCss();
+    var q = [];
+    if (RS.centre) q.push('centre_id=' + RS.centre);
+    if (RS.week) q.push('week=' + RS.week);
+    var d;
+    try { d = await Api.get('/hr/schedule/plan' + (q.length ? '?' + q.join('&') : '')); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    RS.centre = d.centre_id; RS.week = d.week;
+    var pay = !!d.can_see_pay, sh = d.shifts || [], gaps = d.ratio_gaps || [], sw = d.swaps || [];
+    var conflicts = sh.filter(function (s) { return s.conflict; });
+    var toApprove = sw.filter(function (w) { return w.status === 'accepted'; });
+    var t = d.totals || {};
+    var h = '<div class="hr-note"><span>The week as planned on the rota (Schedule), checked against each person\'s availability and approved leave, and against the room ratios for the children expected that day.</span>'
+      + (pay ? ' <span>Cost uses each person\'s hourly pay rate; only people who can see pay see it.</span>' : '') + '</div>'
+      + '<div class="hrt-chips">'
+      + ((d.centres || []).length > 1 ? '<select class="hr-i" data-ro="centre" style="height:30px;max-width:220px;">' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (c.id === d.centre_id ? ' selected' : '') + ' data-no-i18n>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '')
+      + '<button type="button" class="hr-b" data-ro="prev" aria-label="Previous week">‹</button><b data-no-i18n style="font-size:13px;white-space:nowrap;">' + esc(wday(d.week) + ' – ' + wday(d.week_end)) + '</b>'
+      + '<button type="button" class="hr-b" data-ro="next" aria-label="Next week">›</button><button type="button" class="hr-b" data-ro="now">This week</button>'
+      + '<span style="flex:1"></span>'
+      + '<span class="hrt-stat">Hours <span class="n" data-no-i18n>' + esc(String(t.hours || 0)) + '</span></span>'
+      + (pay ? '<span class="hrt-stat">Cost <span class="n" data-no-i18n>' + esc(money(t.cost || 0)) + '</span></span>' : '')
+      + '<span class="hrt-stat' + (gaps.length ? ' warn' : '') + '">Ratio warnings <span class="n">' + gaps.length + '</span></span>'
+      + '<span class="hrt-stat' + (conflicts.length ? ' warn' : '') + '">Availability conflicts <span class="n">' + conflicts.length + '</span></span></div>';
+    if (pay && (t.salaried || t.no_rate)) h += '<div class="hr-sub" style="margin:-4px 0 8px;">' + (t.salaried ? '<span data-no-i18n>' + t.salaried + '</span> <span>salaried shifts are not costed.</span> ' : '') + (t.no_rate ? '<span data-no-i18n>' + t.no_rate + '</span> <span>shifts have no pay rate on the employee file.</span>' : '') + '</div>';
+    h += '<div class="hrt-sec">Shift changes</div><div class="kt-card">' + (sw.length ? '<table data-hrs="swaps"><thead><tr><th>From</th><th>Shift</th><th>To</th><th>Status</th><th></th></tr></thead><tbody>' + sw.map(function (w) {
+      return '<tr><td><b data-no-i18n>' + esc(w.from) + '</b></td><td>' + swWhat(w) + '</td><td data-no-i18n>' + esc(w.accepted_by || w.to || '') + (!w.accepted_by && !w.to ? '<span class="hr-sub">Anyone at the centre</span>' : '')
+        + (w.conflict ? '<div style="color:#B45309;font-size:12px;">⚠️ ' + esc(w.conflict) + '</div>' : '') + '</td><td>' + swPill(w.status) + '</td>'
+        + '<td style="text-align:center;"><button type="button" data-ro="swap" data-id="' + w.id + '">View change</button></td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No shift giveaways or swaps waiting.</div>') + '</div>';
+    h += '<div class="hrt-sec">Ratio warnings</div><div class="kt-card">' + (gaps.length ? '<table data-hrs="gaps"><thead><tr><th>Day</th><th>Room</th><th>Time</th><th>Children expected</th><th>Educators planned</th><th>Needed</th></tr></thead><tbody>' + gaps.map(function (g) {
+      return '<tr style="background:#FFFBEB;"><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(g.date)) + '</td><td data-no-i18n>' + esc(g.room) + '</td><td style="white-space:nowrap;">' + span({ start: g.from, end: g.to }) + '</td>'
+        + '<td data-no-i18n>' + g.children + '</td><td data-no-i18n>' + g.planned + '</td><td data-no-i18n><b style="color:#B45309;">' + g.required + '</b></td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">Every room has enough educators planned for the children expected.</div>') + '</div>';
+    h += '<div class="hrt-sec">Shifts</div><div class="kt-card">' + (sh.length ? '<table data-hrs="shifts"><thead><tr><th>Person</th><th>Day</th><th>Time</th><th>Room</th><th style="text-align:right;">Hours</th>' + (pay ? '<th style="text-align:right;">Cost</th>' : '') + '<th>Availability</th></tr></thead><tbody>' + sh.map(function (s) {
+      return '<tr' + (s.conflict ? ' style="background:#FFFBEB;"' : '') + '><td><b data-no-i18n>' + esc(s.person) + '</b></td><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(s.date)) + '</td><td style="white-space:nowrap;">' + span(s) + '</td>'
+        + '<td data-no-i18n>' + esc(s.room || '') + '</td><td style="text-align:right;" data-no-i18n>' + esc(hrs(s.hours)) + '</td>'
+        + (pay ? '<td style="text-align:right;white-space:nowrap;">' + (s.cost != null ? '<span data-no-i18n>' + esc(money(s.cost)) + '</span>' : '<span class="hr-sub">' + esc(s.cost_note || '') + '</span>') + '</td>' : '')
+        + '<td>' + (s.conflict ? pill('#FEF3C7', '#92400E', s.conflict) : '<span class="hr-sub">OK</span>') + '</td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No shifts planned this week. Add them on the Schedule screen.</div>') + '</div>';
+    var bp = d.by_person || [];
+    if (bp.length) h += '<div class="hrt-sec">By person</div><div class="kt-card"><table data-hrs="byperson"><thead><tr><th>Person</th><th style="text-align:right;">Shifts</th><th style="text-align:right;">Hours</th>' + (pay ? '<th style="text-align:right;">Cost</th>' : '') + '</tr></thead><tbody>'
+      + bp.map(function (p) { return '<tr><td data-no-i18n><b>' + esc(p.name) + '</b></td><td style="text-align:right;" data-no-i18n>' + p.shifts + '</td><td style="text-align:right;" data-no-i18n>' + esc(hrs(p.hours)) + '</td>' + (pay ? '<td style="text-align:right;" data-no-i18n>' + (p.cost != null ? esc(money(p.cost)) : '—') + '</td>' : '') + '</tr>'; }).join('') + '</tbody></table></div>';
+    host.innerHTML = h;
+    var go = function () { if (host.isConnected) drawRota(host); };
+    host.querySelectorAll('[data-ro]').forEach(function (b) {
+      var a = b.getAttribute('data-ro');
+      if (a === 'centre') { b.addEventListener('change', function () { RS.centre = +b.value; go(); }); return; }
+      b.addEventListener('click', function () {
+        if (a === 'prev') { RS.week = addDays(d.week, -7); go(); }
+        else if (a === 'next') { RS.week = addDays(d.week, 7); go(); }
+        else if (a === 'now') { RS.week = null; go(); }
+        else if (a === 'swap') { var w = sw.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (w) openSwapDecision(w, d.me, go); }
+      });
+    });
+    var m = /[?&]swap=(\d+)/.exec(location.hash || '');
+    if (m) { var w = sw.filter(function (x) { return x.id === +m[1]; })[0]; if (w) openSwapDecision(w, d.me, go); }
+  }
+
+  function openSwapDecision(w, me, done) {
+    var kv = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;"><span style="color:#64748B;">' + esc(k) + '</span><b style="text-align:right;">' + v + '</b></div>'; };
+    var s = w.shift || {};
+    var h = kv('Type', w.kind === 'swap' ? 'Swap' : 'Giveaway') + kv('From', '<span data-no-i18n>' + esc(w.from) + '</span>')
+      + kv('Shift', '<span data-no-i18n>' + esc(wday(s.date)) + '</span> ' + span(s) + ' <span class="hr-sub" data-no-i18n>' + esc(s.room || '') + '</span>');
+    if (w.swap_shift) h += kv('In return', '<span data-no-i18n>' + esc(wday(w.swap_shift.date)) + '</span> ' + span(w.swap_shift));
+    h += kv('Taken by', w.accepted_by ? '<span data-no-i18n>' + esc(w.accepted_by) + '</span>' : '<span class="hr-sub">Nobody yet</span>') + kv('Status', swPill(w.status));
+    if (w.note) h += kv('Note', '<span data-no-i18n>' + esc(w.note) + '</span>');
+    if (w.conflict) h += '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#FFFBEB;color:#92400E;font-size:13px;">⚠️ <span data-no-i18n>' + esc(w.accepted_by || w.to || '') + '</span>: ' + esc(w.conflict) + '</div>';
+    h += '<div style="margin-top:10px;">' + field('Comment (optional, the people involved see it)', area('comment', '', 2), true) + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>';
+    var box = el(h);
+    var mine = me === w.from_user_id || me === (w.accepted_by_id || 0);
+    var decide = function (dec) {
+      return Api.post('/hr/swaps/' + w.id + '/decide', { decision: dec, comment: val(box, 'comment') }).then(function () { saved(dec === 'approve' ? 'Shift change approved. The rota is updated.' : 'Shift change declined.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    };
+    var acts = [{ label: 'Close' }];
+    if (!mine && (w.status === 'open' || w.status === 'accepted')) acts.push({ label: 'Decline', handler: function () { return decide('decline'); } });
+    if (!mine && w.status === 'accepted') acts.push({ label: 'Approve', primary: true, busyLabel: 'Saving…', handler: function () { return decide('approve'); } });
+    modal({ title: (w.kind === 'swap' ? 'Shift swap: ' : 'Shift giveaway: ') + w.from, body: box, actions: acts });
+  }
+
+  async function mineRota(host) {
+    chipCss();
+    var wrap = document.createElement('div'); wrap.setAttribute('data-hrs-rota', '1'); host.appendChild(wrap);
+    var d;
+    try { d = await Api.get('/hr/me/schedule'); } catch (e) { wrap.innerHTML = ''; return; }
+    if (!wrap.isConnected) return;
+    var reload = function () { if (wrap.isConnected) { wrap.remove(); mineRota(host); } };
+    var sh = d.shifts || [], sw = d.swaps || [], offered = {};
+    sw.forEach(function (w) { if (w.from_user_id === d.me && w.shift) offered[w.shift.id] = w; });
+    var forMe = sw.filter(function (w) { return w.from_user_id !== d.me; });
+    var weekly = d.weekly || [];
+    var wk = {}; weekly.forEach(function (w) { (wk[w.dow] = wk[w.dow] || []).push(t12(w.start) + ' – ' + t12(w.end)); });
+    var h = '<div class="hrt-sec">My shifts and availability</div><div class="hr-bar"><button type="button" class="hr-b p" data-mro="avail">Weekly availability</button><button type="button" class="hr-b" data-mro="unav">I can\'t work a date</button></div>'
+      + '<div class="hr-note">' + (weekly.length ? '<span>You are available:</span> <span data-no-i18n>' + Object.keys(wk).map(function (k) { return esc(DOW[k].slice(0, 3) + ' ' + wk[k].join(', ')); }).join(' · ') + '.</span>' : '<span>You have not set your weekly availability, so you can be rostered any time the centre is open.</span>') + ' <span>The rota leaves out days you are on approved leave or can\'t work.</span></div>';
+    if (forMe.length) h += '<div class="kt-card" style="margin-bottom:10px;"><table data-hrs="swapsforme"><thead><tr><th>From</th><th>Shift</th><th>Status</th><th></th></tr></thead><tbody>' + forMe.map(function (w) {
+      return '<tr><td data-no-i18n><b>' + esc(w.from) + '</b></td><td>' + swWhat(w) + '</td><td>' + swPill(w.status) + '</td><td style="text-align:center;white-space:nowrap;">'
+        + (w.status === 'open' ? '<button type="button" class="hr-b p" data-mro="take" data-id="' + w.id + '">' + (w.kind === 'swap' ? 'Accept swap' : 'Take shift') + '</button>' : '<button type="button" class="hr-b" data-mro="release" data-id="' + w.id + '">Let it go</button>') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    h += '<div class="kt-card">' + (sh.length ? '<table data-hrs="myshifts"><thead><tr><th>Day</th><th>Time</th><th>Room</th><th>Change</th><th></th></tr></thead><tbody>' + sh.map(function (s) {
+      var o = offered[s.id];
+      return '<tr><td style="white-space:nowrap;" data-no-i18n><b>' + esc(wday(s.date)) + '</b></td><td style="white-space:nowrap;">' + span(s) + '</td><td data-no-i18n>' + esc(s.room || '') + '</td>'
+        + '<td>' + (o ? swPill(o.status) : '<span class="hr-sub">—</span>') + '</td><td style="text-align:center;white-space:nowrap;">'
+        + (o ? '<button type="button" class="hr-b" data-mro="cancel" data-id="' + o.id + '">Cancel offer</button>' : '<button type="button" class="hr-b" data-mro="offer" data-id="' + s.id + '">Give away or swap</button>') + '</td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No shifts on the rota for the next four weeks.</div>') + '</div>';
+    var un = d.unavailable || [];
+    if (un.length) h += '<div class="kt-card" style="margin-top:10px;"><table data-hrs="unav"><thead><tr><th>Can\'t work</th><th>Time</th><th>Reason</th><th></th></tr></thead><tbody>' + un.map(function (u) {
+      return '<tr><td data-no-i18n style="white-space:nowrap;">' + esc(wday(u.date_from) + (u.date_to !== u.date_from ? ' – ' + wday(u.date_to) : '')) + '</td><td>' + (u.start ? span(u) : 'All day') + '</td><td data-no-i18n>' + esc(u.reason || '') + '</td>'
+        + '<td style="text-align:center;"><button type="button" class="hr-b" data-mro="unrm" data-id="' + u.id + '">Remove</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+    wrap.innerHTML = h;
+    var post = function (url, body, ok) { return Api.post(url, body || {}).then(function () { saved(ok); reload(); }, function (e) { toast('⚠️', 'Could not save it', errMsg(e), '#DC2626'); }); };
+    wrap.querySelectorAll('[data-mro]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-mro'), id = +b.getAttribute('data-id');
+        if (a === 'avail') openAvailability(weekly, reload);
+        else if (a === 'unav') openUnavailable(d.today, reload);
+        else if (a === 'offer') { var s = sh.filter(function (x) { return x.id === id; })[0]; if (s) openOffer(s, reload); }
+        else if (a === 'cancel') post('/hr/swaps/' + id + '/cancel', {}, 'Offer cancelled.');
+        else if (a === 'take') post('/hr/swaps/' + id + '/accept', {}, 'Accepted. A director approves it next.');
+        else if (a === 'release') post('/hr/swaps/' + id + '/cancel', {}, 'You let it go. It is open again.');
+        else if (a === 'unrm') post('/hr/me/unavailability/' + id + '/remove', {}, 'Removed.');
+      });
+    });
+  }
+
+  function openAvailability(weekly, done) {
+    var by = {}; weekly.forEach(function (w) { if (!by[w.dow]) by[w.dow] = w; });
+    var rows = Object.keys(DOW).map(function (k) {
+      var w = by[k];
+      return '<div data-avrow style="margin-bottom:8px;">' + check('on' + k, !!w, DOW[k])
+        + '<div style="display:flex;gap:6px;align-items:center;margin:4px 0 0 26px;max-width:340px;"><input class="hr-i" type="time" style="flex:1 1 0;min-width:0;width:auto;" data-f="s' + k + '" value="' + esc(w ? w.start : '07:00') + '">'
+        + '<span class="hr-sub">to</span><input class="hr-i" type="time" style="flex:1 1 0;min-width:0;width:auto;" data-f="e' + k + '" value="' + esc(w ? w.end : '18:00') + '"></div></div>';
+    }).join('');
+    var box = el('<div class="hr-sub" style="margin-bottom:10px;">Tick the days you can work and the hours. Leave every day unticked to be available any time the centre is open.</div>' + rows + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    modal({ title: 'My weekly availability', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var days = [];
+      for (var k = 1; k <= 7; k++) {
+        if (!val(box, 'on' + k)) continue;
+        var s = val(box, 's' + k), e = val(box, 'e' + k);
+        if (!s || !e || s >= e) { msg(box, DOW[k] + ': the end time is after the start time.'); return false; }
+        days.push({ dow: k, start: s.slice(0, 5), end: e.slice(0, 5) });
+      }
+      return Api.post('/hr/me/availability', { days: days }).then(function () { saved('Availability saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  function openUnavailable(today0, done) {
+    var box = el('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' + field('From', input('date_from', today0, 'date')) + field('To (optional)', input('date_to', '', 'date'))
+      + field('', check('part', false, 'Only part of the day'), true) + '<div data-part style="display:none;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:10px;">' + field('From time', input('start', '09:00', 'time')) + field('To time', input('end', '12:00', 'time')) + '</div>'
+      + field('Reason (optional)', input('reason', ''), true) + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var p = box.querySelector('[data-f="part"]');
+    p.addEventListener('change', function () { box.querySelector('[data-part]').style.display = p.checked ? 'grid' : 'none'; });
+    modal({ title: 'I can\'t work a date', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var b = { date_from: val(box, 'date_from'), date_to: val(box, 'date_to'), reason: val(box, 'reason') };
+      if (!b.date_from) { msg(box, 'Choose the date.'); return false; }
+      if (val(box, 'part')) { b.start = (val(box, 'start') || '').slice(0, 5); b.end = (val(box, 'end') || '').slice(0, 5); }
+      return Api.post('/hr/me/unavailability', b).then(function () { saved('Saved. You will not be rostered then.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  async function openOffer(s, done) {
+    var o;
+    try { o = await Api.get('/hr/swaps/options?shift_id=' + s.id); } catch (e) { toast('⚠️', 'Could not open it', errMsg(e), '#DC2626'); return; }
+    var people = {}; (o.people || []).forEach(function (p) { people[p.id] = p.name; });
+    var box = el('<div class="hr-note" style="margin-top:0;"><b data-no-i18n>' + esc(wday(s.date)) + '</b> ' + span(s) + ' <span class="hr-sub" data-no-i18n>' + esc(s.room || '') + '</span></div>'
+      + '<div style="display:grid;grid-template-columns:1fr;gap:10px;">' + field('What do you want to do?', select('kind', opts({ giveaway: 'Give this shift away', swap: 'Swap it for one of a colleague\'s shifts' }, 'giveaway')))
+      + field('Colleague', select('to_user_id', opts(people, '', 'Anyone at the centre'))) + '<div data-theirs style="display:none;">' + field('Their shift', select('swap_shift_id', '')) + '</div>'
+      + field('Note (optional)', input('note', '')) + '</div><div class="hr-sub" style="margin-top:8px;">A colleague accepts it, then a director approves it before the rota changes.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var kind = box.querySelector('[data-f="kind"]'), to = box.querySelector('[data-f="to_user_id"]'), theirs = box.querySelector('[data-f="swap_shift_id"]');
+    var sync = function () {
+      var swap = kind.value === 'swap';
+      box.querySelector('[data-theirs]').style.display = swap ? '' : 'none';
+      to.options[0].textContent = swap ? 'Choose a colleague' : 'Anyone at the centre';
+      var list = (o.shifts || []).filter(function (x) { return String(x.user_id) === to.value; });
+      theirs.innerHTML = list.length ? list.map(function (x) { return '<option value="' + x.id + '">' + esc(wday(x.date) + ' ' + t12(x.start) + ' – ' + t12(x.end)) + '</option>'; }).join('') : '<option value="">No upcoming shifts</option>';
+    };
+    kind.addEventListener('change', sync); to.addEventListener('change', sync); sync();
+    modal({ title: 'Give away or swap a shift', body: box, actions: [{ label: 'Cancel' }, { label: 'Offer it', primary: true, busyLabel: 'Sending…', handler: function () {
+      var b = { shift_id: s.id, kind: kind.value, to_user_id: to.value ? +to.value : null, swap_shift_id: kind.value === 'swap' && theirs.value ? +theirs.value : null, note: val(box, 'note') };
+      if (b.kind === 'swap' && (!b.to_user_id || !b.swap_shift_id)) { msg(box, 'Choose a colleague and one of their shifts.'); return false; }
+      return Api.post('/hr/swaps', b).then(function () { saved('Offered. You keep the shift until a director approves the change.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
   window.KTHrSafety = {
-    tabs: [['injuries', 'Injuries'], ['claims', 'Claims']],
-    has: function (tab) { return tab === 'injuries' || tab === 'claims'; },
-    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); },
-    mine: function (host) { mine(host); mineClaims(host); }
+    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['rota', 'Rota']],
+    has: function (tab) { return tab === 'injuries' || tab === 'claims' || tab === 'rota'; },
+    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); },
+    mine: function (host) { mine(host); mineClaims(host); mineRota(host); }
   };
 })(window);

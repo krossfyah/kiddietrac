@@ -179,6 +179,8 @@ class ScheduleAutofillCommand extends Command
                 if (! in_array((int) $d->isoWeekday(), $uDays, true)) { continue; }
                 if (isset($closures[$date])) { continue; }
                 if (isset($existing[$uid . '|' . $date])) { continue; }
+                // HR add-on: approved leave / unavailability / outside weekly availability (App\Support\HrAvailability)
+                if (\App\Support\HrAvailability::blocksFor($centre, (int) $uid, $date, $pat ? $pat['start'] : $open, $pat ? $pat['end'] : $close)) { continue; }
                 $rows[] = [
                     'user_id' => $uid,
                     'room_id' => $room,

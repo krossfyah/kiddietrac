@@ -4,6 +4,20 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "🔁",
+            "title": "Availability and shift swaps",
+            "body": "Staff set the days and hours they can work, mark dates they cannot, and give away or swap shifts in My HR; a director approves each change. Autofill leaves out leave and unavailable days, and HR > Rota shows the planned week with ratio warnings and, for people who can see pay, its cost.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🧾",
             "title": "Expense and mileage claims",
             "body": "Staff can now claim money back from My HR: snap a photo of the receipt, or enter the km driven at your agency's mileage rate. Directors and admins approve or decline in HR > Claims, and approved claims are added to the person's next payslip as a reimbursement. A report totals claims by person, category and month.",

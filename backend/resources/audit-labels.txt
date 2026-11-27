@@ -1342,3 +1342,10 @@ post hr/claims | Filed an expense or mileage claim
 post hr/claims/{id}/withdraw | Withdrew an expense or mileage claim
 post hr/claims/{id}/decide | Approved or declined an expense or mileage claim
 put hr/claims/settings | Changed the expense and mileage claim settings
+post hr/me/availability | Changed their weekly work availability
+post hr/me/unavailability | Marked a date they can't work
+post hr/me/unavailability/{id}/remove | Removed a date they can't work
+post hr/swaps | Offered a shift as a giveaway or swap
+post hr/swaps/{id}/accept | Accepted a colleague's shift giveaway or swap
+post hr/swaps/{id}/cancel | Cancelled or let go of a shift giveaway or swap
+post hr/swaps/{id}/decide | Approved or declined a shift giveaway or swap

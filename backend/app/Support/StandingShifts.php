@@ -121,7 +121,8 @@ final class StandingShifts
         $now = now();
         for ($d = $from->copy()->startOfDay(); $d->lte($to); $d->addDay()) {
             $date = $d->toDateString();
-            if (! in_array((int) $d->isoWeekday(), $pattern['days'], true) || isset($closed[$date]) || isset($have[$date])) {
+            if (! in_array((int) $d->isoWeekday(), $pattern['days'], true) || isset($closed[$date]) || isset($have[$date])
+                || HrAvailability::blocksFor($centre, $userId, $date, $pattern['start'], $pattern['end'])) {   // HR add-on: leave / unavailable
                 continue;
             }
             $rows[] = [

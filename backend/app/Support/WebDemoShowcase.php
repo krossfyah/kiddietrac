@@ -774,6 +774,7 @@ final class WebDemoShowcase
         $this->hrTalentStory($agencyId, $byName->all(), $centreOf->all(), $maya, $elena, $olivia, $now);
         $this->hrSafetyStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);
         $this->hrClaimsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 3, item 9
+        $this->hrRotaStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 3, item 10
     }
 
     /**
@@ -863,6 +864,61 @@ final class WebDemoShowcase
                 'receipt_path' => $path, 'receipt_name' => $path ? 'receipt.png' : null, 'receipt_mime' => $path ? 'image/png' : null,
                 'status' => $status, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($byAgo, 10, 0) : null, 'decision_comment' => $comment,
                 'paid_at' => $status === 'paid' ? $this->at(-14, 9, 0) : null, 'created_at' => $this->at($ago, 17, 30), 'updated_at' => $now]);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 3 DEMO, ITEM 10 (2026-11-26, Starlight only): the rota planning view. This week and next on the
+     * San Diego centre for Lucas, Sofia, Noah, Ethan and Ava (wall-clock times, as the Schedule screen stores them), hourly
+     * pay rates where none is set (Elena salaried), Sofia available Monday to Thursday only (her Friday shifts show the
+     * conflict), Noah can't work next Wednesday, Lucas giving away next Tuesday (open) and Ethan / Noah swapping next
+     * Thursday and Friday (accepted, waiting for approval). Rooms the five cannot cover show as ratio warnings.
+     */
+    private function hrRotaStory(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_shift_swaps')) return;
+        $who = ['Lucas' => [23.00, [7, 0, 15, 0]], 'Sofia' => [25.75, [7, 0, 15, 0]], 'Noah' => [22.50, [10, 0, 18, 0]], 'Ethan' => [23.75, [8, 0, 16, 0]], 'Ava' => [26.00, [10, 0, 18, 0]]];
+        $centre = null;
+        foreach ($who as $n => $_) if (isset($byName[$n], $centreOf[$byName[$n]])) { $centre = (int) $centreOf[$byName[$n]]; break; }
+        if (! $centre) return;
+        $rooms = DB::table('rooms')->where('centre_id', $centre)->orderBy('id')->pluck('id')->map(fn ($v) => (int) $v)->all();
+        if (! $rooms) return;
+        foreach ($who as $n => [$rate]) {
+            if (isset($byName[$n])) DB::table('users')->where('id', $byName[$n])->whereNull('pay_rate')->whereNull('pay_type')->update(['pay_rate' => $rate, 'pay_type' => 'hourly']);
+        }
+        if ($elena) DB::table('users')->where('id', $elena)->whereNull('pay_rate')->whereNull('pay_type')->update(['pay_type' => 'salary']);
+        $mon = $this->today->copy()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $ids = [];   // name|offset => shift id
+        $i = 0;
+        foreach ($who as $n => [$rate, $hm]) {
+            $uid = $byName[$n] ?? null;
+            if (! $uid || (int) ($centreOf[$uid] ?? 0) !== $centre) continue;
+            $room = (int) (DB::table('educator_rooms')->where('user_id', $uid)->whereIn('room_id', $rooms)->value('room_id') ?: $rooms[$i % count($rooms)]);
+            $i++;
+            for ($o = 0; $o < 12; $o++) {
+                if ($o % 7 > 4) continue;
+                $date = $mon->copy()->addDays($o)->toDateString();
+                $ids[$n . '|' . $o] = $this->add('shifts', ['user_id' => $uid, 'room_id' => $room, 'starts_at' => sprintf('%s %02d:%02d:00', $date, $hm[0], $hm[1]),
+                    'ends_at' => sprintf('%s %02d:%02d:00', $date, $hm[2], $hm[3]), 'role' => 'lead', 'status' => $date < $this->today->toDateString() ? 'completed' : 'scheduled', 'created_at' => $now]);
+            }
+        }
+        if (isset($byName['Sofia'])) {
+            foreach ([1, 2, 3, 4] as $dow) {
+                $this->add('hr_availability', ['agency_id' => $agencyId, 'user_id' => $byName['Sofia'], 'dow' => $dow, 'start_time' => '07:00:00', 'end_time' => '15:00:00', 'created_at' => $now, 'updated_at' => $now]);
+            }
+        }
+        if (isset($byName['Noah'])) {
+            $wed = $mon->copy()->addDays(9)->toDateString();
+            $this->add('hr_unavailability', ['agency_id' => $agencyId, 'user_id' => $byName['Noah'], 'date_from' => $wed, 'date_to' => $wed, 'reason' => 'Medical appointment', 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if (isset($ids['Lucas|8'])) {
+            $this->add('hr_shift_swaps', ['agency_id' => $agencyId, 'centre_id' => $centre, 'shift_id' => $ids['Lucas|8'], 'from_user_id' => $byName['Lucas'], 'kind' => 'giveaway',
+                'status' => 'open', 'note' => 'Family wedding out of town', 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if (isset($ids['Ethan|10'], $ids['Noah|11'])) {
+            $this->add('hr_shift_swaps', ['agency_id' => $agencyId, 'centre_id' => $centre, 'shift_id' => $ids['Ethan|10'], 'from_user_id' => $byName['Ethan'], 'kind' => 'swap',
+                'to_user_id' => $byName['Noah'], 'swap_shift_id' => $ids['Noah|11'], 'accepted_by_id' => $byName['Noah'], 'accepted_at' => $now, 'status' => 'accepted',
+                'note' => 'Swapping so I can take my son to his game', 'created_at' => $now, 'updated_at' => $now]);
         }
     }
 

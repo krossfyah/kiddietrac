@@ -60,7 +60,7 @@
      while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
      entry written in DICT above always wins. New UI text can still go straight into DICT. */
   var PACK_V = '20261126brc';
-  var BASE_V = '20261126hr3c9';   // + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
+  var BASE_V = '20261126hr3i10b';   // + HR item 10 rota (2026-11-26). Was 20261126hr3i10: + HR item 10 rota (2026-11-26). Was 20261126hr3c9: + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
   var packAsked = {};
   var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in
   window.KT_I18N_BASE = function (map) {

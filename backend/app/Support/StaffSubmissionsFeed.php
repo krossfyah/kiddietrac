@@ -261,6 +261,14 @@ final class StaffSubmissionsFeed
                     $push('hr_injury', "\u{1FA79}", $first($r) . ($r->kind === 'near_miss' ? ' reported a near miss' : ' reported a workplace injury'), $r->created_at, '#hr?tab=injuries&injury=' . $r->id, $r->photo_url);
                 }
             }
+            // A shift giveaway / swap a colleague has accepted, waiting for a director (HR Phase 3, item 10).
+            if (\Illuminate\Support\Facades\Schema::hasTable('hr_shift_swaps')) {
+                $q = $who(DB::table('hr_shift_swaps as sw')->where('sw.status', 'accepted'), 'sw.from_user_id');
+                $byPerson($q, 'sw.agency_id', 'sw.from_user_id');
+                foreach ($q->orderByDesc('sw.accepted_at')->limit(12)->get(array_merge($sel, ['sw.id', 'sw.kind', 'sw.accepted_at'])) as $r) {
+                    $push('hr_swap', "\u{1F501}", $first($r) . ($r->kind === 'swap' ? ' asked to swap a shift' : ' gave away a shift') . ' (waiting for your approval)', $r->accepted_at, '#hr?tab=rota&swap=' . $r->id, $r->photo_url);
+                }
+            }
             // An expense / mileage claim waiting for approval (HR Phase 3, item 9). The amount, never the receipt.
             if (\Illuminate\Support\Facades\Schema::hasTable('hr_claims')) {
                 $q = $who(DB::table('hr_claims as cl')->where('cl.status', 'submitted'), 'cl.user_id');

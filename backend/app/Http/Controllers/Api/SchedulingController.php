@@ -710,6 +710,7 @@ final class SchedulingController extends Controller
         $skipClosed = 0;
         $skipExisting = 0;
         $skipShut = 0;
+        $skipUnavail = 0;   // HR add-on: approved leave / unavailability / outside weekly availability (App\Support\HrAvailability)
         $now = now();
 
         foreach ($userIds as $uid) {
@@ -719,6 +720,7 @@ final class SchedulingController extends Controller
                 if (! in_array((int) $d->isoWeekday(), $openDays, true)) { $skipShut++; continue; }
                 if (isset($closures[$date])) { $skipClosed++; continue; }
                 if (isset($existing[$uid . '|' . $date])) { $skipExisting++; continue; }
+                if (\App\Support\HrAvailability::blocksFor($centre, (int) $uid, $date, $open, $close)) { $skipUnavail++; continue; }
                 $rows[] = [
                     'user_id' => $uid,
                     'room_id' => $uRoom,
@@ -775,11 +777,13 @@ final class SchedulingController extends Controller
                 'closed' => $skipClosed,
                 'already_rostered' => $skipExisting,
                 'not_an_open_day' => $skipShut,
+                'unavailable' => $skipUnavail,
             ],
             'message' => count($rows)
                 ? (count($rows) . ' shift' . (count($rows) === 1 ? '' : 's') . ' added from ' . $open . '-' . $close . '.'
                    . ($skipClosed ? ' ' . $skipClosed . ' closure day' . ($skipClosed === 1 ? '' : 's') . ' left clear.' : '')
-                   . ($skipExisting ? ' ' . $skipExisting . ' day' . ($skipExisting === 1 ? '' : 's') . ' already rostered.' : ''))
+                   . ($skipExisting ? ' ' . $skipExisting . ' day' . ($skipExisting === 1 ? '' : 's') . ' already rostered.' : '')
+                   . ($skipUnavail ? ' ' . $skipUnavail . ' day' . ($skipUnavail === 1 ? '' : 's') . ' left clear (leave or unavailable).' : ''))
                 : 'Nothing to add - every open day in that range is already rostered or closed.',
         ]);
     }
