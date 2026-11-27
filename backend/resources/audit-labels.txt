@@ -1383,3 +1383,5 @@ post hr/people/{id}/leaving | Saved an employee's leaving details
 post hr/leavings/{id}/complete | Completed an employee's leaving
 post hr/leavings/{id}/undo | Undid an employee's leaving
 post hr/people/{id}/rehire | Rehired a returning employee
+post hr/people/{id}/probation | Updated a staff member's probation (passed, extended or reset)
+put hr/compliance/settings | Changed the probation and invite settings

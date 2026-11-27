@@ -2,6 +2,42 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📊",
+            "title": "HR reports: headcount, turnover, leave liability and more",
+            "body": "HR > Reports has headcount by centre and type, starters and leavers with turnover and retention, length of service, leave liability (for people who can see pay), overtime, lateness, schedule vs worked, leave this year vs last, team absence for any dates and everything we hold about one person. Print any report, or export it as CSV, Excel or PDF.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Rapports RH : effectif, roulement, passif de congés et plus",
+            "body_fr": "RH > Rapports présente l'effectif par centre et par type, les arrivées et départs avec le roulement et la rétention, l'ancienneté, le passif de congés (pour qui voit la paie), les heures supplémentaires, les retards, l'horaire et les heures travaillées, les congés de cette année et de l'an dernier, les absences de l'équipe pour n'importe quelles dates et tout ce que nous détenons sur une personne. Imprimez un rapport, ou exportez-le en CSV, Excel ou PDF.",
+            "title_es": "Informes de RR. HH.: plantilla, rotación, pasivo de permisos y más",
+            "body_es": "RR. HH. > Informes muestra la plantilla por centro y tipo, altas y bajas con rotación y retención, antigüedad, pasivo de permisos (para quien ve la nómina), horas extra, retrasos, horario y horas trabajadas, permisos de este año y del anterior, ausencias del equipo entre cualquier fecha y todo lo que guardamos sobre una persona. Imprima cualquier informe o expórtelo en CSV, Excel o PDF.",
+            "title_hi": "HR रिपोर्ट: कर्मचारी संख्या, टर्नओवर, छुट्टी की देनदारी और बहुत कुछ",
+            "body_hi": "HR > रिपोर्ट में सेंटर और प्रकार के अनुसार कर्मचारी संख्या, टर्नओवर और रिटेंशन के साथ आने और जाने वाले, सेवा की अवधि, छुट्टी की देनदारी (वेतन देख सकने वालों के लिए), ओवरटाइम, देरी, शेड्यूल बनाम काम, इस साल बनाम पिछले साल की छुट्टी, किसी भी तारीख की टीम अनुपस्थिति और किसी व्यक्ति के बारे में हमारे पास क्या-क्या है, सब मिलता है। कोई भी रिपोर्ट प्रिंट करें या CSV, Excel या PDF में एक्सपोर्ट करें।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🧭",
+            "title": "HR dashboard: setup checklist, probation reminders and missing information",
+            "body": "HR > Dashboard shows a setup checklist, whose probation is ending (mark it passed or extend it; the manager gets a reminder before the end), who has missing details such as an emergency contact, pay deposit details or pay below the minimum wage, and who has never signed in. Admins can resend an invite from there.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Tableau de bord RH : liste de mise en place, rappels de période d'essai et informations manquantes",
+            "body_fr": "RH > Tableau de bord affiche une liste de mise en place, les périodes d'essai qui se terminent (marquez-les réussies ou prolongez-les; le gestionnaire reçoit un rappel avant la fin), les dossiers incomplets (contact d'urgence, dépôt de paie, paie sous le salaire minimum) et qui ne s'est jamais connecté. Les administrateurs peuvent renvoyer une invitation depuis cet écran.",
+            "title_es": "Panel de RR. HH.: lista de configuración, avisos de período de prueba e información que falta",
+            "body_es": "RR. HH. > Panel muestra una lista de configuración, los períodos de prueba que terminan (márquelos como superados o amplíelos; el responsable recibe un aviso antes del final), quién tiene datos que faltan, como el contacto de emergencia, el depósito de nómina o un pago por debajo del salario mínimo, y quién nunca ha iniciado sesión. Los administradores pueden reenviar una invitación desde ahí.",
+            "title_hi": "HR डैशबोर्ड: सेटअप चेकलिस्ट, प्रोबेशन रिमाइंडर और अधूरी जानकारी",
+            "body_hi": "HR > डैशबोर्ड में सेटअप चेकलिस्ट दिखती है। यह भी दिखता है कि किसका प्रोबेशन खत्म हो रहा है (पास चिह्नित करें या बढ़ाएँ; खत्म होने से पहले मैनेजर को रिमाइंडर मिलता है)। किसकी जानकारी अधूरी है, जैसे आपातकालीन संपर्क, वेतन जमा का विवरण या न्यूनतम मज़दूरी से कम वेतन। और किसने कभी साइन इन नहीं किया। एडमिन वहीं से आमंत्रण दोबारा भेज सकते हैं।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🏡",

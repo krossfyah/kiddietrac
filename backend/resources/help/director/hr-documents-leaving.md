@@ -37,3 +37,5 @@ The **Leave payout** works out what is owed from their remaining balances and pa
 **Complete leaving** books the payout against their balances. If it was a mistake, **Undo leaving** reopens their account and reverses the payout. If someone comes back later, **Rehire** starts a new record from their new start date, with leave balances at zero unless you untick that.
 
 The **Leavers** tab lists everyone who has left. Leavers are taken off approver and manager lists. **Download all their data** gives a ZIP of their file, documents, leave, time and HR records (without their SIN or bank numbers) for an access request.
+
+The leave payout counts only the leave types marked **Paid out when someone leaves** in **HR > Leave types** (by default your vacation type and the Overtime bank). Other balances show as **Not paid out** and stay as they are. See **HR: dashboard, reports, probation and missing information**.

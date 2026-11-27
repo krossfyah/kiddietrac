@@ -2684,6 +2684,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
+        // HR Phase 4, batch 5 (2026-11-27): Dashboard (setup checklist, probation, missing info, sign-ins), the Reports pack, probation (App\Support\HrReports).
+        Route::get   ('/hr/dashboard',                      [\App\Http\Controllers\Api\HrReportsController::class, 'dashboard']);
+        Route::get   ('/hr/reports/{kind}',                 [\App\Http\Controllers\Api\HrReportsController::class, 'report'])->where('kind', '[a-z]+')->middleware('throttle:60,1,hrreports');
+        Route::get   ('/hr/people/{id}/holdings',           [\App\Http\Controllers\Api\HrReportsController::class, 'holdings'])->whereNumber('id');
+        Route::post  ('/hr/people/{id}/probation',          [\App\Http\Controllers\Api\HrReportsController::class, 'probation'])->whereNumber('id');
+        Route::get   ('/hr/compliance/settings',            [\App\Http\Controllers\Api\HrReportsController::class, 'settings']);
+        Route::put   ('/hr/compliance/settings',            [\App\Http\Controllers\Api\HrReportsController::class, 'saveSettings']);
         Route::put   ('/hr/settings',                       [\App\Http\Controllers\Api\HrController::class, 'saveSettings']);
         Route::post  ('/hr/leave-types',                    [\App\Http\Controllers\Api\HrController::class, 'createType']);
         Route::post  ('/hr/leave-types/example',            [\App\Http\Controllers\Api\HrController::class, 'loadExample']);

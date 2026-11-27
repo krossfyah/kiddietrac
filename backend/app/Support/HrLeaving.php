@@ -99,17 +99,31 @@ final class HrLeaving
         $u = DB::table('users')->where('id', $userId)->first(['pay_rate', 'pay_type']);
         $rate = $u && $u->pay_rate !== null ? (float) $u->pay_rate : null;
         $hourly = $rate === null ? null : (($u->pay_type ?? 'hourly') === 'salary' ? $rate / 260 / $hpd : $rate);
+        $types = HrLeave::types($agencyId)->keyBy('id');
+        $bank = HrTime::bankType($agencyId);
         $lines = [];
         foreach (HrLeave::summary($agencyId, $userId) as $t) {
             if (! $t['paid'] || ! $t['tracked'] || abs((float) $t['balance']) < 0.01) continue;
             $hours = $t['unit'] === 'hours' ? (float) $t['balance'] : (float) $t['balance'] * $hpd;
+            /* HR Phase 4 batch 5 fix (2026-11-27): only the types that are PAID OUT on leaving count (Leave types >
+               "Paid out when someone leaves"; default = vacation + the Overtime bank). Sick and personal days were being
+               valued too: Ethan (Starlight) showed $2,850 where his vacation is $1,520. The others stay on the sheet at 0. */
+            $in = isset($types[$t['leave_type_id']]) && self::paysOut($types[$t['leave_type_id']], $bank ? (int) $bank->id : null);
             $lines[] = ['leave_type_id' => $t['leave_type_id'], 'name' => $t['name'], 'unit' => $t['unit'], 'balance' => (float) $t['balance'],
-                'hours' => round($hours, 2), 'value' => $pay && $hourly !== null ? round($hours * $hourly, 2) : null];
+                'hours' => round($hours, 2), 'included' => $in, 'value' => $pay && $hourly !== null ? ($in ? round($hours * $hourly, 2) : 0.0) : null];
         }
 
         return ['lines' => $lines, 'hours_per_day' => $hpd, 'pay_type' => $pay ? ($u->pay_type ?? null) : null,
             'hourly_rate' => $pay && $hourly !== null ? round($hourly, 4) : null,
-            'total' => $pay ? round(array_sum(array_map(fn ($l) => (float) $l['value'], $lines)), 2) : null];
+            'total' => $pay ? round(array_sum(array_map(fn ($l) => $l['included'] ? (float) $l['value'] : 0.0, $lines)), 2) : null];
+    }
+
+    /** Is a balance of this leave type paid out on leaving? The type's own answer, else: the vacation type and the Overtime bank. */
+    public static function paysOut(object $type, ?int $bankTypeId): bool
+    {
+        if (isset($type->payout_on_leaving) && $type->payout_on_leaving !== null) return (bool) $type->payout_on_leaving;
+
+        return (bool) $type->paid && ($type->maps_request_type === 'vacation' || ($bankTypeId && (int) $type->id === $bankTypeId));
     }
 
     /** ROE prep facts (never filed from here). $pay false = hours only, no earnings. */
@@ -176,6 +190,7 @@ final class HrLeaving
     {
         $n = 0;
         foreach ($lines as $l) {
+            if (array_key_exists('included', $l) && ! $l['included']) continue;   // not paid out: the balance is left alone
             $amt = round((float) ($l['balance'] ?? 0), 2);
             if (abs($amt) < 0.01) continue;
             $n += DB::table('hr_leave_ledger')->insertOrIgnore(['agency_id' => $agencyId, 'user_id' => $userId, 'leave_type_id' => (int) $l['leave_type_id'],

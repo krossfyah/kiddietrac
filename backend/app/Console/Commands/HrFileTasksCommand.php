@@ -9,6 +9,7 @@ use App\Support\Features;
 use App\Support\HrDocs;
 use App\Support\HrLeave;
 use App\Support\HrPay;
+use App\Support\HrReports;
 use App\Support\TestAgency;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -18,12 +19,14 @@ use Illuminate\Support\Facades\DB;
  *  1. pay / role / hours changes dated today or earlier (agency timezone) apply themselves (App\Support\HrPay). Data only.
  *  2. document expiry + follow-up reminders (App\Support\HrDocs), once per step, from 07:00 agency time. Test agencies
  *     send nothing (their reminders are not even stamped, so nothing is lost if the flag is ever lifted).
+ *  3. probation reminders (App\Support\HrReports::remindProbation, HR Phase 4 batch 5): a bell to the person's manager
+ *     agencies.settings.hr_compliance.remind_days before the probation ends, once per end date. Same 07:00 + test-agency rule.
  */
 final class HrFileTasksCommand extends Command
 {
     protected $signature = 'hr:file-tasks {--agency= : one agency id only} {--dry-run : count what would happen, change and send nothing}';
 
-    protected $description = 'KiddieTrac HR: apply dated pay/role changes and send document expiry / follow-up reminders';
+    protected $description = 'KiddieTrac HR: apply dated pay/role changes, send document expiry / follow-up and probation reminders';
 
     public function handle(): int
     {
@@ -44,6 +47,7 @@ final class HrFileTasksCommand extends Command
                         if ($only) $this->line("agency $aid: test agency, reminders send nothing");
                     } else {
                         [$bells, $mails] = HrDocs::remind($aid, $dry);
+                        $bells += HrReports::remindProbation($aid, $dry);   // HR Phase 4 batch 5: probation ends in N days -> their manager's bell
                     }
                 }
                 if ($applied || $bells || $only) $this->line("agency $aid: " . ($dry ? 'would apply ' : 'applied ') . "$applied change(s), " . ($dry ? 'would ring ' : 'rang ') . "$bells bell(s), $mails email(s)");

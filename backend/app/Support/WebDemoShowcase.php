@@ -795,6 +795,7 @@ final class WebDemoShowcase
         $this->hrOpenShiftsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 3
         $this->hrFileStory($agencyId, $byName->all(), $elena, $olivia, $now);   // HR Phase 4, batch 4
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
+        $this->hrReportsStory($agencyId, $byName->all());   // HR Phase 4, batch 5
     }
 
     /**
@@ -885,6 +886,36 @@ final class WebDemoShowcase
                 'status' => $status, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($byAgo, 10, 0) : null, 'decision_comment' => $comment,
                 'paid_at' => $status === 'paid' ? $this->at(-14, 9, 0) : null, 'created_at' => $this->at($ago, 17, 30), 'updated_at' => $now]);
         }
+    }
+
+    /**
+     * HR Phase 4, batch 5 (2026-11-27): reports, probation, missing info. Idempotent (updates only, never inserts twice):
+     * Sofia's probation was confirmed (so Passed shows), Nina's is overdue and Lucas's ends soon (from their start dates);
+     * emergency contacts on most files so "missing information" has a realistic mix; Nina's pay sits below the California
+     * minimum so the check has something to flag.
+     */
+    private function hrReportsStory(int $agencyId, array $byName): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('hr_employee_files', 'probation_passed_on')) return;
+        if (isset($byName['Sofia'])) {
+            $hire = DB::table('users')->where('id', $byName['Sofia'])->value('hire_date');
+            if ($hire) DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $byName['Sofia'])
+                ->update(['probation_passed_on' => \Illuminate\Support\Carbon::parse(substr((string) $hire, 0, 10))->addDays(88)->toDateString()]);
+        }
+        $contacts = ['Ethan' => ['Maya Clarke', 'Spouse'], 'Lucas' => ['Rosa Bennett', 'Mother'], 'Sofia' => ['Diego Ramirez', 'Brother'], 'Noah' => ['Grace Kim', 'Sister'],
+            'Ava' => ['Liam Mitchell', 'Partner'], 'Marcus' => ['Denise Reid', 'Mother'], 'Grace' => ['Tom Holloway', 'Husband'], 'Elena' => ['Paul Brooks', 'Father']];
+        $n = 0;
+        foreach ($contacts as $who => [$name, $rel]) {
+            if (! isset($byName[$who])) continue;
+            $n++;
+            $vals = ['emergency_contact_name' => $name, 'emergency_contact_phone' => '(619) 555-01' . str_pad((string) (10 + $n), 2, '0', STR_PAD_LEFT), 'emergency_contact_relation' => $rel, 'updated_at' => now()];
+            if (DB::table('user_profiles')->where('user_id', $byName[$who])->exists()) {
+                DB::table('user_profiles')->where('user_id', $byName[$who])->whereNull('emergency_contact_name')->update($vals);
+            } else {
+                DB::table('user_profiles')->insert($vals + ['user_id' => $byName[$who], 'created_at' => now()]);
+            }
+        }
+        if (isset($byName['Nina'])) DB::table('users')->where('id', $byName['Nina'])->update(['pay_rate' => 16.50, 'pay_type' => 'hourly']);
     }
 
     /**

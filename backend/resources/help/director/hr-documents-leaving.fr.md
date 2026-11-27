@@ -37,3 +37,5 @@ Le **Paiement des congés** calcule ce qui est dû d’après les soldes restant
 **Terminer le départ** inscrit le paiement dans les soldes. En cas d’erreur, **Annuler le départ** rouvre le compte et annule le paiement. Si la personne revient plus tard, **Réembaucher** crée un nouveau dossier à partir de sa nouvelle date d’entrée, avec des soldes de congés à zéro sauf si vous décochez cette option.
 
 L’onglet **Départs** liste tous ceux qui sont partis. Ils sont retirés des listes d’approbateurs et de gestionnaires. **Télécharger toutes leurs données** donne un ZIP de leur dossier, documents, congés, temps et dossiers RH (sans NAS ni numéros bancaires) pour une demande d’accès.
+
+Le paiement des congés ne compte que les types de congé marqués **Payé au départ** dans **RH > Types de congé** (par défaut votre type vacances et la banque d'heures supplémentaires). Les autres soldes s'affichent comme **Non payé** et ne changent pas. Voir **RH : tableau de bord, rapports, période d'essai et informations manquantes**.

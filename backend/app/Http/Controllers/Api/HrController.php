@@ -179,6 +179,7 @@ final class HrController extends Controller
             'carry_cap' => 'nullable|required_if:carry_mode,capped|numeric|min:0|max:1000',
             'carry_expiry_months' => 'nullable|integer|min:1|max:24',
             'sort' => 'nullable|integer|min:0|max:999',
+            'payout_on_leaving' => 'sometimes|nullable|boolean',   // HR Phase 4 batch 5: null = default (vacation + overtime bank)
         ];
     }
 
@@ -193,7 +194,7 @@ final class HrController extends Controller
             'carry_mode' => $d['carry_mode'], 'carry_cap' => $d['carry_mode'] === 'capped' ? (float) $d['carry_cap'] : null,
             'carry_expiry_months' => $d['carry_mode'] === 'none' ? null : ($d['carry_expiry_months'] ?? null),
             'sort' => (int) ($d['sort'] ?? 0), 'updated_at' => now(),
-        ];
+        ] + (array_key_exists('payout_on_leaving', $d) ? ['payout_on_leaving' => $d['payout_on_leaving'] === null ? null : (bool) $d['payout_on_leaving']] : []);
     }
 
     /** POST /hr/leave-types */

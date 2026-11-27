@@ -37,3 +37,5 @@ El **Pago de vacaciones** calcula lo que se debe según los saldos restantes y l
 **Completar la salida** registra el pago en los saldos. Si fue un error, **Deshacer la salida** reabre la cuenta y revierte el pago. Si la persona vuelve más tarde, **Volver a contratar** crea un expediente nuevo desde su nueva fecha de inicio, con saldos en cero salvo que lo desmarque.
 
 La pestaña **Bajas** muestra a todos los que se han ido. Se quitan de las listas de aprobadores y responsables. **Descargar todos sus datos** da un ZIP con su expediente, documentos, vacaciones, horas y registros de RR. HH. (sin número de seguro social ni números bancarios) para una solicitud de acceso.
+
+El pago de permisos solo cuenta los tipos marcados **Se paga cuando alguien se va** en **RR. HH. > Tipos de permiso** (por defecto su tipo de vacaciones y la bolsa de horas extra). Los demás saldos aparecen como **No se paga** y no cambian. Vea **RR. HH.: panel, informes, período de prueba e información que falta**.

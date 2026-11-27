@@ -271,9 +271,9 @@
     }).join('');
     h += '<div class="hrf-sec">Leave payout</div>' + ((pay.lines || []).length ? '<div class="kt-card" style="padding:4px 10px;">' + pay.lines.map(function (p) {
         return '<div class="hrf-row"><div class="t"><b data-no-i18n>' + esc(p.name) + '</b><div class="hr-sub">' + esc(p.balance + ' ' + p.unit + (p.unit === 'days' ? ' (' + p.hours + ' h)' : '')) + '</div></div>'
-          + (can.pay ? '<input class="hr-i" type="number" step="0.01" min="0" data-pv="' + p.leave_type_id + '" value="' + esc(p.value == null ? '' : p.value) + '" style="width:110px;text-align:right;"' + dis + '>' : '') + '</div>';
+          + (p.included === false ? '<span class="hr-sub" style="white-space:nowrap;">Not paid out</span>' : can.pay ? '<input class="hr-i" type="number" step="0.01" min="0" data-pv="' + p.leave_type_id + '" value="' + esc(p.value == null ? '' : p.value) + '" style="width:110px;text-align:right;"' + dis + '>' : '') + '</div>';
       }).join('') + (can.pay ? '<div class="hrf-row"><div class="t"><b>Total</b></div><b data-pt data-no-i18n>' + esc(money(pay.total)) + '</b></div>' : '') + '</div>'
-      + (can.pay ? '<div class="hr-sub" style="margin-top:4px;">Worked out at ' + esc(money(pay.hourly_rate)) + ' an hour' + (pay.pay_type === 'salary' ? ' (annual salary ÷ 260 days ÷ ' + pay.hours_per_day + ' h)' : '') + '. Change any amount; lump-sum grants are not pro-rated here.</div>' : '')
+      + (can.pay ? '<div class="hr-sub" style="margin-top:4px;">Worked out at ' + esc(money(pay.hourly_rate)) + ' an hour' + (pay.pay_type === 'salary' ? ' (annual salary ÷ 260 days ÷ ' + pay.hours_per_day + ' h)' : '') + '. Change any amount; lump-sum grants are not pro-rated here. Only leave types marked "Paid out when someone leaves" (HR > Leave types; by default vacation and the overtime bank) are valued.</div>' : '')
       : '<div class="hr-sub">No paid leave balance to pay out.</div>');
     if ((r.past || []).length) h += '<div class="hrf-sec">Earlier</div>' + r.past.map(function (p) {
       return '<div class="hr-sub" data-no-i18n>' + esc((p.employment_start ? day(p.employment_start) + ' – ' : '') + day(p.last_day) + (p.rehired_on ? ' · returned ' + day(p.rehired_on) : '') + (p.status === 'undone' ? ' · undone: ' + (p.undo_reason || '') : '')) + '</div>';
@@ -308,7 +308,7 @@
 
   function openComplete(lid, r, per, done) {
     var box = el('<div class="hr-note">Their HR file becomes Terminated on the last day you entered. This does not close their account: off-board them from their user record (rooms, shifts and sign-in).</div>'
-      + ((r.payout && (r.payout.lines || []).length) ? check('pay_out', true, 'Book the leave payout: their leave balances go to zero') : '')
+      + ((r.payout && (r.payout.lines || []).length) ? check('pay_out', true, 'Book the leave payout: the paid-out balances go to zero') : '')
       + ((r.reports || []).length ? '<div style="margin-top:10px;">' + field('New manager for ' + r.reports.map(function (x) { return x.name; }).join(', '), select('new_manager_id', opts((r.managers || []).reduce(function (o, m) { o[m.id] = m.name; return o; }, {}), '', 'Nobody for now')), true) + '</div>' : '')
       + ERR);
     modal({ title: 'Complete leaving: ' + (per.name || ''), body: box, actions: [{ label: 'Back', handler: function () { later(function () { openLeaving(per.id, done); }); } }, { label: 'Complete', primary: true, busyLabel: 'Saving…', handler: function () {

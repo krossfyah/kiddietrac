@@ -79,6 +79,8 @@
 
   function tabsFor() {
     var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
+    var rp = window.KTHrReports ? window.KTHrReports.tabs : [];   // Phase 4 batch 5: Dashboard (setup checklist, to-dos) first, Reports after the absence report (screen-hr-reports.js)
+    if (rp.length) { t.unshift(rp[0]); t.push(rp[1]); }
     if (window.KTHrTalent) t = t.concat(window.KTHrTalent.tabs);   // Phase 2 (2026-11-28)
     if (window.KTHrSafety) t = t.concat(window.KTHrSafety.tabs);   // Phase 3: injuries (screen-hr-safety.js)
     if (window.KTHrFile) t = t.concat(window.KTHrFile.tabs);       // Phase 4 batch 4: company documents, leavers (screen-hr-file.js)
@@ -129,6 +131,7 @@
     if (S.tab === 'settings') return drawSettings(main);
     if (window.KTHrSafety && window.KTHrSafety.has(S.tab)) return window.KTHrSafety.draw(S.tab, b);
     if (window.KTHrFile && window.KTHrFile.has(S.tab)) return window.KTHrFile.draw(S.tab, b);
+    if (window.KTHrReports && window.KTHrReports.has(S.tab)) return window.KTHrReports.draw(S.tab, b);
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 
@@ -573,6 +576,7 @@
       + '<div><label class="hr-l">Pay</label>' + yn('paid', t.paid, 'Paid', 'Unpaid') + '</div>'
       + '<div><label class="hr-l">Staff can see and request it</label>' + yn('visible_to_staff', t.visible_to_staff, 'Yes', 'No, managers only') + '</div>'
       + '<div><label class="hr-l">Approval</label>' + yn('needs_approval', t.needs_approval, 'Needs approval', 'No approval: recorded at once, manager reviews it') + '</div>'
+      + '<div><label class="hr-l">Paid out when someone leaves</label>' + sel('payout_on_leaving', { default: 'Default (vacation and overtime bank only)', yes: 'Yes, pay out the balance', no: 'No' }, t.payout_on_leaving == null ? 'default' : (+t.payout_on_leaving ? 'yes' : 'no')) + '</div>'
       + '<div><label class="hr-l">How it builds up</label>' + sel('accrual', ACCR, t.accrual) + '</div>'
       + '<div data-show="pay_period"><label class="hr-l">Pay periods a year</label>' + sel('periods_per_year', { '12': '12 (monthly)', '24': '24 (twice a month)', '26': '26 (every two weeks)', '52': '52 (weekly)' }, t.periods_per_year || 26) + '</div>'
       + '<div data-show="hours_worked"><label class="hr-l">Hours worked to earn 1 unit</label><input class="hr-i" type="number" min="1" step="0.5" data-f="hours_per_unit" style="width:100%;" value="' + esc(t.hours_per_unit || 30) + '"></div>'
@@ -594,6 +598,7 @@
       var o = {}; box.querySelectorAll('[data-f]').forEach(function (el) { o[el.getAttribute('data-f')] = el.value.trim(); });
       ['paid', 'visible_to_staff', 'needs_approval'].forEach(function (k) { o[k] = o[k] === '1'; });
       o.maps_request_type = o.maps_request_type || null;
+      o.payout_on_leaving = o.payout_on_leaving === 'default' ? null : o.payout_on_leaving === 'yes';
       o.periods_per_year = o.accrual === 'pay_period' ? +o.periods_per_year : null;
       o.hours_per_unit = o.accrual === 'hours_worked' ? +o.hours_per_unit : null;
       o.carry_cap = o.carry_mode === 'capped' ? +o.carry_cap : null;

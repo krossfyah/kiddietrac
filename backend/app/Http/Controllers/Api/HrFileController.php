@@ -527,9 +527,9 @@ final class HrFileController extends Controller
         foreach ((array) ($d['payout'] ?? []) as $p) $vals[(int) $p['leave_type_id']] = $p['value'] ?? null;
         $calc = HrLeaving::payout($aid, $id, $this->canSeePay($request, $aid));
         if ($vals && $this->canSeePay($request, $aid)) {
-            foreach ($calc['lines'] as &$l) if (array_key_exists($l['leave_type_id'], $vals) && $vals[$l['leave_type_id']] !== null) $l['value'] = round((float) $vals[$l['leave_type_id']], 2);
+            foreach ($calc['lines'] as &$l) if (! empty($l['included']) && array_key_exists($l['leave_type_id'], $vals) && $vals[$l['leave_type_id']] !== null) $l['value'] = round((float) $vals[$l['leave_type_id']], 2);
             unset($l);
-            $calc['total'] = round(array_sum(array_map(fn ($l) => (float) $l['value'], $calc['lines'])), 2);
+            $calc['total'] = round(array_sum(array_map(fn ($l) => ! empty($l['included']) ? (float) $l['value'] : 0.0, $calc['lines'])), 2);
         }
         $vals2 = ['last_day' => $d['last_day'] ?? ($row->last_day ?? null), 'notice_on' => $d['notice_on'] ?? ($row->notice_on ?? null),
             'reason_code' => $d['reason_code'] ?? ($row->reason_code ?? null), 'reason_note' => array_key_exists('reason_note', $d) ? $d['reason_note'] : ($row->reason_note ?? null),
