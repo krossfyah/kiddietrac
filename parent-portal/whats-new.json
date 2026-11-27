@@ -2,6 +2,26 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🧑‍💼",
+            "title": "Step-by-step HR guides",
+            "body": "Every Human Resources screen now has a step-by-step guide behind its ?: time off, rota and shifts, timesheets, payroll and claims, hiring, reviews and courses, health and safety, documents, reports, HR settings and My HR, with the exact buttons to press and answers to common questions.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Des guides RH étape par étape",
+            "body_fr": "Chaque écran des Ressources humaines a maintenant un guide étape par étape derrière son ? : congés, horaire et quarts, feuilles de temps, paie et remboursements, embauche, évaluations et formations, santé et sécurité, documents, rapports, paramètres RH et Mes RH, avec les boutons exacts sur lesquels appuyer et les réponses aux questions fréquentes.",
+            "title_es": "Guías de RR. HH. paso a paso",
+            "body_es": "Cada pantalla de Recursos humanos tiene ahora una guía paso a paso detrás de su ?: tiempo libre, turnos, hojas de horas, nómina y reembolsos, contratación, evaluaciones y cursos, seguridad y salud, documentos, informes, ajustes de RR. HH. y Mis RR. HH., con los botones exactos que debe pulsar y respuestas a preguntas frecuentes.",
+            "title_hi": "HR की चरण-दर-चरण गाइड",
+            "body_hi": "अब मानव संसाधन की हर स्क्रीन के ? के पीछे चरण-दर-चरण गाइड है: छुट्टी, रोटा और शिफ़्ट, टाइमशीट, पेरोल और दावे, भर्ती, समीक्षा और कोर्स, स्वास्थ्य व सुरक्षा, दस्तावेज़, रिपोर्ट, HR सेटिंग्स और My HR, कौन-से बटन दबाने हैं और आम सवालों के जवाब के साथ।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "❓",
