@@ -2,7 +2,6 @@
 title: Texts and phone calls — choosing what you get
 category: Your Account
 order: 20
-screens: ~phone
 ---
 # Texts and phone calls — choosing what you get
 
