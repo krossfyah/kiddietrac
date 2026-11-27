@@ -140,6 +140,16 @@ final class StaffSubmissionsFeed
             }
         });
 
+        // 🗺️ Fire plans sent for review (2026-11-28, the Drill log's Fire plan tab): "Maya submitted a fire plan — Sunflower".
+        $run('fire_plans', function () use ($byCentre, $who, $sel, $push, $first, $at) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('fire_plans')) return;
+            $q = $who(DB::table('fire_plans as fp')->whereNull('fp.deleted_at')->whereNotNull('fp.submitted_at'), 'fp.submitted_by');
+            $byCentre($q, 'fp.centre_id');
+            foreach ($q->orderByDesc('fp.submitted_at')->limit(12)->get(array_merge($sel, ['fp.id', 'fp.centre_id', 'fp.submitted_at'])) as $r) {
+                $push('fire_plan', "\u{1F5FA}\u{FE0F}", $first($r) . ' submitted a fire plan' . $at($r->centre_id), $r->submitted_at, '#drills?tab=fireplan&plan=' . $r->id, $r->photo_url);
+            }
+        });
+
         // 🚧 Hazards reported.
         $run('hazards', function () use ($byCentre, $who, $sel, $push, $first, $at) {
             $q = $who(DB::table('centre_hazards as h'), 'h.created_by');

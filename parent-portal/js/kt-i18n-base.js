@@ -8,6 +8,10 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // Fire plan notices (Settings > Notifications topic, 2026-11-28)
+    'When a fire plan you wrote is approved or sent back for changes, and when a fire plan you wrote or oversee is due for its yearly review.': { fr: 'Quand un plan d’évacuation que vous avez rédigé est approuvé ou renvoyé pour modifications, et quand un plan que vous avez rédigé ou supervisez doit être révisé chaque année.', es: 'Cuando un plan de evacuación que usted escribió se aprueba o se devuelve con cambios, y cuando un plan que escribió o supervisa debe revisarse cada año.', hi: 'जब आपकी लिखी आग से बचाव की योजना स्वीकृत होती है या बदलाव के लिए लौटाई जाती है, और जब आपकी लिखी या देखी जाने वाली योजना की सालाना समीक्षा का समय आता है।' },
+    'You cannot review a plan you wrote. Another director of this centre or an agency admin reviews it.': { fr: 'Vous ne pouvez pas réviser un plan que vous avez rédigé. Une autre direction du centre ou un administrateur de l’agence le révise.', es: 'No puede revisar un plan que usted escribió. Lo revisa otro director del centro o un administrador de la agencia.', hi: 'आप अपनी लिखी योजना की समीक्षा नहीं कर सकते। इस केंद्र का कोई दूसरा निदेशक या एजेंसी एडमिन इसकी समीक्षा करता है।' },
+    'Waiting for review by another director or an agency admin.': { fr: 'En attente de révision par une autre direction ou un administrateur de l’agence.', es: 'En espera de revisión por otro director o un administrador de la agencia.', hi: 'किसी दूसरे निदेशक या एजेंसी एडमिन की समीक्षा की प्रतीक्षा।' },
     // Escalated daily records: who gets them (screen-notification-settings.js, RecordEscalation, 2026-11-26)
     'Escalated daily records': { fr: 'Registres quotidiens escaladés', es: 'Registros diarios escalados', hi: 'एस्केलेट किए गए दैनिक रिकॉर्ड' },
     'Escalated daily records: who gets them': { fr: 'Registres quotidiens escaladés : qui les reçoit', es: 'Registros diarios escalados: quién los recibe', hi: 'एस्केलेट किए गए दैनिक रिकॉर्ड: इन्हें किसे मिलें' },

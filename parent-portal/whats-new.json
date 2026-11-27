@@ -44,6 +44,20 @@
         {
             "type": "new",
             "date": "2026-11-26",
+            "icon": "🗺️",
+            "title": "Draw your fire plan",
+            "body": "Drill log has a new Fire plan tab: draw your exits, routes and meeting spot, fill in who does what, and send it to your director for review. Attach it to each fire drill and print a sheet to post by the door.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
             "icon": "🩹",
             "title": "Staff injury records",
             "body": "Record a staff injury or near miss in HR. Health details stay encrypted and hidden until you choose to show them. In Ontario, a countdown shows the business days left to file WSIB Form 7. Return-to-work plans and check-ins live on the same record.",

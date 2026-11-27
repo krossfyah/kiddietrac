@@ -2784,6 +2784,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Immunization + drill notices per role (2026-11-09, App\Support\StaffTopicNotify): admins only, checked in the controller.
         Route::get ('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsShow']);
         Route::post('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsSave'])->middleware('throttle:30,1,r-topic-notifications');
+        // Escalated daily records: who gets them (2026-11-26, App\Support\RecordEscalation): admins only, checked in the controller.
+        Route::get ('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationShow']);
+        Route::post('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationSave'])->middleware('throttle:30,1,r-record-escalation');
         // Settings -> Notifications -> Staff certifications (2026-11-03): expiry alert steps, who is told, email.
         Route::get ('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'show']);
         Route::post('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'save'])->middleware('throttle:30,1,r-cert-alerts');
@@ -2856,6 +2859,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/drills/notify-settings', [\App\Http\Controllers\Api\DrillController::class, 'notifySettingsSave']);
         Route::post  ('/drills/maps',      [\App\Http\Controllers\Api\DrillController::class, 'uploadMap']);
         Route::delete('/drills/maps/{id}', [\App\Http\Controllers\Api\DrillController::class, 'removeMap'])->whereNumber('id');
+        // Fire plan (2026-11-28): the drawn plan + decision tree, versioned; directors/admins review (FirePlanController).
+        Route::get   ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'index']);
+        Route::post  ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'store']);
+        Route::post  ('/drills/fire-plans/template',          [\App\Http\Controllers\Api\FirePlanController::class, 'template']);
+        Route::get   ('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'show'])->whereNumber('id');
+        Route::post  ('/drills/fire-plans/{id}/review',       [\App\Http\Controllers\Api\FirePlanController::class, 'review'])->whereNumber('id');
+        Route::delete('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'destroy'])->whereNumber('id');
+        Route::get   ('/drills/fire-plans/{id}/file/{kind}',  [\App\Http\Controllers\Api\FirePlanController::class, 'file'])->whereNumber('id')->where('kind', 'png|underlay');
     });
     /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
        manage and notify parents — checked per centre in HazardController. Its own group since
