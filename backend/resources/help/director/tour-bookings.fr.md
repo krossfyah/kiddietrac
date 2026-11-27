@@ -1,34 +1,56 @@
 ---
 title: Réservations de visites
-category: Daily Operations
-order: 78
 ---
 # Réservations de visites
 
-Les familles intéressées peuvent demander une visite du centre par l’intermédiaire de votre point d’accès public de réservation. Les visites confirmées alimentent le calendrier du personnel afin que les directeurs sachent qui vient et quand. La vue de gestion se trouve sous **Marketing → Visites**.
+**Marketing › Tours** liste chaque famille intéressée qui a demandé à visiter votre centre par votre page de
+réservation publique, et vous permet de faire avancer chaque demande : la confirmer, la marquer comme faite, ou noter
+une absence ou une annulation. Chaque nouvelle demande envoie aussi un avis à la direction du centre et aux
+administrateurs de l'agence, pour que personne ne la manque.
 
-## Le lien public
+[[open: #tours | Ouvrir les visites]]
 
-Votre URL publique de réservation est :
+## Partager votre page de réservation
 
-    POST https://api.kiddietrac.com/api/v1/public/tours
+1. Ouvrez **Marketing › Tours**. La carte **Public booking link** est en haut.
+2. Appuyez sur **Copy**. Le bouton affiche **Copied**.
+3. Collez le lien sur votre site Web, dans votre signature de courriel ou dans vos publications. Les familles inscrivent leur nom, courriel, téléphone, l'âge de l'enfant, la date de début souhaitée et l'heure de la visite.
 
-Intégrez-la dans un formulaire personnalisé de votre site Web qui envoie `{ agency_slug, centre_id, parent_name, parent_email, parent_phone, child_age_months, preferred_start_date, tour_at, notes }`. Une future livraison v22p51 fournira une page d’accueil publique hébergée, de sorte que vous n’aurez pas à créer le formulaire vous-même.
+> ℹ️ La page de réservation limite le nombre de demandes venant d'un même endroit en une heure, pour bloquer les pourriels.
 
-Le point d’accès est limité à 8 requêtes par heure par adresse IP afin d’éviter le pourriel.
+## Traiter une demande
 
-## La vue d’administration
+1. Trouvez la demande dans la liste. La bordure colorée montre son statut : ambre demandée, bleu confirmée, vert faite, rouge absence, gris annulée.
+2. Lisez le nom du parent, son courriel, son téléphone, la date et l'heure de la visite, l'âge de l'enfant, **Wants to start:** et ses notes.
+3. Communiquez avec la famille pour confirmer l'heure (copiez son courriel ou son téléphone sur la ligne).
+4. Dans le menu de statut de la ligne, choisissez **confirmed**. La liste s'actualise et les totaux changent.
+5. Après la visite, passez-la à **completed** — ou à **no show** ou **cancelled** si la famille n'est pas venue.
 
-L’écran Visites énumère chaque réservation avec :
+> ⚠️ Changer le statut n'envoie pas de courriel à la famille. Répondez-lui vous-même par courriel ou par téléphone.
 
-- Un rail coloré à gauche selon le statut (ambre = demandée, bleu = confirmée, vert = terminée, rouge = absence, gris = annulée)
-- Nom du parent + courriel + téléphone
-- Date et heure de la visite
-- Âge de l’enfant en mois (s’il est fourni)
-- Notes en texte libre de la famille
+## Trouver et exporter les visites
 
-Un menu déroulant de statut sur chaque ligne fait avancer la réservation dans le flux de travail. Chaque demande crée aussi une notification pour le directeur du centre et les administrateurs de l’agence, qui voient ainsi les nouvelles demandes dans leur boîte de réception.
+1. Utilisez les pastilles de filtre — **Requested**, **Confirmed**, **Completed**, **No-show**, **Cancelled** — pour afficher un statut. Choisissez à nouveau la pastille pour tout voir.
+2. Lisez la rangée de résumé pour le **Total** et le nombre par statut.
+3. Appuyez sur **Export CSV** pour un tableur avec **Parent**, **Email**, **Phone**, **Centre**, **Tour at**, **Preferred start**, **Status** et **Notes**.
 
-## Courriels de confirmation
+## Qui peut faire quoi
 
-L’envoi d’un courriel au demandeur lors de la confirmation fait partie d’un suivi v22p50. Pour l’instant, copiez son courriel depuis la ligne et répondez manuellement.
+| Rôle | Peut |
+|---|---|
+| Administrateur d'agence | Voir et mettre à jour les visites de tous les centres. |
+| Directeur de centre | Voir et mettre à jour les visites de son ou ses centres. |
+| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. |
+
+## Questions fréquentes et problèmes
+
+??? La liste affiche « No tour requests yet. » | Personne n'a encore réservé. Partagez votre lien public (au-dessus de la liste) pour commencer à recevoir des demandes.
+??? Les familles reçoivent-elles un courriel de confirmation? | Pas à partir de cet écran. Répondez-leur vous-même; une campagne automatisée sur **After tour booked** peut envoyer un remerciement tout seul.
+??? Puis-je ajouter une visite demandée au téléphone? | Ouvrez votre lien de réservation public et remplissez-le pour la famille.
+??? Où les visites comptent-elles? | Les visites récentes alimentent la **Enrolment forecast** (« Tour pipeline · 60d »).
+
+## Écrans connexes
+
+[[open: #forecast | Prévision des inscriptions]] [[open: #marketing-campaigns | Campagnes]]
+
+Voir aussi [[drip-campaigns]] et [[enrolment-forecast]].

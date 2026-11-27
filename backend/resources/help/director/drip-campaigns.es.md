@@ -1,47 +1,61 @@
 ---
-roles: agency_admin, platform_admin
-title: Campañas automatizadas
-category: Marketing
-order: 65
+title: Campañas por goteo
 ---
-# Campañas automatizadas
+# Campañas por goteo
 
-Envío automático de correos de seguimiento N días después de un evento desencadenante. Útil para acompañar a quienes reservaron una visita y para reactivar a las familias que se han quedado calladas.
+**Engagement › Drip campaigns** envía automáticamente un correo de seguimiento cierta cantidad de días después de que
+pasa algo: la visita de una familia, la inscripción de un niño, su cumpleaños o una familia que deja de participar.
+Configúrela una vez y cada familia que llegue a ese momento recibe el correo, sin olvidos: una nota de agradecimiento
+el día después de la visita, un paquete de bienvenida tres días después de la inscripción.
 
-## Crear una campaña
+[[open: #drip-campaigns | Abrir campañas por goteo]]
 
-1. Barra lateral → **Campañas automatizadas**.
-2. Toque **+ Nueva campaña automatizada**.
-3. Elija un desencadenante:
-   - **Después de reservar una visita** (p. ej., enviar un correo de «gracias por visitarnos» 1 día después)
-   - **Después de completar la inscripción** (p. ej., paquete de bienvenida 3 días después)
-   - **En el cumpleaños** (p. ej., sugerencia de programa adecuada a la edad)
-   - **Después de 30 días de inactividad** (reactivación)
-4. Elija el retraso en días (0-365).
-5. Escriba el asunto y el cuerpo en HTML.
-6. Guarde.
+## Crear una campaña por goteo
 
-## Cómo funciona el envío
+1. Abra **Engagement › Drip campaigns**. El encabezado dice **💧 Drip campaigns**.
+2. Pulse **+ New drip campaign**.
+3. Escriba un **Title** que su equipo reconozca («Gracias por la visita»).
+4. Elija el **Trigger event**: **After tour booked**, **After enrollment complete**, **On child's birthday** o **After 30 days inactive**.
+5. Escriba el **Delay (days)**: cuántos días después del evento enviar (0 lo envía ese mismo día).
+6. Escriba el **Email subject** y el **Email body (HTML allowed)**. Ponga **{first_name}** donde quiera el nombre del padre o la madre.
+7. Pulse **Create**. La campaña aparece en la lista como activa.
 
-Una tarea cron se ejecuta cada hora. Busca los eventos desencadenantes que coinciden con el `(trigger_event, trigger_delay_days)` de cada campaña activa. Los eventos coincidentes se añaden a la cola `drip_sends` y se envían de inmediato.
+> 💡 En **After tour booked**, la espera cuenta desde la fecha de la visita: una espera de 1 envía el día siguiente.
 
-Cada (campaña, origen) se envía una sola vez: las repeticiones son idempotentes.
+## Comprobar que funciona
 
-## Seguimiento
+1. Mire los recuadros de arriba: **Active drip campaigns**, **Sent (all time)**, **Queued** y **Failed**.
+2. Lea la lista: **Title**, **Trigger**, **Delay** y **Status** de cada campaña.
+3. Si **Failed** aumenta, revise los correos en los registros de las familias.
 
-La página de la campaña muestra: n.º de campañas · n.º enviados · n.º en cola · n.º fallidos.
+KiddieTrac revisa cada hora qué familias llegaron a un disparador y envía cada campaña una sola vez a cada persona;
+nunca la repite para la misma visita, niño o familia.
 
-## Plantillas de correo
+## Quién la recibe
 
-Use las variables estándar de EmailTemplate en el HTML del cuerpo:
-- `{{first_name}}`: nombre de pila del destinatario
-- `{{family_name}}`: apellido de la familia
-- `{{centre_name}}`: nombre del centro
-- `{{agency_name}}`: nombre de su agencia
+- **After tour booked**: el correo que se dio al reservar la visita.
+- **After enrollment complete** y **On child's birthday**: el correo principal de la familia, para niños aún inscritos.
+- **After 30 days inactive**: familias que no usan el portal desde hace 30 días.
 
-## Buenas prácticas
+Se aplican las reglas de correo habituales: las familias que se fueron y las cuentas cerradas no reciben nada.
 
-- Empiece con 1 o 2 campañas; mida la respuesta antes de añadir más
-- Combine tonos: visita reservada = bienvenida cálida, inactividad = reactivación suave
-- No envíe con demasiada frecuencia: calidad antes que cantidad
-- Use la reescritura con IA (punto de acceso `/marketing/ai-rewrite`) para pulir el texto
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de agencia | Crear campañas por goteo y ver sus cifras. |
+| Administrador de plataforma | La agencia elegida en el selector de agencias. |
+| Director de centro, educador | No disponible. |
+
+## Preguntas frecuentes y problemas
+
+??? ¿Cómo cambio o detengo una campaña por goteo? | Esta pantalla aún no tiene botón para editar, pausar o borrar. Abra un ticket desde Ayuda y el soporte de KiddieTrac la cambiará o detendrá por usted.
+??? Una familia no recibió nada. | Revise la fecha del disparador (por ejemplo, la fecha de visita o de inscripción en el registro), la espera y que la familia tenga correo. El envío corre cada hora: espere una hora.
+??? ¿Puedo ver una vista previa del correo? | Aquí no. Escríbalo primero como campaña en **Marketing › Campaigns**, use **👁 Preview** y luego pegue el texto aquí.
+??? ¿Funciona {first_name}? | Sí. Se convierte en el nombre de la persona si la dirección pertenece a una cuenta; si no, «there».
+
+## Pantallas relacionadas
+
+[[open: #marketing-campaigns | Campañas]] [[open: #tours | Visitas]] [[open: #engagement | Participación]]
+
+Vea también [[marketing-campaigns]] y [[tour-bookings]].

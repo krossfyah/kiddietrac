@@ -1,34 +1,56 @@
 ---
 title: Reservas de visitas
-category: Daily Operations
-order: 78
 ---
 # Reservas de visitas
 
-Las familias interesadas pueden solicitar una visita al centro a través de su punto de acceso público de reservas. Las visitas confirmadas pasan al calendario del personal para que los directores sepan quién viene y cuándo. La vista de gestión está en **Marketing → Visitas**.
+**Marketing › Tours** lista cada familia interesada que pidió visitar su centro desde su página pública de reservas, y
+le permite avanzar cada solicitud: confirmarla, marcarla como hecha o registrar una inasistencia o cancelación. Cada
+solicitud nueva también envía un aviso al director del centro y a los administradores de la agencia, para que nadie la
+pase por alto.
 
-## El enlace público
+[[open: #tours | Abrir Visitas]]
 
-Su URL pública de reservas es:
+## Compartir su página de reservas
 
-    POST https://api.kiddietrac.com/api/v1/public/tours
+1. Abra **Marketing › Tours**. La tarjeta **Public booking link** está arriba.
+2. Pulse **Copy**. El botón muestra **Copied**.
+3. Pegue el enlace en su sitio web, su firma de correo o sus publicaciones. Las familias escriben su nombre, correo, teléfono, la edad del niño, la fecha de inicio deseada y la hora de la visita.
 
-Insértela en un formulario personalizado de su sitio web que envíe `{ agency_slug, centre_id, parent_name, parent_email, parent_phone, child_age_months, preferred_start_date, tour_at, notes }`. Una futura entrega v22p51 ofrecerá una página de destino pública alojada, para que no tenga que crear el formulario usted mismo.
+> ℹ️ La página de reservas limita cuántas solicitudes pueden llegar desde un mismo lugar en una hora, para frenar el spam.
 
-El punto de acceso está limitado a 8 solicitudes por hora por IP para evitar el spam.
+## Atender una solicitud
 
-## La vista de administración
+1. Busque la solicitud en la lista. El borde de color muestra su estado: ámbar solicitada, azul confirmada, verde hecha, rojo inasistencia, gris cancelada.
+2. Lea el nombre del padre o la madre, correo, teléfono, fecha y hora de la visita, edad del niño, **Wants to start:** y sus notas.
+3. Contacte a la familia para confirmar la hora (copie su correo o teléfono de la fila).
+4. En el menú de estado de la fila, elija **confirmed**. La lista se actualiza y cambian los totales.
+5. Después de la visita, póngala en **completed**, o en **no show** o **cancelled** si no vinieron.
 
-La pantalla Visitas enumera cada reserva con:
+> ⚠️ Cambiar el estado no envía un correo a la familia. Respóndale usted por correo o por teléfono.
 
-- Un riel de color a la izquierda según el estado (ámbar = solicitada, azul = confirmada, verde = completada, rojo = no se presentó, gris = cancelada)
-- Nombre del padre o madre + correo electrónico + teléfono
-- Fecha y hora de la visita
-- Edad del niño en meses (si se indicó)
-- Notas de texto libre de la familia
+## Buscar y exportar visitas
 
-Un menú desplegable de estado en cada fila hace avanzar la reserva por el flujo de trabajo. Cada solicitud también crea una notificación para el director del centro y los administradores de la agencia, de modo que vean las nuevas en su bandeja de entrada.
+1. Use las fichas de filtro —**Requested**, **Confirmed**, **Completed**, **No-show**, **Cancelled**— para ver un estado. Elija la ficha otra vez para ver todo.
+2. Lea la fila de resumen con el **Total** y la cantidad de cada estado.
+3. Pulse **Export CSV** para una hoja con **Parent**, **Email**, **Phone**, **Centre**, **Tour at**, **Preferred start**, **Status** y **Notes**.
 
-## Correos electrónicos de confirmación
+## Quién puede hacer qué
 
-Enviar un correo electrónico a quien solicita la visita al confirmar es un seguimiento de v22p50. Por ahora, copie su correo electrónico de la fila y responda manualmente.
+| Rol | Puede |
+|---|---|
+| Administrador de agencia | Ver y actualizar las visitas de todos los centros. |
+| Director de centro | Ver y actualizar las visitas de su(s) centro(s). |
+| Administrador de plataforma | La agencia elegida en el selector de agencias. |
+
+## Preguntas frecuentes y problemas
+
+??? La lista dice «No tour requests yet.» | Nadie ha reservado todavía. Comparta su enlace público (arriba de la lista) para empezar a recibir reservas.
+??? ¿Las familias reciben un correo de confirmación? | No desde esta pantalla. Respóndales usted; una campaña por goteo con **After tour booked** puede enviar un agradecimiento automático.
+??? ¿Puedo agregar una visita que pidieron por teléfono? | Abra su enlace público de reservas y complételo por la familia.
+??? ¿Dónde cuentan las visitas? | Las visitas recientes alimentan el **Enrolment forecast** («Tour pipeline · 60d»).
+
+## Pantallas relacionadas
+
+[[open: #forecast | Pronóstico de inscripciones]] [[open: #marketing-campaigns | Campañas]]
+
+Vea también [[drip-campaigns]] y [[enrolment-forecast]].

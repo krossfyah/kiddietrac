@@ -2,34 +2,58 @@
 title: Tour bookings
 category: Daily Operations
 order: 78
+roles: agency_admin, centre_director, platform_admin
 screens: tours
 ---
 # Tour bookings
 
-Prospective families can request a centre tour through your public booking endpoint. Confirmed tours feed into the staff calendar so directors know who's coming when. Find the management view under **Marketing → Tours**.
+**Marketing › Tours** lists every prospective family who asked to visit your centre through your public booking page,
+and lets you move each request along: confirm it, mark it done, or record a no-show or cancellation. Each new request
+also sends a notice to the centre director and agency admins, so nobody misses one.
 
-## The public link
+[[open: #tours | Open Tours]]
 
-Your public booking URL is:
+## Sharing your booking page
 
-    POST https://api.kiddietrac.com/api/v1/public/tours
+1. Open **Marketing › Tours**. The **Public booking link** card is at the top.
+2. Press **Copy**. The button shows **Copied**.
+3. Paste the link on your website, in your email signature or in social posts. Families fill in their name, email, phone, child's age, preferred start date and tour time.
 
-Embed it in a custom form on your website that posts `{ agency_slug, centre_id, parent_name, parent_email, parent_phone, child_age_months, preferred_start_date, tour_at, notes }`. A future v22p51 ship will provide a hosted public landing page so you don't need to build the form yourself.
+> ℹ️ The booking page limits how many requests can come from one place in an hour, to keep spam out.
 
-The endpoint is throttled to 8 requests per hour per IP to prevent spam.
+## Handling a request
 
-## The admin view
+1. Find the request in the list. The coloured edge shows its status: amber requested, blue confirmed, green completed, red no-show, grey cancelled.
+2. Read the parent's name, email, phone, tour date and time, the child's age, **Wants to start:** and their notes.
+3. Contact the family to confirm the time (copy their email or phone from the row).
+4. In the status menu on the row, choose **confirmed**. The list refreshes and the counts update.
+5. After the visit, set it to **completed** — or **no show** or **cancelled** if they did not come.
 
-The Tours screen lists every booking with:
+> ⚠️ Changing the status does not email the family. Reply to them yourself from your email or by phone.
 
-- Coloured left rail by status (amber = requested, blue = confirmed, green = completed, red = no-show, grey = cancelled)
-- Parent name + email + phone
-- Tour date and time
-- Child age in months (if provided)
-- Free-text notes from the family
+## Finding and exporting tours
 
-A status dropdown on each row flips the booking through the workflow. Each request also creates a notification for the centre director and agency admins so they see new ones in their inbox.
+1. Use the filter chips — **Requested**, **Confirmed**, **Completed**, **No-show**, **Cancelled** — to show one status. Choose the chip again to see all.
+2. Read the summary row for the **Total** and the count for each status.
+3. Press **Export CSV** for a spreadsheet with **Parent**, **Email**, **Phone**, **Centre**, **Tour at**, **Preferred start**, **Status** and **Notes**.
 
-## Confirmation emails
+## Who can do what
 
-Sending an email to the requester on confirm is a v22p50 follow-up. For now, copy their email from the row and reply manually.
+| Role | Can |
+|---|---|
+| Agency admin | See and update tours for every centre. |
+| Centre director | See and update tours for their own centre(s). |
+| Platform admin | The agency chosen in the agency switcher. |
+
+## FAQs and when something goes wrong
+
+??? The list says "No tour requests yet." | Nobody has booked yet. Share your public link (above the list) to start collecting bookings.
+??? Do families get a confirmation email? | Not from this screen. Reply to them yourself; a drip campaign on **After tour booked** can send a thank-you automatically.
+??? Can I add a tour that came in by phone? | Open your public booking link and fill it in for the family.
+??? Where do tours count? | Recent tours feed the **Enrolment forecast** ("Tour pipeline · 60d").
+
+## Related screens
+
+[[open: #forecast | Enrolment forecast]] [[open: #marketing-campaigns | Campaigns]]
+
+See also [[drip-campaigns]] and [[enrolment-forecast]].

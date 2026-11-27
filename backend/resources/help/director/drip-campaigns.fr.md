@@ -1,47 +1,61 @@
 ---
-roles: agency_admin, platform_admin
-title: Campagnes automatisées
-category: Marketing
-order: 65
+title: Campagnes automatisées (goutte-à-goutte)
 ---
-# Campagnes automatisées
+# Campagnes automatisées (goutte-à-goutte)
 
-Envoi automatique de courriels de suivi N jours après un événement déclencheur. Utile pour accompagner les familles qui ont réservé une visite et pour relancer celles qui sont devenues silencieuses.
+**Engagement › Drip campaigns** envoie automatiquement un courriel de suivi un certain nombre de jours après un
+événement — la visite d'une famille, l'inscription d'un enfant, son anniversaire ou une famille qui ne donne plus
+signe de vie. Réglez-la une fois et chaque famille qui arrive à ce moment reçoit le courriel, sans oubli : un mot de
+remerciement le lendemain d'une visite, une trousse d'accueil trois jours après l'inscription.
 
-## Créer une campagne
+[[open: #drip-campaigns | Ouvrir les campagnes automatisées]]
 
-1. Barre latérale → **Campagnes automatisées**.
-2. Touchez **+ Nouvelle campagne automatisée**.
-3. Choisissez un déclencheur :
-   - **Après une visite réservée** (p. ex. envoyer un courriel « merci de votre visite » 1 jour après)
-   - **Après une inscription terminée** (p. ex. trousse de bienvenue 3 jours après)
-   - **À l’anniversaire** (p. ex. suggestion de programme adaptée à l’âge)
-   - **Après 30 jours d’inactivité** (relance)
-4. Choisissez le délai en jours (0 à 365).
-5. Rédigez l’objet et le corps en HTML.
-6. Enregistrez.
+## Créer une campagne automatisée
 
-## Comment fonctionne l’envoi
+1. Ouvrez **Engagement › Drip campaigns**. La bannière indique **💧 Drip campaigns**.
+2. Appuyez sur **+ New drip campaign**.
+3. Entrez un **Title** que votre équipe reconnaîtra (« Merci pour la visite »).
+4. Choisissez le **Trigger event** : **After tour booked**, **After enrollment complete**, **On child's birthday** ou **After 30 days inactive**.
+5. Entrez le **Delay (days)** — combien de jours après l'événement envoyer (0 envoie le jour même).
+6. Rédigez l'**Email subject** et l'**Email body (HTML allowed)**. Tapez **{first_name}** là où vous voulez le prénom du parent.
+7. Appuyez sur **Create**. La campagne apparaît dans la liste comme active.
 
-Une tâche cron s’exécute chaque heure. Elle recherche les événements déclencheurs qui correspondent au `(trigger_event, trigger_delay_days)` de chaque campagne active. Les événements correspondants sont ajoutés à la file `drip_sends` et envoyés immédiatement.
+> 💡 Pour **After tour booked**, le délai compte à partir de la date de la visite : un délai de 1 envoie le lendemain.
 
-Chaque (campagne, source) n’est envoyé qu’une seule fois — les rejeux sont idempotents.
+## Vérifier que ça fonctionne
 
-## Suivi
+1. Regardez les tuiles du haut : **Active drip campaigns**, **Sent (all time)**, **Queued** et **Failed**.
+2. Lisez la liste : le **Title**, le **Trigger**, le **Delay** et le **Status** de chaque campagne.
+3. Si **Failed** augmente, vérifiez les adresses courriel dans les dossiers des familles.
 
-La page de la campagne affiche : nb de campagnes · nb envoyés · nb en file · nb échoués.
+KiddieTrac vérifie chaque heure quelles familles ont atteint un déclencheur, et envoie chaque campagne une seule fois
+à chaque personne — jamais deux fois pour la même visite, le même enfant ou la même famille.
 
-## Modèles de courriel
+## Qui la reçoit
 
-Utilisez les variables standard d’EmailTemplate dans le HTML du corps :
-- `{{first_name}}` — le prénom du destinataire
-- `{{family_name}}` — le nom de la famille
-- `{{centre_name}}` — le nom du centre
-- `{{agency_name}}` — le nom de votre agence
+- **After tour booked** — l'adresse donnée lors de la réservation de la visite.
+- **After enrollment complete** et **On child's birthday** — le courriel principal de la famille, pour les enfants encore inscrits.
+- **After 30 days inactive** — les familles qui n'ont pas utilisé le portail depuis 30 jours.
 
-## Bonnes pratiques
+Les règles habituelles s'appliquent : les familles parties et les comptes fermés ne reçoivent rien.
 
-- Commencez avec 1 ou 2 campagnes; mesurez les réponses avant d’en ajouter
-- Variez le ton : visite réservée = accueil chaleureux, inactivité = relance en douceur
-- N’envoyez pas trop souvent — la qualité plutôt que la quantité
-- Utilisez la réécriture par IA (point d’accès `/marketing/ai-rewrite`) pour peaufiner le texte
+## Qui peut faire quoi
+
+| Rôle | Peut |
+|---|---|
+| Administrateur d'agence | Créer des campagnes automatisées et voir leurs chiffres. |
+| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. |
+| Directeur de centre, éducatrice | Non disponible. |
+
+## Questions fréquentes et problèmes
+
+??? Comment modifier ou arrêter une campagne automatisée? | Il n'y a pas encore de bouton pour modifier, suspendre ou supprimer sur cet écran. Ouvrez un billet dans l'Aide et le soutien KiddieTrac la modifiera ou l'arrêtera pour vous.
+??? Une famille n'a rien reçu. | Vérifiez la date du déclencheur (par exemple la date de visite ou d'inscription au dossier), le délai et que la famille a un courriel au dossier. L'envoi se fait chaque heure : comptez une heure.
+??? Puis-je prévisualiser le courriel? | Pas ici. Rédigez-le d'abord comme campagne dans **Marketing › Campaigns**, utilisez **👁 Preview**, puis collez le texte ici.
+??? Est-ce que {first_name} fonctionne? | Oui. Il devient le prénom de la personne si l'adresse appartient à un compte, sinon « there ».
+
+## Écrans connexes
+
+[[open: #marketing-campaigns | Campagnes]] [[open: #tours | Visites]] [[open: #engagement | Score d'engagement]]
+
+Voir aussi [[marketing-campaigns]] et [[tour-bookings]].
