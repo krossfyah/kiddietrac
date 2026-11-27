@@ -820,7 +820,7 @@
   function mineAll(host) {
     mine(host).then(function () { if (host.querySelector('[data-hrx-mine]')) tile(host, '🏛️', 'Tax forms', /^tax forms/i); });
     myPayslips(host).then(function () { if (host.querySelector('[data-hrx-slips]')) tile(host, '💵', 'My payslips', /^my payslips/i); });
-    myTaxSlips(host).then(function () { if (host.querySelector('[data-hrx-taxslips]')) tile(host, '🧾', 'My tax slips', /^my tax slips/i); });
+    myTaxSlips(host).then(function () { if (host.querySelector('[data-hrx-taxslips]')) tile(host, '🍁', 'My tax slips', /^my tax slips/i); });
   }
   window.KTHrTax = { mine: mineAll, profile: profile, has: has, draw: draw, settings: settings, openSlip: openSlip };
 })(window);

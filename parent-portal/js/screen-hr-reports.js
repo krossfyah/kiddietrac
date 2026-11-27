@@ -394,7 +394,7 @@
       var ye = T.year_end, yd = ye.days_left, ySt = ye.status === 'final' ? (ye.pending ? 'finalized · ' + ye.pending + ' change(s) waiting' : 'finalized') : (ye.status === 'draft' ? 'draft slips' : 'not started');
       tiles.push({ icon: '🧾', label: ye.year + ' tax slips due', value: yd < 0 ? 0 : yd, unit: yd === 1 ? ' day' : ' days',
         sub: esc('Feb ' + String(ye.deadline).slice(8) + ', ' + (ye.year + 1) + ' · ' + ySt) + (yd < 0 && ye.status !== 'final' ? ' <span class="hrd-d b">' + esc((-yd) + ' days late') + '</span>' : ''),
-        subText: 'T4 / T4A / RL-1 ' + ySt, go: function () { goHash('#hr-payroll?tab=yearend'); } });
+        subText: 'T4 / T4A / RL-1 ' + ySt, go: function () { goHash('#payroll?tab=yearend'); } });
     }
 
     // ── charts ──
@@ -601,7 +601,7 @@
     if (k === 'lateness') return { note: 'Clock-ins compared with the scheduled shift start; late = more than ' + d.grace + ' minutes after it (the absence report\'s Lateness tab, summed).',
       tables: [{ title: 'By centre', cols: [['label', 'Centre'], ['compared', 'Clock-ins compared', 'num'], ['late', 'Late', 'num'], ['minutes', 'Minutes late', 'num'], ['people_late', 'People late', 'num'], ['on_time_pct', 'On time', 'pct']], rows: d.by_centre },
         { title: 'People', cols: [['name', 'Name'], ['centre', 'Centre'], ['compared', 'Compared', 'num'], ['late', 'Late', 'num'], ['minutes', 'Minutes', 'num'], ['average', 'Average', 'num'], ['worst', 'Most', 'num'], ['on_time_pct', 'On time', 'pct'], ['pattern', 'Pattern']], rows: d.rows }] };
-    if (k === 'schedule') return { note: 'Scheduled shift hours against the hours clocked (paid hours follow your timesheet rules). The same figures as HR > Timesheets.',
+    if (k === 'schedule') return { note: 'Scheduled shift hours against the hours clocked (paid hours follow your timesheet rules). The same figures as Human Resources › Clock-ins & timesheets.',
       tables: [{ title: 'By centre', cols: [['label', 'Centre'], ['people', 'People', 'num'], ['shifts', 'Shifts', 'num'], ['scheduled_hours', 'Scheduled hours', 'num'], ['worked_hours', 'Worked hours', 'num'], ['paid_hours', 'Paid hours', 'num'], ['no_show', 'Missed shifts', 'num'], ['unscheduled', 'Unscheduled clock-ins', 'num'], ['overtime_hours', 'Approved overtime', 'num']], rows: d.by_centre },
         { title: 'People', cols: [['name', 'Name'], ['centre', 'Centre'], ['shifts', 'Shifts', 'num'], ['scheduled_hours', 'Scheduled', 'num'], ['worked_hours', 'Worked', 'num'], ['paid_hours', 'Paid', 'num'], ['variance_hours', 'Paid − scheduled', 'num'], ['no_show', 'Missed', 'num'], ['overtime_hours', 'Overtime', 'num']], rows: d.rows }] };
     if (k === 'leave') return { note: 'Each person\'s current leave year and the one before it (' + (d.leave_year === 'anniversary' ? 'from their start date' : 'your agency\'s leave year') + '). Earned = grants and accruals; Taken = time off booked; Other = carry-over, expiry and adjustments.',
