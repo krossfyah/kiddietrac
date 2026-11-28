@@ -1576,6 +1576,8 @@
         _notifTexts ? { key: 'texts', label: '📱 Texts & calls', paint: _card(_notifTexts) } : null,
         typeof _notifPush !== 'undefined' && _notifPush ? { key: 'push', label: '📲 Push & alerts', paint: _card(_notifPush) } : null,
         _notifSounds ? { key: 'sounds', label: '🔊 Sounds & vibration', paint: _card(_notifSounds) } : null,
+        // 📻 The walkie's own settings moved here from its screen (2026-11-27, Anthony): Do not disturb + Walkie sounds (kt-walkie.js).
+        ((typeof isPaidStaff !== 'undefined' && isPaidStaff) || (typeof activeRole !== 'undefined' && activeRole === 'platform_admin')) && KT.walkie && KT.walkie.myCard ? { key: 'walkie', label: '📻 Walkie-talkie', paint: function (p) { p.classList.add('kt-st-full'); p.innerHTML = ''; p.appendChild(KT.walkie.myCard()); } } : null,
       ], { param: 'sub' });
     } catch (e) {}
 

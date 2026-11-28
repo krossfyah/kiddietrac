@@ -10,7 +10,11 @@
       so the page only shows the "Amna is talking" card.
    2. TALKS: hold the 🎙 button (or the spacebar on the Walkie-talkie screen). The mic is captured at once, cut into
       ~400 ms mu-law pieces and posted to /walkie/talk/{id}/chunk; one speaker per channel (409 = someone is talking).
-   3. The #walkie screen: channels, people, history (play back), Do not disturb, and the agency settings for admins.
+   3. The #walkie screen: channels, people, history (play back). Its settings live in Settings (2026-11-27, Anthony:
+      "move the settings from the walkie talkie to the settings section"): yours (Do not disturb, Walkie sounds) in
+      My settings › Notifications › 📻 Walkie-talkie (KT.walkie.myCard), the agency's in Settings › Agency
+      notifications › 📻 Walkie-talkie (KT.walkie.agencyPane). The screen keeps a ⚙️ link to each.
+   4. RADIO SOUNDS (see KIT below): press, release (roger), incoming, end of transmission.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (w, d) {
   'use strict';
@@ -57,13 +61,54 @@
   }
   function unlocked() { return !!(S.ctx && S.ctx.state === 'running'); }
   ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) { d.addEventListener(ev, function () { if (S.me) ctx(); }, { capture: true, passive: true }); });
-  function chirp(c, at, emergency) {
-    [0, emergency ? 0.16 : -1].forEach(function (off) {
-      if (off < 0) return; var o = c.createOscillator(), g = c.createGain(); o.frequency.value = emergency ? 1500 : 1180;
-      g.gain.setValueAtTime(0.0001, at + off); g.gain.exponentialRampToValueAtTime(0.25, at + off + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, at + off + 0.09);
-      o.connect(g); g.connect(c.destination); o.start(at + off); o.stop(at + off + 0.1);
+  /* RADIO SOUNDS (2026-11-27, Anthony: "use a walkie talkie type sound like how zello has it for receiving and sending
+     messages"). Our OWN sounds, made here from tones and a little filtered noise - no audio files, nothing copied:
+       press     two quick rising blips: you have the channel, talk now;
+       release   a roger beep and a short squelch tail: you let go;
+       rx        a squelch click and a rising sweep: someone starts talking to you;
+       rxEnd     a short beep and a soft squelch: they finished;
+       emergency three urgent beeps (the emergency channel; plays even with Walkie sounds off).
+     Each is 0.1-0.4 s, quiet (well under speech), and never on top of a voice: it plays before or after it. The SAME
+     recipe (segments, the noise generator) is in the Android app, KtWalkie.sound(), so a phone sounds the same.
+     Segment = [t]one or [n]oise, start s, length s, from Hz, to Hz, level. */
+  var KIT = {
+    press: [['t', 0, 0.045, 1800, 1800, 0.16], ['t', 0.07, 0.045, 2400, 2400, 0.16]],
+    release: [['t', 0, 0.07, 1250, 1050, 0.14], ['n', 0.075, 0.13, 0, 0, 0.06]],
+    rx: [['n', 0, 0.035, 0, 0, 0.05], ['t', 0.035, 0.085, 900, 1500, 0.15]],
+    rxEnd: [['t', 0, 0.04, 1050, 1050, 0.1], ['n', 0.045, 0.16, 0, 0, 0.07]],
+    emergency: [['t', 0, 0.09, 1500, 1500, 0.22], ['t', 0.16, 0.09, 1500, 1500, 0.22], ['t', 0.32, 0.09, 1900, 1900, 0.22]]
+  };
+  var PCM = {};
+  function soundPcm(name) {
+    var segs = KIT[name] || [], len = 0;
+    segs.forEach(function (s) { len = Math.max(len, s[1] + s[2]); });
+    var n = Math.ceil(len * RATE), out = new Float32Array(n), seed = 12345, lp1 = 0, lp2 = 0, edge = Math.round(0.003 * RATE);
+    segs.forEach(function (s) {
+      var i0 = Math.round(s[1] * RATE), m = Math.round(s[2] * RATE), ph = 0;
+      for (var i = 0; i < m && i0 + i < n; i++) {
+        var env = Math.min(1, i / edge, (m - i) / edge), v;
+        if (s[0] === 't') { ph += 2 * Math.PI * (s[3] + (s[4] - s[3]) * i / m) / RATE; v = Math.sin(ph); }
+        else {   // band-limited hiss (two one-pole low-passes, subtracted), fading out: a radio squelch
+          seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+          var x = seed / 1073741824 - 1; lp1 += 0.55 * (x - lp1); lp2 += 0.08 * (x - lp2); v = (lp1 - lp2) * 2.2; env *= Math.pow(1 - i / m, 1.6);
+        }
+        out[i0 + i] += v * env * s[5];
+      }
     });
+    return out;
   }
+  /* Walkie sounds on? My settings › Notifications › 📻 Walkie-talkie (walkie_prefs.sounds). Emergency always beeps. */
+  function soundsOn() { return !(S.me && S.me.prefs && S.me.prefs.sounds === false); }
+  /** Play one radio sound at `at` (AudioContext time); returns when it ends (= at when it does not play). */
+  function sound(c, name, at) {
+    if (!c || (name !== 'emergency' && !soundsOn())) return at;
+    var pcm = PCM[name] || (PCM[name] = soundPcm(name));
+    if (!pcm.length) return at;
+    var buf = c.createBuffer(1, pcm.length, RATE); buf.getChannelData(0).set(pcm);
+    var src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination); src.start(at);
+    return at + buf.duration;
+  }
+  function chirp(c, at, emergency) { return sound(c, emergency ? 'emergency' : 'rx', at); }
   function schedule(c, u8, at) {
     var buf = c.createBuffer(1, u8.length, RATE), ch = buf.getChannelData(0);
     for (var i = 0; i < u8.length; i++) ch[i] = DEC[u8[i]];
@@ -144,7 +189,8 @@
             var c2 = ctx();
             if (!unlocked()) { loop(seq + 1, 0, at, Date.now()); return; }    // locked tab: catch up silently until "Listen" is tapped
             var now = c2.currentTime;
-            if (at === null || at < now + 0.05) { if (at === null) chirp(c2, now + 0.02, t.emergency); at = Math.max(now + (at === null ? 0.3 : 0.12), at || 0); }
+            if (at === null) at = Math.max(now + 0.3, chirp(c2, now + 0.02, t.emergency) + 0.06);   // the incoming sound, then the voice
+            else if (at < now + 0.05) at = now + 0.12;
             at = schedule(c2, new Uint8Array(pcm), at);
             markHeard(false);
             loop(seq + 1, 0, at, Date.now());
@@ -154,7 +200,10 @@
           if (misses % 4 === 3) {
             fetch(t.live + 'end.txt?r=' + Date.now(), { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (v) {
               var n = parseInt(v, 10);
-              if (!isNaN(n) && seq >= n) { var c3 = S.ctx; var left = c3 && at ? Math.max(0, (at - c3.currentTime) * 1000) : 0; setTimeout(finish, left); }
+              if (!isNaN(n) && seq >= n) {
+                var c3 = S.ctx, end = c3 && at ? sound(c3, 'rxEnd', Math.max(at, c3.currentTime) + 0.03) : 0;   // they finished
+                var left = c3 && end ? Math.max(0, (end - c3.currentTime) * 1000) : 0; setTimeout(finish, left);
+              }
               else setTimeout(function () { loop(seq, misses + 1, at, since); }, 120);
             }).catch(function () { setTimeout(function () { loop(seq, misses + 1, at, since); }, 150); });
           } else setTimeout(function () { loop(seq, misses + 1, at, since); }, 120);
@@ -196,6 +245,7 @@
     api().post('/walkie/talk', { channel: channel }, { quiet: true }).then(function (r) {
       tk.id = r.id;
       if (tk.failed) { api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {}); return; }   // no microphone
+      sound(c, 'press', c.currentTime + 0.01);   // the channel is yours: talk
       ui && ui.state('live', r);
       tk.pend.splice(0).forEach(function (p) { send(tk, p); });
       if (tk.released) talkEnd();
@@ -229,6 +279,7 @@
     if (!tk.id || !tk.stream) { if (tk.failed) S.talk = null; return; }   // finishes when the start / mic answers
     if (tk.fill > 0) piece(tk);
     teardown(tk);
+    if (S.ctx) sound(S.ctx, 'release', S.ctx.currentTime + 0.02);   // roger: the mic is already off
     S.talk = null;
     var ui = tk.ui;
     Promise.all(tk.ups).then(function () { return api().post('/walkie/talk/' + tk.id + '/end', { chunks: tk.seq }, { quiet: true }); }).then(function (r) {
@@ -294,7 +345,9 @@
       + '.wt-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-bottom:10px;}.wt-bar select,.wt-bar .btn{height:30px;font-size:13px;}'
       + '.wt-sec{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;margin:16px 0 8px;}'
       + '.wt-set{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr));gap:10px;}.wt-set label{display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;}.wt-set select,.wt-set input[type=text],.wt-set input[type=number]{width:100%;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:13px;}'
-      + '.wt-note{font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;margin-top:10px;}';
+      + '.wt-note{font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;margin-top:10px;}'
+      + '.wt-links{display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:center;margin:4px 0 8px;font-size:13px;}.wt-links a{color:#0E7490;font-weight:700;text-decoration:none;}.wt-links a:hover{text-decoration:underline;}'
+      + '.wt-dndon{font-size:12.5px;font-weight:700;color:#B45309;}.wt-card .wt-links{justify-content:flex-start;margin-top:10px;}';
     d.head.appendChild(s);
   }
 
@@ -313,8 +366,9 @@
 
   function draw(main, body, r) {
     if (!r.enabled) {
-      body.innerHTML = '<div class="wt-note">' + esc(T('The walkie-talkie is switched off for your agency.')) + (r.can_admin ? '' : ' ' + esc(T('Ask an agency admin to turn it on.'))) + '</div>' + (r.can_admin ? settingsHtml(r) : '');
-      wireSettings(body, r, main); return;
+      body.innerHTML = '<div class="wt-note">' + esc(T('The walkie-talkie is switched off for your agency.')) + (r.can_admin ? '' : ' ' + esc(T('Ask an agency admin to turn it on.'))) + '</div>'
+        + (r.can_admin ? '<div class="wt-links"><a href="' + AGENCY_LINK + '">⚙️ ' + esc(T('Agency walkie settings')) + '</a></div>' : '');
+      return;
     }
     var q = (location.hash.split('?')[1] || '').split('&').reduce(function (a, kv) { var p = kv.split('='); if (p[0]) a[p[0]] = decodeURIComponent(p[1] || ''); return a; }, {});
     var all = {}; r.channels.forEach(function (c) { all[c.key] = { key: c.key, label: c.label, icon: c.icon, can_talk: c.can_talk, emergency: c.emergency, talking: c.talking }; });
@@ -337,11 +391,10 @@
       + '<div class="wt-main"><div class="wt-head"><h2 data-wt-title data-no-i18n></h2></div>'
       + '<div class="wt-ptt"><button type="button" class="wt-btn" data-wt-ptt aria-label="' + esc(T('Hold to talk')) + '">🎙</button><div class="wt-state" data-wt-state></div>'
       + '<div class="wt-hint">' + esc(T('Hold to talk, let go to finish.')) + (matchMedia('(pointer:fine)').matches ? ' ' + esc(T('On a computer you can hold the spacebar.')) : '') + '</div></div>'
-      + '<div class="wt-bar"><span style="font-size:13px;font-weight:700;">' + esc(T('Do not disturb')) + '</span><select data-wt-dnd><option value="off">' + esc(T('Off')) + '</option><option value="60">' + esc(T('For 1 hour')) + '</option><option value="240">' + esc(T('For 4 hours')) + '</option><option value="0">' + esc(T('Until I turn it off')) + '</option></select>'
-      + '<span class="wt-sub" data-wt-dndnote style="font-size:12px;color:#64748B;"></span></div>'
+      + '<div class="wt-links">' + (r.prefs && r.prefs.dnd ? '<span class="wt-dndon">🔕 ' + esc(T('Do not disturb is on')) + '</span>' : '')
+      + '<a href="' + MY_LINK + '">⚙️ ' + esc(T('My walkie settings')) + '</a>' + (r.can_admin ? '<a href="' + AGENCY_LINK + '">⚙️ ' + esc(T('Agency walkie settings')) + '</a>' : '') + '</div>'
       + '<div class="wt-note">' + esc(nativeNote) + ' ' + esc(T('The emergency channel always plays.')) + ' ' + esc(T('Talks are kept for')) + ' ' + (r.settings.retention_days || 30) + ' ' + esc(T('days, encrypted.')) + '</div>'
-      + '<div class="wt-sec">' + esc(T('History')) + '</div><div data-wt-hist></div>'
-      + (r.can_admin ? settingsHtml(r) : '') + '</div></div>';
+      + '<div class="wt-sec">' + esc(T('History')) + '</div><div data-wt-hist></div></div></div>';
 
     var title = body.querySelector('[data-wt-title]'), btn = body.querySelector('[data-wt-ptt]'), state = body.querySelector('[data-wt-state]');
     function select(k) {
@@ -371,14 +424,6 @@
     var qi = body.querySelector('[data-wtq]');
     qi.addEventListener('input', function () { var s = qi.value.trim().toLowerCase(); body.querySelectorAll('[data-name]').forEach(function (b) { b.style.display = !s || b.getAttribute('data-name').indexOf(s) >= 0 ? '' : 'none'; }); });
 
-    var dnd = body.querySelector('[data-wt-dnd]'), dndNote = body.querySelector('[data-wt-dndnote]');
-    function showDnd(p) { dnd.value = p.dnd ? (p.dnd_until ? '60' : '0') : 'off'; dndNote.textContent = p.dnd ? (p.dnd_until ? T('until') + ' ' + fmtWhen(p.dnd_until) : T('on')) : ''; if (p.dnd && p.dnd_until) dnd.value = 'x'; if (dnd.value === '') { var o = d.createElement('option'); o.value = 'x'; o.textContent = T('On'); dnd.appendChild(o); dnd.value = 'x'; } }
-    showDnd(r.prefs);
-    dnd.addEventListener('change', function () {
-      var v = dnd.value; if (v === 'x') return;
-      api().request('/walkie/prefs', { method: 'PUT', body: { dnd: v !== 'off', minutes: v === 'off' ? 0 : +v } }).then(function (p) { showDnd(p); toast('✅', 'Saved', '', '#16A34A'); }, function (e) { toast('⚠️', 'Could not save', errMsg(e), '#DC2626'); });
-    });
-
     var hist = body.querySelector('[data-wt-hist]');
     function history() {
       if (!S.sel) { hist.innerHTML = ''; return; }
@@ -396,7 +441,6 @@
       }, function (e) { hist.innerHTML = '<div class="wt-note">' + esc(T(errMsg(e))) + '</div>'; });
     }
     S.view = { history: history };
-    wireSettings(body, r, main);
     select(S.sel);
   }
 
@@ -404,14 +448,14 @@
     var c = ctx(); if (!c) return;
     api().get('/walkie/tx/' + id + '/audio').then(function (a) {
       var u = unb64(a.data || ''); if (!u.length) return;
-      var at = c.currentTime + 0.05; chirp(c, at, false); schedule(c, u, at + 0.12);
+      var at = sound(c, 'rx', c.currentTime + 0.05) + 0.04; at = schedule(c, u, at); sound(c, 'rxEnd', at + 0.03);
     }, function (e) { toast('⚠️', 'Could not play it', errMsg(e), '#DC2626'); });
   }
 
   function settingsHtml(r) {
     var s = r.settings || {};
     function opt(v, l, cur) { return '<option value="' + v + '"' + (String(cur) === String(v) ? ' selected' : '') + '>' + esc(T(l)) + '</option>'; }
-    return '<div class="wt-sec">' + esc(T('Agency settings')) + '</div><div class="wt-set" data-wt-set>'
+    return '<div class="wt-set" data-wt-set>'
       + '<div><label>' + esc(T('Walkie-talkie')) + '</label><select data-k="enabled">' + opt('1', 'On', s.enabled ? '1' : '0') + opt('0', 'Off', s.enabled ? '1' : '0') + '</select></div>'
       + '<div><label>' + esc(T('Phones listen')) + '</label><select data-k="listen">' + opt('always', 'All the time (24/7)', s.listen) + opt('on_shift', 'Only while clocked in', s.listen) + '</select></div>'
       + '<div><label>' + esc(T('Keep recordings for (days)')) + '</label><input type="number" min="1" max="365" data-k="retention_days" value="' + esc(s.retention_days || 30) + '"></div>'
@@ -421,7 +465,7 @@
       + '<div><label>' + esc(T('Educators can call')) + '</label><select data-k="educators_agency">' + opt('0', 'Staff at their own centres', s.educators_agency ? '1' : '0') + opt('1', 'Anyone on staff in the agency', s.educators_agency ? '1' : '0') + '</select></div>'
       + '</div><div class="wt-note">' + esc(T('Changes save as you make them and are recorded in the audit log.')) + '</div>';
   }
-  function wireSettings(body, r, main) {
+  function wireSettings(body, r, repaint) {
     var box = body.querySelector('[data-wt-set]'); if (!box) return;
     box.addEventListener('change', function (e) {
       var k = e.target.getAttribute('data-k'); if (!k) return;
@@ -429,8 +473,77 @@
       o[k] = (k === 'enabled' || k === 'emergency' || k === 'educators_agency') ? v === '1' : (k === 'retention_days' ? +v : v);
       api().request('/walkie/settings', { method: 'PUT', body: o }).then(function () {
         toast('✅', 'Saved', '', '#16A34A');
-        if (k === 'enabled' || k === 'emergency' || k === 'emergency_name' || k === 'emergency_talkers' || k === 'educators_agency') render(main);
+        if (S.me && S.me.settings) S.me.settings[k] = o[k];
+        if (repaint && (k === 'enabled' || k === 'emergency')) repaint();
       }, function (x) { toast('⚠️', 'Could not save', errMsg(x), '#DC2626'); });
+    });
+  }
+
+  /* ---- THE WALKIE'S SETTINGS, DRAWN IN THE SETTINGS SCREENS (2026-11-27, Anthony: "move the settings from the walkie
+     talkie to the settings section somewhere appropriate"). Your own: My settings › Notifications › 📻 Walkie-talkie
+     (screen-settings.js asks KT.walkie.myCard). The agency's: Settings › Agency notifications › 📻 Walkie-talkie
+     (screen-notification-settings.js asks KT.walkie.agencyPane; agency admins and super admins). ---- */
+  var MY_LINK = '#settings?tab=notifications&sub=walkie', AGENCY_LINK = '#notification-settings?tab=walkie';
+  function cardHead(title, sub) {
+    return '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + title + '</div>' + (sub ? '<div class="wt-sub" style="font-size:12.5px;color:#64748B;margin:2px 0 10px;">' + esc(T(sub)) + '</div>' : '');
+  }
+  function myCard() {
+    css();
+    var box = d.createElement('div'); box.className = 'kt-card wt-card'; box.setAttribute('data-wt-my', '1');
+    box.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie')), 'Do not disturb and the radio sounds. Only for you.') + '<div class="wt-sub">' + esc(T('Loading…')) + '</div>';
+    load().then(function (r) { paintMy(box, r); }, function (e) {
+      box.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie'))) + '<div class="wt-note">' + esc(T(errMsg(e))) + '</div>';
+    });
+    return box;
+  }
+  function paintMy(box, r) {
+    var p = r.prefs || {};
+    function opt(v, l) { return '<option value="' + v + '">' + esc(T(l)) + '</option>'; }
+    var nativeNote = native() ? T('This phone listens all the time, even with the screen off, unless you turn on Do not disturb.')
+      : (/iPhone|iPad/.test(navigator.userAgent) ? T('On iPhone, talks arrive as a notification: tap it to listen.') : T('In a browser you hear talks only while a KiddieTrac tab is open. The Android app listens all the time.'));
+    box.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie')), 'Do not disturb and the radio sounds. Only for you.')
+      + '<div class="wt-set">'
+      + '<div><label>' + esc(T('Do not disturb')) + '</label><select data-wt-dnd>' + opt('off', 'Off') + opt('60', 'For 1 hour') + opt('240', 'For 4 hours') + opt('0', 'Until I turn it off') + '</select>'
+      + '<div class="wt-sub" data-wt-dndnote style="font-size:12px;color:#64748B;margin-top:3px;"></div></div>'
+      + '<div><label>' + esc(T('Walkie sounds')) + '</label><div style="display:flex;gap:6px;"><select data-wt-snd style="flex:1;">' + opt('1', 'On (radio beeps)') + opt('0', 'Off') + '</select>'
+      + '<button type="button" class="btn" data-wt-try style="height:30px;font-size:13px;white-space:nowrap;">▶ ' + esc(T('Try')) + '</button></div></div>'
+      + '</div><div class="wt-note">' + esc(T('A beep when you press to talk, a roger beep when you let go, a chirp when someone starts talking to you and a soft squelch when they finish. The emergency channel always beeps and always plays.'))
+      + ' ' + esc(nativeNote) + '</div>'
+      + (r.enabled ? '<div class="wt-links"><a href="#walkie">📻 ' + esc(T('Open the Walkie-talkie')) + '</a></div>' : '<div class="wt-note">' + esc(T('The walkie-talkie is switched off for your agency.')) + '</div>');
+    var dnd = box.querySelector('[data-wt-dnd]'), dndNote = box.querySelector('[data-wt-dndnote]'), snd = box.querySelector('[data-wt-snd]');
+    function showDnd(x) {
+      dnd.value = x.dnd ? (x.dnd_until ? 'x' : '0') : 'off';
+      if (dnd.value === '' || (x.dnd && x.dnd_until)) { if (!dnd.querySelector('option[value="x"]')) { var o = d.createElement('option'); o.value = 'x'; o.textContent = T('On'); dnd.appendChild(o); } dnd.value = 'x'; }
+      dndNote.textContent = x.dnd ? (x.dnd_until ? T('On until') + ' ' + fmtWhen(x.dnd_until) : T('On until you turn it off')) : '';
+    }
+    showDnd(p);
+    snd.value = p.sounds === false ? '0' : '1';
+    function save(body, after) {
+      return api().request('/walkie/prefs', { method: 'PUT', body: body }).then(function (x) {
+        if (S.me) S.me.prefs = Object.assign({}, S.me.prefs || {}, x);
+        after && after(x); toast('✅', 'Saved', '', '#16A34A');
+      }, function (e) { toast('⚠️', 'Could not save', errMsg(e), '#DC2626'); });
+    }
+    dnd.addEventListener('change', function () { var v = dnd.value; if (v === 'x') return; save({ dnd: v !== 'off', minutes: v === 'off' ? 0 : +v }, showDnd); });
+    snd.addEventListener('change', function () { save({ sounds: snd.value === '1' }); });
+    box.querySelector('[data-wt-try]').addEventListener('click', function () {
+      var c = ctx(); if (!c) return;
+      if (snd.value !== '1') { toast('🔇', 'Walkie sounds are off', '', '#475569'); return; }
+      var t = c.currentTime + 0.05;
+      ['press', 'release', 'rx', 'rxEnd'].forEach(function (n) { var pcm = PCM[n] || (PCM[n] = soundPcm(n)); var b = c.createBuffer(1, pcm.length, RATE); b.getChannelData(0).set(pcm); var s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + 0.35; });
+    });
+  }
+  function agencyPane(pane) {
+    css();
+    pane.innerHTML = '<div class="kt-card wt-card" style="max-width:860px;">' + cardHead('📻 ' + esc(T('Walkie-talkie'))) + '<div class="wt-sub">' + esc(T('Loading…')) + '</div></div>';
+    return load().then(function (r) {
+      var card = pane.firstChild;
+      if (!r.can_admin) { card.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie'))) + '<div class="wt-note">' + esc(T('Only agency administrators can change this.')) + '</div>'; return; }
+      card.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie')), 'For the whole agency: on or off, when phones listen, how long talks are kept, the emergency channel and who educators can call.')
+        + settingsHtml(r) + '<div class="wt-links"><a href="#walkie">📻 ' + esc(T('Open the Walkie-talkie')) + '</a><a href="' + MY_LINK + '">⚙️ ' + esc(T('My walkie settings')) + '</a></div>';
+      wireSettings(card, r, function () { agencyPane(pane); });
+    }, function (e) {
+      pane.firstChild.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie'))) + '<div class="wt-note">' + esc(T(errMsg(e))) + '</div>';
     });
   }
 
@@ -439,5 +552,5 @@
     ['agency_admin', 'centre_director', 'educator', 'home_visitor'].forEach(function (role) { KT.Shell.registerScreen(role + ':walkie', render); });
   }
   reg();
-  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
+  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, myCard: myCard, agencyPane: agencyPane, sound: function (n) { var c = ctx(); return c ? sound(c, n, c.currentTime + 0.02) : 0; }, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
 })(window, document);

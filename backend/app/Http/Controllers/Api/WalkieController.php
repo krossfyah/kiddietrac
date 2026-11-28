@@ -100,7 +100,7 @@ final class WalkieController extends Controller
         return response()->json([
             'enabled' => $s['enabled'], 'me' => ['id' => $me, 'kind' => $who['kind'], 'name' => Walkie::firstName($me)],
             'bell' => Walkie::bellPath($me), 'channels' => $channels, 'people' => $people,
-            'prefs' => ['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd ? self::local($p->dnd_until, $aid) : null],
+            'prefs' => ['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me)],
             'settings' => $isAdmin ? $s : ['listen' => $s['listen'], 'retention_days' => $s['retention_days'], 'emergency' => $s['emergency'], 'emergency_name' => $s['emergency_name']],
             'can_admin' => $isAdmin, 'rate' => Walkie::SAMPLE_RATE, 'max_secs' => Walkie::MAX_SECS,
         ]);
@@ -362,18 +362,32 @@ final class WalkieController extends Controller
         return response()->json(['rate' => Walkie::SAMPLE_RATE, 'codec' => 'mulaw', 'data' => (string) Sensitive::open((string) $t->audio)]);
     }
 
-    /** PUT walkie/prefs {dnd, minutes} - my own Do not disturb (minutes empty = until I turn it off). */
+    /**
+     * PUT walkie/prefs {dnd, minutes} and/or {sounds} - my own Do not disturb (minutes empty = until I turn it off) and
+     * Walkie sounds (the radio beeps, 2026-11-27). Each is saved only when sent. Shown in My settings › Notifications.
+     */
     public function prefs(Request $request): JsonResponse
     {
         [$aid, $me] = $this->ctx($request);
-        $on = $request->boolean('dnd');
-        $min = (int) $request->input('minutes', 0);
-        $until = $on && $min > 0 ? now()->addMinutes(min($min, 24 * 60)) : null;
-        DB::table('walkie_prefs')->updateOrInsert(['user_id' => $me], ['dnd' => $on, 'dnd_until' => $until, 'updated_at' => now(), 'created_at' => now()]);
-        Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.dnd', 'entity_type' => 'user', 'entity_id' => $me,
-            'payload' => ['do_not_disturb' => $on, 'until' => $until ? (string) $until : null]]);
+        $set = ['updated_at' => now()];
+        if ($request->has('dnd')) {
+            $on = $request->boolean('dnd');
+            $min = (int) $request->input('minutes', 0);
+            $until = $on && $min > 0 ? now()->addMinutes(min($min, 24 * 60)) : null;
+            $set += ['dnd' => $on, 'dnd_until' => $until];
+            Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.dnd', 'entity_type' => 'user', 'entity_id' => $me,
+                'payload' => ['do_not_disturb' => $on, 'until' => $until ? (string) $until : null]]);
+        }
+        if ($request->has('sounds')) {
+            $set['sounds'] = $request->boolean('sounds');
+            Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.sounds', 'entity_type' => 'user', 'entity_id' => $me,
+                'payload' => ['walkie_sounds' => $set['sounds']]]);
+        }
+        if (! DB::table('walkie_prefs')->where('user_id', $me)->exists()) $set['created_at'] = now();
+        DB::table('walkie_prefs')->updateOrInsert(['user_id' => $me], $set);
+        $p = DB::table('walkie_prefs')->where('user_id', $me)->first();
 
-        return response()->json(['dnd' => $on, 'dnd_until' => $until ? self::local($until, $aid) : null]);
+        return response()->json(['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd && $p->dnd_until ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me)]);
     }
 
     /** PUT walkie/settings - agency admins: on/off, listening, retention, emergency channel. */
@@ -433,7 +447,7 @@ final class WalkieController extends Controller
     {
         $d = self::deviceUser($request);
 
-        return response()->json(['live' => self::liveFor((int) $d->user_id), 'dnd' => Walkie::dnd((int) $d->user_id)]);
+        return response()->json(['live' => self::liveFor((int) $d->user_id), 'dnd' => Walkie::dnd((int) $d->user_id), 'sounds' => Walkie::sounds((int) $d->user_id)]);
     }
 
     /** POST walkie/device/heard {tx, busy} (header X-KT-Walkie) */

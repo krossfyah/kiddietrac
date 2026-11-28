@@ -279,6 +279,14 @@ final class Walkie
         return $p->dnd_until === null || strtotime((string) $p->dnd_until) > time();
     }
 
+    /** Walkie sounds on (the radio beeps; My settings › Notifications › Walkie-talkie)? Default on. */
+    public static function sounds(int $uid): bool
+    {
+        $v = DB::table('walkie_prefs')->where('user_id', $uid)->value('sounds');
+
+        return $v === null ? true : (bool) $v;
+    }
+
     /** Clocked in now (an open punch from the last 16 hours)? @return int[] of $ids that are */
     public static function onShift(array $ids): array
     {

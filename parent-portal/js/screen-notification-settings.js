@@ -76,6 +76,8 @@
       { key: 'escalation', label: '🚩 Escalated daily records', paint: section(paintEscalation) },
       { key: 'topics', label: '💉 Immunizations & drills', paint: section(paintTopics) },
       { key: 'certs', label: '🎓 Staff certifications', paint: section(paintCerts) },
+      // 📻 The walkie's agency settings moved here from its screen (2026-11-27, Anthony: "move the settings ... to the settings section").
+      { key: 'walkie', label: '📻 Walkie-talkie', paint: function (pane) { return KT.walkie && KT.walkie.agencyPane ? KT.walkie.agencyPane(pane) : (pane.innerHTML = '<div class="kt-card">Loading…</div>'); } },
       // Sleep checks moved to Settings → Room Controls → Sleep checks (2026-10-15).
     ]);
   }
