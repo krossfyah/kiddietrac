@@ -4,6 +4,29 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🧭",
+            "title": "Step-by-step guides for every screen",
+            "body": "Every screen in KiddieTrac now has its own step-by-step guide behind the ? in its banner: what the screen is for, the exact buttons to press, who can do what and answers to common questions, in English, French, Spanish and Hindi.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "Des guides étape par étape pour chaque écran",
+            "body_fr": "Chaque écran de KiddieTrac a maintenant son propre guide étape par étape derrière le ? de sa bannière : à quoi sert l’écran, les boutons exacts sur lesquels appuyer, qui peut faire quoi et les réponses aux questions fréquentes, en français, en anglais, en espagnol et en hindi.",
+            "title_es": "Guías paso a paso para cada pantalla",
+            "body_es": "Cada pantalla de KiddieTrac tiene ahora su propia guía paso a paso detrás del ? de su encabezado: para qué sirve la pantalla, los botones exactos que debe pulsar, quién puede hacer qué y respuestas a preguntas frecuentes, en español, inglés, francés e hindi.",
+            "title_hi": "हर स्क्रीन के लिए चरण-दर-चरण गाइड",
+            "body_hi": "अब KiddieTrac की हर स्क्रीन के बैनर में ? के पीछे उसकी अपनी चरण-दर-चरण गाइड है: स्क्रीन किस काम की है, कौन-से बटन दबाने हैं, कौन क्या कर सकता है और आम सवालों के जवाब — हिंदी, अंग्रेज़ी, फ़्रेंच और स्पैनिश में।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔒",
             "title": "Directors see their own centres",
             "body": "Centre directors now see only the staff of their own centres in billing reminder copies, bus route drivers, holiday closures and text alert consent. People who have left, and closed centres, no longer appear in staff pickers, the contacts directory, team chat or meeting invites.",
