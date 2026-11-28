@@ -645,6 +645,8 @@ Schedule::command('kt:intake-reminders')->dailyAt('09:00')->timezone('America/To
 // Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 // Every section banner shimmers: gradient range, animation not switched off, white-label size kept (2026-11-24).
 Schedule::command('kt:banner-shimmer-check --quiet-ok')->dailyAt('05:52')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
+// The portal is light on every device: no style follows the device's dark mode (2026-11-27, KtDarkModeCheck).
+Schedule::command('kt:dark-mode-check --quiet-ok')->dailyAt('05:54')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 // Job applications kept on file: removed when their 24 months are up, as the applicant was told (2026-11-24).
 Schedule::command('kt:careers-retention')->dailyAt('03:40')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
