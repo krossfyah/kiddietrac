@@ -1,76 +1,66 @@
 ---
 title: Consigner rapidement des événements
-category: Daily Workflows
-order: 1
 ---
 
 # Consigner rapidement des événements
 
-Consigner les activités quotidiennes est ce que vous ferez le plus souvent. L’objectif est que ce soit rapide : moins de 5 secondes par événement.
+L'écran **Journal quotidien** (sa bannière dit **Consigner un moment**) sert à noter la journée d'un enfant en deux touches : couches, siestes, repas, biberons, jeux extérieurs, écran solaire, humeur, médicament, changement de vêtements, photos et vidéos. Chaque entrée s'affiche tout de suite dans l'écran Aujourd'hui de la famille et alimente le résumé de fin de journée.
 
-## Les 8 types d’événements
+[[open: #care-log | Ouvrir le journal quotidien]]
 
-| Événement | Quand le consigner |
+## Consigner un moment pour un enfant
+
+1. Ouvrez **Journal quotidien** dans le menu.
+2. Dans **Enfant**, choisissez l'enfant.
+3. Touchez une tuile : **Couche**, **Toilettes**, **Sieste**, **Repas**, **Collation**, **Biberon**, **Jeux extérieurs**, **Écran solaire**, **Humeur**, **Medicine** ou **Change of clothes**.
+4. Dans la fenêtre, touchez un choix rapide (par exemple **Wet**, **Ate most** ou **Happy**), ou touchez **Other** et écrivez-le.
+5. Si c'est arrivé plus tôt, changez **When did it happen? (optional)**. Pour une sieste, remplissez plutôt **Fell asleep** et **Woke up**.
+6. Ajoutez une **Note (facultatif)** ou **📷 Add a photo or video** si c'est utile pour la famille.
+7. Touchez **Consigner**. L'entrée apparaît en haut du journal du jour, sous les tuiles.
+
+> 💡 La fenêtre d'une couche a un bouton **🧴 Cream applied**, un biberon demande la quantité en **oz**, et **Medicine** demande le **Medicine and dose** (par exemple « Tylenol pour enfants 5 ml »).
+
+## Consigner pour tout le groupe d'un coup
+
+1. Dans **Enfant**, choisissez **Tous les enfants**.
+2. Touchez **Repas**, **Collation**, **Biberon**, **Jeux extérieurs**, **Écran solaire**, **Humeur** ou **Sieste**.
+3. Choisissez les détails et touchez **Consigner**. Une entrée est enregistrée pour chaque enfant présent en ce moment.
+
+> ⚠️ **Couche**, **Toilettes**, **Medicine** et **Change of clothes** concernent toujours un seul enfant : il faut choisir un enfant.
+
+## Photos, vidéos, observations, retards et fournitures
+
+1. Touchez **Photo** ou **Vidéo**, choisissez le fichier, identifiez les enfants, ajoutez une légende et touchez **Share it**. Un fichier peut faire jusqu'à 30 Mo (environ 30 secondes de vidéo).
+2. Touchez **🌱 Observation** pour ouvrir le formulaire d'observation avec l'enfant déjà choisi (voir [Consigner des observations](recording-observations)).
+3. Touchez **En retard** pour noter un **Late pick-up** ou un **Late arrival** : choisissez **How late**, ajoutez ce qui s'est passé et touchez **Consigner**. Votre direction l'examine; vous ne facturez rien.
+4. Touchez **Fournitures** pour demander à la famille d'apporter quelque chose de la maison (couches, lingettes, vêtements de rechange).
+
+## Voir une autre journée
+
+Sous les tuiles, le journal du jour liste ce qui a été consigné pour l'enfant (ou pour tout le monde avec **Tous les enfants**), du plus récent au plus ancien, avec le nom de la personne qui l'a consigné. Utilisez **‹** et **›** ou la case de date pour voir une journée passée, et **Aujourd’hui** pour revenir. On ne peut pas choisir une date future.
+
+## Qui peut faire quoi
+
+| Rôle | Ce qu'il peut faire ici |
 |---|---|
-| **Repas** | Déjeuner, dîner — tout véritable repas |
-| **Collation** | Collation du matin, collation de l’après-midi |
-| **Début / fin de sieste** | Quand l’enfant s’endort, quand il se réveille |
-| **Couche** | Chaque change (mouillée / selle / les deux) |
-| **Toilettes** | Pour les plus grands qui utilisent les toilettes |
-| **Activité** | Jeu structuré ou libre (heure du conte, bac à sable, bricolage, etc.) |
-| **Humeur** | Quand un changement notable survient (s’est fâché, s’est calmé, etc.) |
-| **Note** | Observation libre qui ne correspond à aucune autre catégorie |
+| Éducatrice ou éducateur | Consigner pour les enfants de ses propres groupes. |
+| Direction de centre / administration de l'agence | Consigner pour tout enfant de ses centres; l'administration choisit d'abord un **Provider**. |
+| Parent | Voit les entrées dans l'écran Aujourd'hui de son enfant et dans le résumé quotidien. |
 
-## Comment consigner rapidement
+## FAQ et quand quelque chose ne va pas
 
-Pour chaque événement, voici la marche à suivre :
+??? La liste Enfant dit « No children in your room yet. Ask your director to assign you a room. » | Vous n'êtes pas encore affecté·e à un groupe. Votre direction attribue les groupes; d'ici là, la liste reste vide.
+??? J'ai choisi Tous les enfants et le message dit « No children are checked in right now, so there is nobody to log this for. » | Les entrées de groupe ne vont qu'aux enfants présents. Faites d'abord l'arrivée des enfants, ou choisissez un enfant.
+??? Le message dit « That time is later today. A log records what has already happened ». | L'heure dans **When did it happen?** est dans le futur. Choisissez l'heure réelle.
+??? Le message dit « Pick a child to log for — All children does not apply to diaper. » | Les couches, toilettes, médicaments et vêtements se notent pour un seul enfant. Choisissez l'enfant et touchez la tuile de nouveau.
+??? Je me suis trompé·e. Puis-je modifier ou supprimer l'entrée? | On ne peut pas modifier ni supprimer une entrée sur cet écran. Consignez la bonne entrée et prévenez votre direction, qui peut corriger le dossier.
+??? Medicine remplace-t-il le registre des médicaments? | Non. Il informe la famille de ce qui a été donné. Les doses d'un médicament autorisé se notent toujours dans **Médicaments** avec **+ Consigner une dose**.
+??? Qui est averti quand je consigne quelque chose? | Les tuteurs de l'enfant reçoivent un avis dans l'application et une notification sur leur téléphone, sauf s'ils ont désactivé les moments quotidiens ou si votre agence a désactivé les moments instantanés. Plusieurs entrées en deux minutes sont regroupées en un seul avis.
 
-1. Touchez la fiche de l’enfant
-2. Touchez le type d’événement (l’une des 8 grandes icônes)
-3. Ajoutez des détails si vous le souhaitez (ce qu’il a mangé, quelle activité, etc.)
-4. Touchez **Enregistrer**
+## Écrans liés
 
-C’est tout. Au total : 4 touches.
-
-## Détails d’un repas
-
-Lorsque vous consignez un repas ou une collation, vous pouvez ajouter :
-
-- **Quel repas** (déjeuner / collation du matin / dîner / collation de l’après-midi)
-- **Ce qu’il a mangé** — liste séparée par des virgules
-- **Quantité** — aucune / un peu / la plupart / tout
-
-Inutile d’écrire de longs textes. « Banane, craquelins — la plupart » est parfait.
-
-## Détails d’une activité
-
-Pour les activités :
-
-- **Nom** — de quoi s’agissait-il ? (p. ex. « Construction de blocs », « Heure du conte », « Jeu extérieur »)
-- **Domaine** — quel domaine d’apprentissage ? Socioaffectif, langage/littératie, physique, cognitif, arts créatifs, soins personnels, extérieur
-- **Durée en minutes** — combien de temps a-t-il participé ?
-
-L’étiquette de domaine est importante pour les **observations** (voir Consigner des observations).
-
-## Pourquoi c’est important
-
-Chaque événement que vous consignez apparaît dans l’appli du parent en quelques secondes. À la fin de la journée :
-
-- Le résumé par IA fait la synthèse de tout pour le parent (fini le silence à « qu’as-tu fait aujourd’hui ? »)
-- Les parents voient toute la chronologie
-- La direction voit les indicateurs globaux
-- Vous avez un registre de ce qui s’est passé, utile pour répondre plus tard aux questions des parents
-
-## Et si j’oublie quelque chose ?
-
-Vous pouvez consigner un événement après coup avec une heure antérieure :
-
-1. Consignez l’événement normalement
-2. Quand la fenêtre s’ouvre, changez l’heure **survenu à** pour celle où cela s’est réellement produit
-3. Enregistrez
-
-N’ajoutez pas d’événements rétroactifs de plus d’une journée : cela devient confus dans la chronologie.
-
-## Et si je me suis trompé ?
-
-Touchez l’événement dans la chronologie → **Modifier** ou **Supprimer**. N’essayez pas de « corriger » en ajoutant une note contradictoire : modifiez simplement l’original.
+[[open: #observations | Observations]]
+[[open: #medications | Médicaments]]
+[[open: #late-pickups | Départs tardifs]]
+[[giving-medications]]
+[[recording-observations]]

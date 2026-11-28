@@ -1,59 +1,63 @@
 ---
 title: Planes de clase y currículo
-category: Daily Workflows
-order: 5
 ---
 
 # Planes de clase y currículo
 
-Un plan semanal compartido da intención a su sala y permite que los padres vean lo que aprenden sus hijos. Kiddietrac hace la planificación rápida y le permite reutilizar lo que funciona.
+La **Biblioteca de currículo** tiene unidades listas para usar basadas en *How Does Learning Happen?* de Ontario y sus cuatro bases: pertenencia, bienestar, participación y expresión. Cada unidad trae objetivos, actividades, sugerencias de observación, ideas para involucrar a las familias y un plan semanal. Usted revisa una unidad y la usa para crear planes de clase semanales en **borrador** para su salón. Después revisa y publica la semana en **Play Spark → Esta semana**, donde la ven las familias.
 
-## El plan semanal
+[[open: #curriculum | Abrir la biblioteca de currículo]]
 
-Abra **Planes de clase** para ver la semana actual día por día. Cada día contiene las actividades que ha planificado: ronda, un proyecto de arte, juego al aire libre, un cuento. Las actividades pueden **codificarse por colores** para leer la semana de un vistazo.
+## Encontrar una unidad
 
-Para añadir al plan:
+1. Abra **Biblioteca de currículo** desde el menú. Se abre en **📖 Biblioteca de Ontario**.
+2. Acote la lista con la casilla de búsqueda (**Search units, themes, activities…**) y los filtros **All ages**, **All foundations**, **All seasons** y **All themes**.
+3. Toque una unidad para verla: sus **🎯 Goals**, actividades, **🗓 Weekly plan**, sugerencias de observación, notas de seguridad y consejos para estudiantes francófonos y bilingües.
 
-1. Abra **Planes de clase** y asegúrese de estar en la **semana** correcta.
-2. Añada una actividad a un día: un título y, si quiere, notas o materiales.
-3. Guarde. Será visible de inmediato para su sala y para los padres.
+[[show: #curriculum @ 🏠 Our units | Muéstreme nuestras unidades]]
 
-## Plantillas semanales
+**🏠 Our units** muestra las unidades que su agencia copió y adaptó. Un director o administrador las crea con **⧉ Copiar para editar**.
 
-No tiene que empezar desde cero. KiddieTrac incluye una biblioteca de semanas ya preparadas (temas para bebés, preescolar y edades mixtas, como Cosecha de otoño, Ayudantes de la comunidad y País de las maravillas invernal), además de las semanas que su agencia haya guardado.
+## Crear planes en borrador a partir de una unidad
 
-1. Abra **Planes de clase** y vaya a la semana que quiere planificar.
-2. Elija **📋 Plantillas**. Filtre por edad o busque por tema.
-3. Abra una plantilla para **ver la semana completa**: cada actividad, día por día, con sus notas y una adaptación sugerida para los más pequeños o los mayores.
-4. Elija **Usar esta plantilla**. Si la semana ya tiene actividades, elija **Reemplazar** o **Añadir a esta semana**.
-5. La semana se rellena como **borrador**. Todavía no se guarda nada: revise, cambie lo que quiera y luego pulse **Guardar**. ¿Cambió de opinión? **Descartar** deja la semana como estaba.
+1. En la vista de la unidad, toque **📅 Usar esta unidad**.
+2. En **Room or centre**, elija su salón.
+3. En **Start the week of (Monday)**, elija la primera semana.
+4. En **Which weeks**, marque las semanas de la unidad que quiere.
+5. Toque **Crear borradores de planes**. **✓ Draft lesson plans** muestra cada semana creada en borrador, y cualquier semana **Left as they were** porque ya tenía un plan.
+6. Toque **Abrir planes de clase** para ir a **Play Spark → Esta semana**, o **Stay here** para seguir explorando.
 
-Para conservar una semana de la que se sienta orgulloso, elija **💾 Guardar como plantilla** y póngale un título y un grupo de edad. Pasa a la biblioteca de su agencia para todos los que planifican. Quien la guardó, un director o un administrador de la agencia puede eliminarla más adelante.
+> ℹ️ Los borradores son solo para el personal. Las familias no ven nada hasta que alguien publique la semana.
 
-## Plan del centro frente a plan de sala
+## Revisar y publicar la semana
 
-Algunos planes se definen a nivel de **centro** y se aplican a todas las salas; otros son específicos de su sala. Si su sala no tiene plan propio para la semana, verá el **plan de todo el centro**: así siempre hay algo que seguir y nunca se encuentra con una semana en blanco.
+1. En **Play Spark → Esta semana**, abra la semana donde se crearon los borradores.
+2. Cambie, agregue o quite actividades. **📋 Plantillas** llena una semana con una plantilla guardada (**Use this template**, luego **Replace** o **Añadir a esta semana**).
+3. Cambie la semana de **Borrador** a **Publicado** y toque **💾 Guardar semana**. La etiqueta cambia a "Published · families can see it".
+4. Para reutilizar una buena semana, toque **Save template**. Se suma a las plantillas de su agencia para todos los que planifican.
 
-Si añade un plan específico de su sala, este prevalece en su sala mientras las demás conservan el plan del centro.
+Si su salón no tiene un plan propio para una semana, verá el plan de todo el centro. Un plan de salón, una vez agregado, lo reemplaza solo para su salón.
 
-## Por qué les encanta a los padres
+## Quién puede hacer qué
 
-Cuando define un plan, los padres lo ven en su aplicación. Convierte «¿qué hiciste hoy?» en una conversación real: pueden preguntar por el proyecto o el cuento que había planificado. Un plan definido es una de las formas más rápidas de lograr la participación de los padres, y por eso el resumen **Hoy de un vistazo** se lo recuerda cuando el plan de la semana sigue vacío.
+| Rol | Qué puede hacer |
+|---|---|
+| Educador | Explorar la biblioteca y las unidades de la agencia, crear borradores para sus salones, editar y publicar la semana de su salón. |
+| Director de centro / administrador de la agencia | Todo eso para cualquier salón o centro, además de **⧉ Copiar para editar**, **✏️ Editar** y **Eliminar** en las unidades de la agencia, y la pestaña **💡 Activity ideas**. |
+| Padre o madre | Ve las semanas publicadas del salón de su hijo, nunca los borradores. |
 
-## Consejos
+## Preguntas frecuentes y cuando algo sale mal
 
-- **Planifique con una semana de antelación** siempre que pueda: las mañanas son más tranquilas.
-- **Reutilice y mejore.** Use **Guardar como plantilla** en sus mejores semanas para que las buenas ideas vuelvan.
-- **Mantenga las notas breves.** Un título y una línea de intención bastan; el plan es una guía, no un ensayo.
-- **Codifique por colores según el tipo** (lectoescritura, arte, motricidad gruesa, aire libre) para ver el equilibrio de la semana.
+??? No veo Copiar para editar ni Editar. | Solo los directores y administradores de la agencia pueden copiar o cambiar unidades. Pídales que adapten una para su agencia.
+??? Dice "No rooms or centres were found for you to plan for." | Todavía no tiene un salón asignado. Pregunte a su director.
+??? Dice "You cannot plan for that room." | Solo puede crear planes para los salones que tiene asignados.
+??? Una semana dice "already has a published plan" en Left as they were. | Las semanas existentes nunca se sobrescriben. Edite esa semana en **Play Spark → Esta semana**, o elija otras semanas.
+??? Las familias dicen que no ven el plan. | Todavía es un borrador. Cámbielo a **Publicado** y toque **💾 Guardar semana**.
+??? Dice "No units match these filters." | Vacíe la búsqueda y vuelva a poner los filtros en **All ages**, **All foundations**, **All seasons** y **All themes**.
+??? Las ideas de Play Spark están en gris. | Si la IA está desactivada para su agencia, **Spark an idea** y el escaneo de materiales se pausan; las ideas guardadas y los planes de clase siguen funcionando.
 
-## Preguntas frecuentes
+## Pantallas relacionadas
 
-**«Definí un plan, pero los padres o mi sala no lo ven.»**
-Compruebe que lo guardó en la **semana** correcta y si es un plan del centro o de la sala. Una causa frecuente es editar la próxima semana por error.
-
-**«Una plantilla que esperaba no está en la biblioteca.»**
-La biblioteca muestra las semanas incorporadas de KiddieTrac y las que su agencia ha guardado. Cualquiera que planifique puede añadir una con **Guardar como plantilla**.
-
-**«¿Puedo copiar la semana pasada?»**
-Guárdela con **Guardar como plantilla** y luego úsela en la semana que quiera.
+[[open: #play-spark?tab=week | Play Spark: esta semana]]
+[[open: #observations | Observaciones]]
+[[recording-observations]]

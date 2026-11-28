@@ -1,57 +1,65 @@
 ---
 title: Cómo administrar medicamentos de forma segura
-category: Safety
-order: 2
 ---
 
 # Cómo administrar medicamentos de forma segura
 
-Administrar un medicamento es una de las tareas más delicadas que realiza. Kiddietrac le ofrece un registro claro de lo que está autorizado y de lo que se ha administrado, pero ese registro apoya su cuidado: no sustituye su formación ni la política de su centro. **Siga siempre el procedimiento de medicamentos de su centro.**
+La pantalla **Medicamentos** (su título dice **Medications to administer**) muestra las órdenes permanentes activas de los niños de sus salones: qué medicamento es, la dosis, con qué frecuencia, las fechas y cuántas dosis se han registrado. Aquí registra cada dosis que da, justo después de darla. El registro apoya su cuidado; no reemplaza su capacitación ni el procedimiento de medicamentos de su centro.
 
-## Antes de administrar nada
+[[open: #medications | Abrir medicamentos]]
 
-1. **Compruebe que haya autorización.** Un medicamento debe tener en el expediente una autorización del padre, madre o tutor: nombre del medicamento, dosis, horario y fechas. Si no está autorizado, no lo administre; hable con su director.
-2. **Verifique los cinco correctos:** niño correcto, medicamento correcto, dosis correcta, hora correcta, vía correcta.
-3. **Revise las alergias** y cualquier alerta que entre en conflicto en el expediente del niño.
+## Antes de dar cualquier cosa
+
+1. Busque la tarjeta del niño en **Medicamentos**. Solo aparecen los medicamentos que un director marcó como autorizados por el padre o la madre, y solo mientras estén activos.
+2. Revise los cinco correctos: niño correcto, medicamento correcto, dosis correcta, hora correcta, vía correcta.
+3. Lea la línea **For:** y las instrucciones de la tarjeta, y revise las alergias y alertas del expediente del niño.
+4. Mire la última línea de la tarjeta: "3 doses logged · last dose …" le dice si ya se dio una dosis hoy.
 
 ## Registrar una dosis
 
-Cuando administre una dosis, regístrela de inmediato:
+1. En la tarjeta del niño, toque **+ Registrar dosis**.
+2. En **Dose given**, escriba exactamente lo que dio (por ejemplo "5 mL").
+3. Elija el **Resultado**: **Given as prescribed**, **Partial dose**, **Refused by child** o **Missed (not given)**.
+4. Agregue **Notes** si algo fue inusual (escupió una parte, se dio con comida).
+5. Para un narcótico, o si su política lo pide, complete el campo del testigo.
+6. Toque **Registrar dosis**. El número de dosis de la tarjeta aumenta y cambia la hora de la última dosis.
 
-1. Abra **Medicamentos** y busque al niño.
-2. Anote la **dosis administrada**, la **hora** y su nombre (usted ha iniciado sesión, así que el registro queda a su nombre).
-3. Añada una nota si ocurrió algo fuera de lo normal (el niño escupió una parte, se dio con comida, etc.).
+> 💡 Registre la dosis enseguida, no al final del día. Eso evita que otro educador dé la misma dosis otra vez.
 
-Registrar de inmediato, y no al final del día, es lo que hace fiable el registro. También evita que otro educador dé una dosis doble por error.
+## Revisar lo que se ha dado
 
-## Leer la lista de medicamentos
-
-El área de Medicamentos muestra, por cada niño:
-
-- Lo que está autorizado, con la dosis y el horario
-- Lo que ya se ha administrado hoy y a qué hora
-- Lo que aún está pendiente
-
-Con un vistazo sabrá si la dosis del almuerzo ya se administró o sigue pendiente.
+1. En la tarjeta del niño, toque **View dose log**.
+2. Se abre **Historial de dosis**: **When**, **Dose**, **Outcome**, **By** y **Notes** de cada dosis.
+3. Toque **Close** para volver.
 
 ## Reglas de seguridad que nunca cambian
 
-- **Nunca administre un medicamento no autorizado**, ni siquiera por petición verbal de un padre o madre: debe constar en el expediente.
-- **Nunca adivine una dosis.** Si las instrucciones no están claras, deténgase y consulte con su director y con el padre o la madre.
-- **Guarde los medicamentos de forma segura**, fuera del alcance de los niños, según la política de su centro.
-- **Vigile posibles reacciones** después de administrarlo, sobre todo con una primera dosis, y conozca su procedimiento de emergencia.
+- Nunca dé un medicamento que no esté en esta pantalla, aunque un padre lo pida en la puerta. Primero necesita autorización por escrito.
+- Nunca adivine una dosis. Si una instrucción no está clara, deténgase y pregunte a su director y a la familia.
+- Guarde los medicamentos de forma segura y fuera del alcance de los niños.
+- Observe si hay reacciones después de darlo, sobre todo en una primera dosis, y conozca su procedimiento de emergencia.
 
-## Si algo sale mal
+## Quién puede hacer qué
 
-Una dosis equivocada, una dosis omitida o una reacción es un incidente. Siga el procedimiento de su centro, atienda primero al niño, avise al director y al padre o madre, y presente un **informe de incidente** (consulte **Cuando ocurre algo**). La honestidad y la rapidez protegen al niño: nunca oculte un error.
+| Rol | Qué puede hacer |
+|---|---|
+| Educador | Ver los medicamentos activos de los niños de sus salones, registrar dosis, leer el historial. |
+| Director de centro / administrador de la agencia | Agregar un **+ New medication**, registrar la autorización de la familia, suspender un medicamento, registrar dosis. |
+| Padre o madre | Pedir al centro que administre un medicamento y ver las dosis dadas a su hijo. |
 
-## Preguntas frecuentes
+## Preguntas frecuentes y cuando algo sale mal
 
-**«Un padre me entregó un medicamento en la entrada sin autorización.»**
-Pídale que complete la autorización (su director puede prepararla). Hasta que conste en el expediente y cumpla la política, no lo administre.
+??? El medicamento del que me habló un padre no está aquí. | Todavía no se ha creado o autorizado. Avise a su director; no lo dé hasta que aparezca en esta pantalla.
+??? La pantalla dice "No active medications." | Ningún niño de sus salones tiene ahora un medicamento activo y autorizado.
+??? Dice "Medication is not active … Director must authorize before doses are recorded." | La orden espera la autorización de la familia, terminó o fue suspendida. Pregunte a su director.
+??? Registré la dosis o la hora equivocada. | Avise a su director de inmediato para que el registro se corrija como corresponde. No registre una segunda dosis para "arreglarlo".
+??? Una dosis salió mal o el niño tuvo una reacción. | Atienda primero al niño, avise a su director y a la familia, y llene un informe de incidente con el tipo **Medication error** (vea [Cuando algo sucede](when-something-happens)).
+??? ¿Se avisa a la familia cuando registro una dosis? | Sí. Los tutores del niño reciben un aviso en la app y una notificación en el teléfono, salvo que la agencia o la familia los hayan desactivado.
+??? Veo un botón Discontinue en la tarjeta. | Suspender un medicamento le corresponde al director. Pregúntele si un medicamento debe suspenderse.
 
-**«El horario indica que toca una dosis, pero el niño está dormido o acaba de comer.»**
-Use su criterio dentro de la autorización y la política, anote la hora real en que la administró y comunique al director cualquier cosa inusual.
+## Pantallas relacionadas
 
-**«Registré una hora o dosis equivocada.»**
-Avise a su director: un registro exacto es importante, y puede ayudarle a corregirlo como corresponde en lugar de que usted lo sobrescriba en silencio.
+[[open: #incidents | Incidentes]]
+[[open: #care-log | Registro diario]]
+[[when-something-happens]]
+[[quick-logging-events]]

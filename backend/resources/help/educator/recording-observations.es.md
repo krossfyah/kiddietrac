@@ -1,99 +1,67 @@
 ---
 title: Registro de observaciones
-category: Daily Workflows
-order: 3
 ---
 
 # Registro de observaciones
 
-Las observaciones son más sustanciales que los eventos rápidos. Sirven para los momentos que vale la pena recordar: un hito, una interacción notable, un avance.
+Una observación va más allá de un registro rápido: capta un momento de aprendizaje o crecimiento, como la primera vez que un niño comparte sin que se lo pidan, una palabra nueva bien usada, una nueva habilidad física o empatía con un amigo. **Observaciones de aprendizaje** muestra las observaciones de los niños con los que trabaja; **+ Nueva observación** le permite escribir o dictar lo que vio, dejar que la IA lo estructure y compartirlo con la familia.
 
-## ¿Qué es una observación?
+[[open: #observations | Abrir observaciones]]
 
-Una observación recoge:
+## Registrar una observación
 
-- Un momento concreto de aprendizaje, crecimiento o conducta
-- Lo que hizo el niño, con detalle (mínimo 1 o 2 frases)
-- El ámbito de aprendizaje con el que se relaciona
-- Opcionalmente, una foto
+1. Abra **Observaciones** desde el menú y toque **+ Nueva observación**. (Desde el **Registro diario** también puede tocar **🌱 Observation** con el niño ya elegido.)
+2. Elija al **Niño**.
+3. En **What did you observe?**, escriba lo que hizo el niño, con quién y con qué. Sea objetivo y concreto; por lo menos una o dos oraciones.
+4. Toque **Estructurar con IA**. KiddieTrac convierte sus palabras en una observación estructurada y la vincula al marco de aprendizaje de su agencia. ¿Prefiere no usar IA? Toque **Write it myself**.
+5. Revise el paso de revisión: el **Domain**, las etiquetas del marco y el **Family summary (parent will see this)**. Cambie lo que no esté bien.
+6. Deje marcado **Compartir con la familia de inmediato**, o desmárquelo para dejarla solo para el personal por ahora.
+7. Toque **Guardar observación**. Aparece **Observation saved** y la observación queda arriba de la lista. **Start over** borra el formulario si quiere empezar de nuevo.
 
-Ejemplos de momentos dignos de una observación:
+> ⚠️ Nada se guarda hasta que toque **Guardar observación**: la pantalla dice "Not saved yet." Si sale a mitad de camino, al volver se le ofrece su observación sin terminar.
 
-- La primera vez que un niño comparte un juguete sin que se lo pidan
-- Una palabra o frase nueva usada correctamente
-- Dominar una habilidad física (trepar, mantener el equilibrio)
-- Mostrar empatía hacia otro niño
-- Hacer una pregunta reflexiva
-- Expresión creativa (un dibujo, un cuento inventado)
+## Dictar en lugar de escribir
 
-## Cómo registrar una
+1. Debajo del cuadro de texto, presione **Dígalo** y hable con naturalidad: lo que hizo el niño, con quién y qué notó.
+2. Las palabras aparecen en el cuadro mientras habla, en el idioma del portal. Presione **Stop** cuando termine.
+3. Léalo y corrija lo que el micrófono haya entendido mal antes de continuar.
 
-1. Toque la tarjeta del niño
-2. Toque **Observación**
-3. Elija un ámbito:
-   - **Social y emocional** — compartir, empatía, amistad, regulación emocional
-   - **Lenguaje y alfabetización** — palabras, frases, hacer preguntas, escuchar
-   - **Físico / motor** — motricidad gruesa o fina, equilibrio, coordinación
-   - **Cognitivo** — resolución de problemas, predicción, contar, clasificar
-   - **Artes creativas** — dibujo, pintura, música, juego dramático
-   - **Cuidado personal** — control de esfínteres, lavado de manos, vestirse, comer
-   - **Juego al aire libre** — correr, trepar, explorar la naturaleza
-4. Añada un título breve (p. ej. «Hizo una pregunta reflexiva durante la hora del cuento»)
-5. Escriba de 1 a 3 frases de detalle
-6. Si lo desea, adjunte una foto
-7. Guarde
+La primera vez, su navegador pide usar el micrófono: elija **Permitir**. En la app de KiddieTrac, o en un navegador sin reconocimiento de voz, toque el micrófono de su teclado. No se graba ni se guarda nada; solo se guarda el texto del cuadro.
 
-## Dígalo en lugar de escribirlo
-
-En **Nueva observación**, pulse **🎤 Dictar** debajo del cuadro de texto y simplemente hable: qué hizo el niño, con quién y qué notó. Las palabras aparecen en el cuadro mientras habla, en el idioma configurado en el portal. Pulse **Detener** cuando termine, luego léalo y corrija lo que el micrófono haya entendido mal antes de continuar.
-
-- La primera vez, el navegador le pide permiso para usar el micrófono. Elija **Permitir**.
-- En la app de KiddieTrac para teléfono, o en un navegador sin reconocimiento de voz, toque en su lugar el **micrófono del teclado**. Hace lo mismo.
-- No se graba ni se conserva nada: solo se guarda el texto del cuadro, y únicamente cuando guarda la observación.
-
-> **Consejo:** Hable como escribiría: primero los hechos («Aria apiló cinco bloques y luego los contó en voz alta»), no lo que sintió al respecto.
+> 💡 Hable como lo escribiría: primero los hechos ("apiló cinco bloques y luego los contó en voz alta"), no lo que sintió al respecto.
 
 ## El marco de aprendizaje de su agencia
 
-Cuando pulsa **Estructurar con IA**, KiddieTrac vincula la observación con las áreas del marco de aprendizaje que usa su agencia: por ejemplo, Pertenencia, Bienestar, Compromiso y Expresión de HDLH, o las siete áreas del EYFS. Las verá como etiquetas de colores en el paso de revisión, y alimentan los informes de evaluación y el informe de lagunas del marco. El administrador de su agencia elige el marco en **Ajustes → Marco de aprendizaje**.
+**Estructurar con IA** vincula la observación al marco que usa su agencia, por ejemplo las bases de HDLH (pertenencia, bienestar, participación y expresión) o las siete áreas del EYFS. Las etiquetas alimentan las libretas de calificaciones y el informe de brechas del marco. El administrador de su agencia elige el marco en **Learning framework**, en la configuración.
 
-## Qué hace buena a una observación
+## Leer la lista
 
-Una buena observación incluye:
+La lista muestra el **When**, el **Niño**, el **Domain** y el **Educator** de cada observación, con la insignia **SHARED** cuando la familia puede verla. Use el menú de orden (**Newest first**, **Oldest first**, **Child (A-Z)**, **Domain (A-Z)**, **Educator (A-Z)**) para reordenarla.
 
-- **Lo que hizo el niño** (conducta concreta)
-- **Contexto** (cuándo, con quién, con qué materiales)
-- **Por qué importa** (qué habilidad demuestra)
+## Libretas de calificaciones
 
-Ejemplo:
+En **Report cards**, **All report cards** muestra las libretas de los niños de sus salones y las que usted escribió. Abra un borrador para terminarlo y toque **Firmar y enviar**; su director o un administrador de la agencia la aprueba antes de que la vea la familia, y luego se marca como **Sent**. Para cambiar una libreta enviada que usted escribió, use **Edit (new version)**. Para escribir una nueva, abra **✨ Generate with AI**.
 
-> Título: «Hizo una pregunta reflexiva durante la hora del cuento»
->
-> Durante nuestra lectura de «El tigre que vino a tomar el té», Aria levantó la mano y preguntó: «¿Por qué el tigre se bebe todo el té?». Estaba haciendo predicciones sobre el cuento y relacionando las acciones del tigre con su propia experiencia de tener hambre. Un razonamiento temprano maravilloso.
+## Quién puede hacer qué
 
-frente a una mala observación:
-
-> Título: «Leyó un libro»
->
-> Aria leyó un libro hoy.
-
-## Cuándo observar y cuándo solo registrar
-
-| Situación | Qué hacer |
+| Rol | Qué puede hacer |
 |---|---|
-| Comida, siesta, cambio de pañal | Registro rápido |
-| Actividad de juego libre que duró un rato | Registro rápido (tipo Actividad) |
-| Momento concreto de crecimiento o aprendizaje | Observación |
-| Una foto que muestra algo significativo | Observación (con foto) |
-| Un hito (la primera vez que…) | Observación |
-| Solo algo gracioso que dijo | Registro rápido (tipo Nota) |
+| Educador | Registrar observaciones de los niños de sus salones y decidir si compartirlas. |
+| Director de centro / administrador de la agencia | Registrar y leer observaciones de sus centros. |
+| Padre o madre | Ve las observaciones compartidas de su hijo (el resumen para la familia), con un aviso al instante. |
 
-## Con qué frecuencia
+## Preguntas frecuentes y cuando algo sale mal
 
-Procure hacer de 2 a 4 observaciones por niño por semana. Para las familias son oro: muestran un crecimiento real, no solo actividades de rutina.
+??? Dice "No children found in your rooms. Ask your director to assign you to a room." | Todavía no tiene un salón asignado, así que no hay a quién elegir.
+??? Estructurar con IA no aparece o no hace nada. | Puede que la IA esté desactivada para su agencia. Use **Write it myself**.
+??? Dice "Microphone access was blocked." | Permita el micrófono para este sitio en la configuración del navegador, o use el micrófono del teclado.
+??? Dice "We didn’t hear anything." | Inténtelo otra vez un poco más cerca del micrófono, en un lugar más tranquilo.
+??? ¿Se avisa a la familia? | Si **Compartir con la familia de inmediato** estaba marcado, los tutores del niño reciben un aviso en la app y una notificación en el teléfono, salvo que ellos o la agencia hayan desactivado las observaciones de aprendizaje.
+??? La lista dice "No observations yet". | No se ha registrado nada para los niños que usted ve. Toque **+ Nueva observación**.
 
-## Qué ven las familias
+## Pantallas relacionadas
 
-Las observaciones aparecen en la app de las familias en **Hoy → Observaciones recientes** y en la página de detalle del niño. Se guardan de forma permanente como parte del portafolio del niño.
-
-Al final del año, puede exportar todas las observaciones de un niño como resumen del desarrollo, útil para la transición a preescolar.
+[[open: #care-log | Registro diario]]
+[[open: #curriculum | Biblioteca de currículo]]
+[[quick-logging-events]]
+[[lesson-plans-and-curriculum]]

@@ -7,100 +7,64 @@ screens: observations
 
 # Recording observations
 
-Observations are more substantial than quick events. They're for moments worth remembering — a milestone, a notable interaction, a growth point.
+An observation is more than a quick log: it captures a moment of learning or growth, such as a first time sharing without prompting, a new word used correctly, a new physical skill, or empathy for a friend. **Learning Observations** lists the observations for the children you work with; **+ New observation** lets you type or speak what you saw, have AI structure it, and share it with the family.
 
-## What's an observation?
+[[open: #observations | Open Observations]]
 
-An observation captures:
+## Recording an observation
 
-- A specific moment of learning, growth, or behaviour
-- What the child did, in detail (1-2 sentences minimum)
-- Which learning domain it relates to
-- Optionally, a photo
+1. Open **Observations** from the menu and tap **+ New observation**. (From **Daily log** you can also tap **🌱 Observation** with the child already chosen.)
+2. Pick the **Child**.
+3. In **What did you observe?**, write what the child did, with whom, and with what. Be factual and specific; at least a sentence or two.
+4. Tap **Structure with AI**. KiddieTrac turns your words into a structured observation and links it to your agency's learning framework. Prefer not to use AI? Tap **Write it myself**.
+5. Check the review step: the **Domain**, the framework tags, and the **Family summary (parent will see this)**. Change anything that is not right.
+6. Leave **Share with family right away** ticked, or untick it to keep it for staff for now.
+7. Tap **Save observation**. **Observation saved** appears and the observation is at the top of the list. **Start over** clears the form if you want to begin again.
 
-Examples of observation-worthy moments:
+> ⚠️ Until you press **Save observation** nothing is saved: the screen says "Not saved yet." If you leave in the middle, you are offered your unfinished observation when you come back.
 
-- First time a child shared a toy without prompting
-- A new word or phrase used correctly
-- Mastering a physical skill (climbing, balancing)
-- Showing empathy to another child
-- Asking a thoughtful question
-- Creative expression (a drawing, a story they made up)
+## Saying it instead of typing
 
-## How to record one
+1. Under the text box, press **Speak it** and talk naturally: what the child did, with whom, and what you noticed.
+2. The words appear in the box as you speak, in the language the portal is set to. Press **Stop** when you are done.
+3. Read it over and fix anything the microphone misheard before you continue.
 
-1. Tap the child's card
-2. Tap **Observation**
-3. Choose a domain:
-   - **Social & Emotional** — sharing, empathy, friendship, emotion regulation
-   - **Language & Literacy** — words, phrases, asking questions, listening
-   - **Physical / Motor** — gross or fine motor, balance, coordination
-   - **Cognitive** — problem-solving, prediction, counting, sorting
-   - **Creative Arts** — drawing, painting, music, dramatic play
-   - **Self-Care** — toileting, hand washing, dressing, eating
-   - **Outdoor Play** — running, climbing, exploring nature
-4. Add a short title (e.g. "Asked thoughtful question during story time")
-5. Write 1-3 sentences of detail
-6. Optionally attach a photo
-7. Save
+The first time, your browser asks to use the microphone: choose **Allow**. In the KiddieTrac phone app, or a browser without speech recognition, tap the microphone on your keyboard instead. Nothing is recorded or kept; only the text in the box is saved.
 
-## Say it instead of typing
-
-On **New observation**, press **🎤 Speak it** under the text box and just talk: what the child did, with whom, and what you noticed. The words appear in the box as you speak, in the language the portal is set to. Press **Stop** when you're done, then read it over and fix anything the microphone misheard before you continue.
-
-- The first time, your browser asks to use the microphone. Choose **Allow**.
-- In the KiddieTrac phone app, or a browser without speech recognition, tap the **microphone on your keyboard** instead. It does the same job.
-- Nothing is recorded or kept: only the text in the box is saved, and only when you save the observation.
-
-> **Tip:** Speak the way you'd write it: facts first ("Aria stacked five blocks, then counted them aloud"), not how you felt about it.
+> 💡 Speak the way you would write it: facts first ("stacked five blocks, then counted them aloud"), not how you felt about it.
 
 ## Your agency's learning framework
 
-When you press **Structure with AI**, KiddieTrac links the observation to the areas of the learning framework your agency uses: for example HDLH's Belonging, Well-being, Engagement and Expression, or the seven areas of EYFS. You'll see them as coloured tags on the review step, and they feed report cards and the framework gaps report. Your agency admin chooses the framework under **Settings → Learning framework**.
+**Structure with AI** links the observation to the framework your agency uses, for example HDLH's Belonging, Well-being, Engagement and Expression, or the seven areas of EYFS. The tags feed report cards and the framework gaps report. Your agency admin chooses the framework under **Learning framework** in the settings.
 
-## What makes a good observation
+## Reading the list
 
-A good observation includes:
+The list shows the **When**, **Child**, **Domain** and **Educator** of each observation, with a **SHARED** badge when the family can see it. Use the sort menu (**Newest first**, **Oldest first**, **Child (A-Z)**, **Domain (A-Z)**, **Educator (A-Z)**) to reorder it.
 
-- **What the child did** (specific behaviour)
-- **Context** (when, with whom, what materials)
-- **Why it matters** (what skill it demonstrates)
+## Report cards
 
-Example:
+On **Report cards**, **All report cards** lists the cards for children in your rooms and those you wrote. Open a draft to finish it and tap **Sign & submit**; your director or an agency admin approves it before the family sees it, and it is then marked **Sent**. To change a sent card you wrote, use **Edit (new version)**. To write a new one, open **✨ Generate with AI**.
 
-> Title: "Asked thoughtful question during story time"
->
-> During our reading of 'The Tiger Who Came to Tea', Aria raised her hand and asked 'Why does the tiger drink all the tea?' She was making predictions about the story and connecting the tiger's actions to her own experience of being hungry. Wonderful early reasoning.
+## Who can do what
 
-vs. a bad observation:
-
-> Title: "She read a book"
->
-> Aria read a book today.
-
-## When to record vs just log
-
-| Situation | What to do |
+| Role | What they can do |
 |---|---|
-| Meal, nap, diaper change | Quick log |
-| Free play activity that lasted a while | Quick log (Activity type) |
-| Specific moment of growth or learning | Observation |
-| A photo showing something meaningful | Observation (with photo) |
-| A milestone (first time...) | Observation |
-| Just a cute thing they said | Quick log (Note type) |
+| Educator | Record observations for children in their rooms and choose whether to share them. |
+| Centre director / agency admin | Record and read observations across their centres. |
+| Parent | Sees shared observations for their own child (the family summary), with an instant notice. |
 
-## How often
+## FAQs and when something goes wrong
 
-Aim for 2-4 observations per child per week. These are gold for parents — they show actual growth, not just routine activities.
+??? It says "No children found in your rooms. Ask your director to assign you to a room." | You are not assigned to a room yet, so there is nobody to pick.
+??? Structure with AI is missing or does nothing. | AI may be switched off for your agency. Use **Write it myself**.
+??? It says "Microphone access was blocked." | Allow the microphone for this site in your browser settings, or use the mic on your keyboard.
+??? It says "We didn't hear anything." | Try again a little closer to the microphone, in a quieter spot.
+??? Is the family told? | If **Share with family right away** was ticked, the child's guardians get an in-app notice and a phone push, unless they or the agency switched learning observations off.
+??? The list says "No observations yet". | Nothing has been recorded for the children you can see. Tap **+ New observation**.
 
-## What parents see
+## Related screens
 
-Observations appear in the parent app under **Today → Recent observations** and on the child's detail page. They're saved permanently as part of the child's portfolio.
-
-At year-end, you can export all of a child's observations as a developmental summary — useful for transitioning to kindergarten.
-
-## Finding your report cards
-
-On the **Report cards** screen, **All report cards** lists the cards for the children in your rooms and the cards you wrote yourself. Use **Draft**, **Awaiting approval** and **Sent** to filter them, or search for a child. Tap a draft to finish it and **Sign & submit for approval**, or use **⋮** on its row to view, edit, download or print it. Once your director or admin approves it, it is marked **Sent**. To change a sent card you wrote, use **Edit (new version)**: your director or admin approves the new version before the family sees it. When you sign and submit a card, an **agency admin** reviews it and signs to approve it before it reaches the family.
-
-To write a new one, open the **✨ Generate with AI** tab. When a parent asks for a report card, **Write it** takes you there with the child and term filled in.
+[[open: #care-log | Daily log]]
+[[open: #curriculum | Curriculum library]]
+[[quick-logging-events]]
+[[lesson-plans-and-curriculum]]

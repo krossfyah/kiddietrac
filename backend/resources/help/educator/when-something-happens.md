@@ -7,76 +7,68 @@ screens: incidents
 
 # When something happens — incidents
 
-Incidents are anything outside of routine: minor bumps and scrapes, behavioural issues, anything you'd want to document.
+An incident report records anything outside the routine: a bump or scrape, an illness, a behaviour, a medication error, or a serious occurrence. You write and sign it on **Incidents**; your director reviews it and tells the family. Care for the child first, then write the report while it is fresh.
 
-## Three categories
+[[open: #incidents | Open Incidents]]
 
-| Severity | Examples | What to do |
-|---|---|---|
-| **Minor** | Small bump, scrape, mild upset | Log incident, comfort child, mention to parent at pickup |
-| **Moderate** | Visible bruise, significant fall, biting incident | Log incident, notify director immediately, parent gets a message |
-| **Serious** | Head injury, allergic reaction, anything requiring medical attention | Log incident, call 911 if needed, notify director immediately, call parent |
+## Writing an incident report
 
-## How to log an incident
+1. Open **Incidents** from the menu and tap **+ New report**.
+2. Pick the **Child** and fill in **When did it happen?**.
+3. Choose the **Type**: **General**, **Injury**, **Illness**, **Behavioural**, **Medication error**, **Other**, or the serious occurrence type for your province.
+4. Choose the **Severity**: **Low**, **Medium** or **High**, and add the **Location**.
+5. Describe **What happened?**: when, where, how, and who saw it.
+6. Fill in **Action taken** (first aid, who you called) and **Follow-up required**.
+7. Tap **Save & submit**. In **Sign this incident report**, draw your signature and tap **Sign & submit**. A green **Submitted for review** message appears.
 
-1. From the child's card, tap **Incident**
-2. Choose severity
-3. Describe what happened — when, where, how
-4. List any first aid given
-5. Note witnesses (other educators, children)
-6. Submit
-
-The director sees it immediately in their review queue.
+> 💡 Not finished? Tap **Save as draft** instead. A draft is only yours; open it later from the list with **✏️ Open to take action** to finish and sign it.
 
 ## What to write
 
-Be factual. Avoid blame. Avoid speculation.
+Be factual. Avoid blame and guesses.
 
-**Good:**
+> **Good:** "At 10:35 during outdoor play, the child tripped on the sandbox edge and fell on her left elbow. Visible scrape, no swelling. Cleaned with water and covered. Upset for about 3 minutes, then went back to playing. Seen by Sam (educator)."
 
-> "At 10:35 AM during outdoor play, Aria tripped over the edge of the sandbox and fell on her left elbow. Visible scrape, no swelling. Cleaned with water and applied bandage. She was upset for ~3 minutes, then resumed playing. Witnessed by James (educator)."
-
-**Bad:**
-
-> "Aria fell down outside. She's fine now."
-
-(Too vague — no details, no first aid noted, no time)
+> **Too vague:** "She fell down outside. She's fine now."
 
 ## When to call 911
 
-- Head injury with loss of consciousness, vomiting, or unequal pupils
+- A head injury with loss of consciousness, vomiting or unequal pupils
 - Difficulty breathing
-- Severe allergic reaction (use EpiPen first, then call)
-- Suspected broken bone
-- Anything where you'd hesitate if it was your own child — call
+- A severe allergic reaction (use the epinephrine auto-injector first, then call)
+- A suspected broken bone
+- Anything where you would hesitate if it were your own child
 
-After calling 911, notify director immediately, then call the parent.
+After calling 911, tell your director at once, then the parent. Write the report as soon as the child is safe.
 
-## After the incident
+## After you submit
 
-- The director reviews each incident in their dashboard
-- For moderate and serious incidents, the director may need to:
-  - Call the parent directly
-  - Submit a CCEYA serious occurrence report (within 24 hours for serious occurrences)
-  - Hold a debrief with all staff present
+1. Your centre's directors and agency admins get a push straight away ("🚨 Incident report — action needed", or "🚨 SERIOUS OCCURRENCE — action needed").
+2. The director reviews it, may add notes, and notifies the family. The family can acknowledge it and add a comment.
+3. You can still open your report from the list: **📄 View report** opens the printable report and **📧 Email report** sends it to the parent, director or agency admin.
 
-## Medication
+## Who can do what
 
-If you give a child medication (e.g. inhaler for asthma, EpiPen for allergy):
+| Role | What they can do |
+|---|---|
+| Educator | Write, sign and submit reports for children in their rooms; finish their own drafts; read and email submitted reports. |
+| Centre director / agency admin | Everything above, plus review, notify the parent, change the status and sign off and close. |
+| Parent | Sees reports about their own child once notified, acknowledges them and adds comments. |
 
-1. From the child's card, tap **Log medication**
-2. Record: medication name, dose, time given, reason
-3. This creates an incident record automatically
+A submitted report cannot be edited by the educator who wrote it; only a director can change it from then on.
 
-Always have your director know about any medication given. Most centres require a written medication authorization form on file before administering any medication.
+## FAQs and when something goes wrong
 
-## Documentation matters
+??? It says "Not submitted — the report needs your signature." | You closed the signature step. Tap **Save & submit** again and sign, or **Save as draft** to finish later.
+??? The Child list is empty. | You are not assigned to a room yet. Ask your director to assign you.
+??? It says "Cannot edit a submitted incident. Contact your director." | Once submitted, only a director can change the report. Tell them what needs correcting.
+??? The list says "No incident reports". | No reports have been written for the children you can see. Tap **+ New report** to write one.
+??? Do I still have to tell my director in person? | Yes, for anything Medium or High, and always for a serious occurrence. The push is a backup, not a replacement for telling them.
+??? A medication was given wrongly. | Choose **Medication error** as the type, and tell your director straight away.
 
-Why we record everything:
+## Related screens
 
-- Protects you and the centre legally
-- Helps identify patterns (recurring biting between two children, persistent eczema, etc.)
-- Builds parent trust through transparency
-- Required by CCEYA for various incident types
-
-When in doubt, log it. It's harder to retroactively document than to over-document and trim later.
+[[open: #medications | Medications]]
+[[open: #headcounts | Headcounts]]
+[[giving-medications]]
+[[headcounts]]

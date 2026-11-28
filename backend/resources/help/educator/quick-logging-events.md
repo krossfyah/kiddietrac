@@ -7,71 +7,63 @@ screens: care-log
 
 # Quick logging events
 
-Logging daily activities is the most common thing you'll do. The goal is to make it fast — under 5 seconds per event.
+The **Daily log** screen (its banner says **Log a moment**) is where you record a child's day in a couple of taps: diapers, naps, meals, bottles, outdoor play, sunscreen, mood, medicine, a change of clothes, photos and videos. Every entry goes to the family's Today screen straight away and feeds the end-of-day summary.
 
-## The 8 event types
+[[open: #care-log | Open Daily log]]
 
-| Event | When to log it |
+## Logging a moment for one child
+
+1. Open **Daily log** from the menu.
+2. In **Child**, pick the child.
+3. Tap a tile: **Diaper**, **Bathroom**, **Nap**, **Meal**, **Snack**, **Bottle**, **Outdoor play**, **Sunscreen**, **Mood**, **Medicine** or **Change of clothes**.
+4. In the popup, tap one quick choice (for example **Wet**, **Ate most** or **Happy**), or tap **Other** and type it.
+5. If it happened earlier, change **When did it happen? (optional)**. For a nap, fill in **Fell asleep** and **Woke up** instead.
+6. Add a **Note (optional)** or **📷 Add a photo or video** if it helps the family.
+7. Tap **Log it**. The entry appears at the top of **Today's log** under the tiles.
+
+> 💡 A diaper popup has a **🧴 Cream applied** switch, a bottle asks for the amount in **oz**, and **Medicine** asks for the **Medicine and dose** (for example "Children's Tylenol 5 ml").
+
+## Logging for the whole room at once
+
+1. In **Child**, choose **All children**.
+2. Tap **Meal**, **Snack**, **Bottle**, **Outdoor play**, **Sunscreen**, **Mood** or **Nap**.
+3. Pick the details and tap **Log it**. One entry is saved for every child who is checked in right now.
+
+> ⚠️ **Diaper**, **Bathroom**, **Medicine** and **Change of clothes** are always about one child, so they need a single child picked.
+
+## Photos, videos, observations, late events and supplies
+
+1. Tap **Photo** or **Video**, choose the file, tag the children in it, add a caption and tap **Share it**. Files can be up to 30 MB (about 30 seconds of video).
+2. Tap **🌱 Observation** to open the observation form with the child already chosen (see [Recording observations](recording-observations)).
+3. Tap **Late** to record a **Late pick-up** or **Late arrival**: pick **How late**, add what happened and tap **Log it**. Your director reviews it; nothing is charged by you.
+4. Tap **Supplies** to ask the family to bring something from home (diapers, wipes, a change of clothes).
+
+## Looking at another day
+
+Under the tiles, **Today's log** lists what was logged for the child (or for everyone when **All children** is picked), newest first, with who logged it. Use **‹** and **›** or the date box to look at an earlier day, and **Today** to come back. Future days cannot be picked.
+
+## Who can do what
+
+| Role | What they can do here |
 |---|---|
-| **Meal** | Breakfast, lunch — any actual meal |
-| **Snack** | Morning snack, afternoon snack |
-| **Nap start / end** | When they fall asleep, when they wake up |
-| **Diaper** | Every change (wet / BM / both) |
-| **Bathroom** | For older kids using the bathroom |
-| **Activity** | Structured or free play (story time, sandbox, art, etc.) |
-| **Mood** | When a notable shift happens (got upset, calmed down, etc.) |
-| **Note** | Free-text observation that doesn't fit other categories |
+| Educator | Log for the children in their own rooms. |
+| Centre director / agency admin | Log for any child in their centres; an agency admin first picks a **Provider**. |
+| Parent | Sees the entries on their own child's Today screen and in the daily summary. |
 
-## How to log fast
+## FAQs and when something goes wrong
 
-For each event, the workflow is:
+??? The Child list says "No children in your room yet. Ask your director to assign you a room." | You are not assigned to a room yet. Your director assigns rooms; until then the list stays empty.
+??? I picked All children and it says "No children are checked in right now, so there is nobody to log this for." | Room-wide entries only go to children who are checked in. Check the children in first, or pick one child.
+??? It says "That time is later today. A log records what has already happened". | The time in **When did it happen?** is in the future. Pick the time it actually happened.
+??? It says "Pick a child to log for — All children does not apply to diaper." | Diaper, bathroom, medicine and clothing entries are for one child. Pick the child and tap the tile again.
+??? I logged the wrong thing. Can I edit or delete it? | Entries cannot be edited or deleted from this screen. Log the correct entry and tell your director, who can correct the record.
+??? Does Medicine here replace the medication record? | No. It tells the family what was given. Doses of an authorized medication are still recorded on **Medications** with **+ Log dose**.
+??? Who gets told when I log something? | The child's own guardians get an in-app notice and a phone push, unless they switched daily moments off or your agency turned instant moments off. Several entries within two minutes are grouped into one notice.
 
-1. Tap the child's card
-2. Tap the event type (one of 8 large icons)
-3. Optionally add detail (what they ate, what activity, etc.)
-4. Tap **Save**
+## Related screens
 
-That's it. Total: 4 taps.
-
-## Meal details
-
-When logging meal or snack, you can add:
-
-- **Which meal** (breakfast / morning snack / lunch / afternoon snack)
-- **What they ate** — comma-separated list
-- **Amount** — none / some / most / all
-
-Don't write essays. "Banana, crackers — most" is perfect.
-
-## Activity details
-
-For activities:
-
-- **Name** — what was it? (e.g. "Block building", "Story time", "Outdoor play")
-- **Domain** — which learning domain? Social-emotional, language/literacy, physical, cognitive, creative arts, self-care, outdoor
-- **Duration in minutes** — how long did they participate?
-
-The domain tag matters for **observations** (see Recording observations).
-
-## Why it matters
-
-Every event you log appears in the parent's app within seconds. By the end of the day:
-
-- The AI digest summarizes everything for the parent (no more "what did you do today?" silence)
-- Parents see the full timeline
-- Director sees aggregate metrics
-- You have a record of what happened, useful for parent questions later
-
-## What if I miss something?
-
-You can backfill events with an earlier timestamp:
-
-1. Log the event normally
-2. When the modal opens, change the **occurred at** time to when it actually happened
-3. Save
-
-Don't backfill more than a day — it gets confusing in the timeline.
-
-## What if I made a mistake?
-
-Tap the event in the timeline → **Edit** or **Delete**. Don't try to "fix" by adding a contradicting note — just edit the original.
+[[open: #observations | Observations]]
+[[open: #medications | Medications]]
+[[open: #late-pickups | Late pickups]]
+[[giving-medications]]
+[[recording-observations]]

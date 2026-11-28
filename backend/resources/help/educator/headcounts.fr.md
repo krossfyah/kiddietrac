@@ -1,46 +1,65 @@
 ---
 title: Comptages
-category: Daily Workflows
-order: 7
 ---
 
 # Comptages
 
-Un comptage est une vérification nom par visage : vous regardez chaque enfant et vous le cochez. À partir du 1er janvier 2027, les centres de l’Ontario doivent compter les enfants à des moments précis et le consigner (Règl. de l’Ont. 137/15, art. 11). Les moments les plus à risque sont les transitions entre les aires, les sorties aux toilettes, l’arrivée et le départ, les sorties éducatives, les entrées et sorties de la cour de jeu, et les stationnements.
+Un comptage, c'est une vérification nom-visage : vous regardez chaque enfant et vous le cochez. À partir du 1er janvier 2027, les centres de l'Ontario doivent compter les enfants à des moments précis et garder une trace (Règl. de l'Ont. 137/15, art. 11). Les moments les plus à risque sont les transitions d'un endroit à l'autre, les passages aux toilettes, l'arrivée et le départ, les sorties, l'entrée et la sortie de la cour, et les stationnements. L'écran **Comptages** montre chacun de vos groupes et l'historique des comptages.
+
+[[open: #headcounts | Ouvrir les comptages]]
 
 ## Faire un comptage
 
-1. Sous **Aujourd’hui**, touchez **👀 Comptage** au-dessus de la liste. Pendant une promenade, touchez **Nombre** sur la barre flottante de la promenade.
-2. Choisissez le moment : Transition, Toilettes, Sortie à l’extérieur, Retour à l’intérieur, Arrivée, Départ, Sortie éducative, Vérification de routine ou Autre.
-3. Touchez chaque enfant au moment où vous le **voyez**. En haut s’affiche « 9 sur 12 comptés ».
-4. Vous pouvez indiquer où vous êtes (par exemple « barrière de la cour ») et ajouter une note.
-5. Touchez **Enregistrer**.
+1. Dans **Aujourd’hui**, touchez **👀 Headcount** au-dessus de la liste, ou ouvrez **Comptages** et touchez **👀 Headcount** sur le groupe. En promenade, touchez **Count** sur la barre de promenade flottante.
+2. Choisissez le moment : **Routine check**, **Transition**, **Washroom**, **Outdoor out**, **Outdoor in**, **Arrival**, **Dismissal**, **Field trip** ou **Other**.
+3. Touchez chaque enfant quand vous le **voyez**. Le haut de l'écran indique combien sont comptés, par exemple « 9 of 12 accounted for ».
+4. Si vous voulez, ouvrez **Where / note (optional)** et ajoutez où vous êtes (par exemple « barrière de la cour ») et une note.
+5. Touchez le bouton d'enregistrement. Il dit **Save — all 12 accounted for**, ou **Save — 2 not seen** s'il manque quelqu'un.
 
-La liste montre les enfants présents à ce moment-là. Si un enfant arrive pendant que vous comptez, l’application l’ajoute à votre liste et vous demande de le repérer aussi avant d’enregistrer.
+La liste montre les enfants présents à ce moment-là. Si l'arrivée d'un enfant est faite pendant que vous comptez, l'application l'ajoute et vous demande de le trouver aussi avant d'enregistrer.
 
-## Si un enfant n’est pas retrouvé
+## Si un enfant manque à l'appel
 
-L’écran devient rouge et énumère les enfants qui n’ont pas été vus.
+L'écran devient rouge et liste les enfants qui n'ont pas été vus.
 
-- Cherchez immédiatement : le dernier endroit où l’enfant a été vu, les toilettes, les casiers, la cour et ses barrières, et le stationnement. Suivez la procédure de votre centre en cas d’enfant disparu.
-- Touchez **🚨 Alerter le directeur maintenant**. Votre directeur, les administrateurs de l’agence et les superviseurs intérimaires reçoivent aussitôt une cloche et une notification push. Aucun texto n’est envoyé.
-- L’écran rouge indique aussi qui joindre si le superviseur est absent (le **superviseur intérimaire**).
-- **Rapport d’événement grave** ouvre un nouveau formulaire d’incident pour cet enfant, déjà rempli.
-- Quand tout le monde est retrouvé, touchez **✅ Retrouvé — tout le monde est là** et indiquez où. Les personnes alertées en sont informées.
+1. Cherchez tout de suite : le dernier endroit où l'enfant a été vu, les toilettes, les casiers, la cour et ses barrières, et le stationnement. Suivez la procédure de votre centre pour un enfant disparu.
+2. Touchez **🚨 Alert director now**. Votre direction, l'administration de l'agence et les superviseurs suppléants reçoivent aussitôt un avis dans la cloche et une notification sur leur téléphone. Aucun texto n'est envoyé.
+3. Si la personne superviseure est absente, l'écran rouge indique le **acting supervisor** (superviseur suppléant) à joindre.
+4. S'il s'agit d'un incident grave, touchez **Serious occurrence report** : un nouveau formulaire d'incident s'ouvre pour cet enfant, déjà rempli.
+5. Quand tout le monde est retrouvé, touchez **✅ Found — all accounted for**, indiquez où l'enfant a été trouvé et touchez **Mark found**. Toutes les personnes alertées en sont avisées.
 
-## L’écran Comptages
+## L'écran Comptages
 
-Ouvrez **Comptages** depuis le menu. Il comporte deux onglets :
+- **👀 Salles en ce moment** — chacun de vos groupes, le nombre d'enfants présents, l'heure du dernier comptage (ou **No count today**) et un bouton **👀 Headcount**.
+- **📜 Journaux** — l'historique des comptages, avec des filtres par date, groupe, moment et résultat.
 
-- **👀 Salles en ce moment** — chacune de vos salles, le nombre d’enfants présents, l’heure du dernier comptage et un bouton **👀 Comptage**.
-- **📜 Journaux** — l’historique des comptages, avec des filtres par date, salle, moment et résultat.
+[[show: #headcounts @ 📜 Logs | Me montrer les journaux]]
 
-[[open: #headcounts | Ouvrir Comptages]]
-
-Besoin d’un document? **Rapports → Comptages** fournit une journée, ou toute période, pour vos salles et les comptages que vous avez faits. Vous pouvez le télécharger en PDF, Excel ou CSV.
+Besoin d'un document? **Reports → Headcounts** donne une journée ou une période pour vos groupes, en PDF, Excel ou CSV.
 
 ## Rappels
 
-Votre agence peut activer des rappels. Si une salle reste sans comptage pendant une durée donnée, les éducateurs pointés dans cette salle reçoivent un rappel.
+Votre agence peut activer les rappels de comptage. Si un groupe reste un certain temps sans comptage, les membres du personnel pointés dans ce groupe reçoivent un rappel. Les rappels s'arrêtent à la fin de votre quart prévu ce jour-là, ou à l'heure de fermeture du centre si vous n'avez pas d'horaire : rester plus tard ne vous vaut pas une avalanche de rappels.
 
-Les rappels cessent à la fin de votre quart prévu ce jour-là. Si vous n’avez pas d’horaire, ils cessent à l’heure de fermeture du centre. Vous n’en recevrez pas de nouveaux si vous restez tard.
+## Qui peut faire quoi
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Éducatrice ou éducateur | Compter les groupes où il travaille, lancer et lever une alerte d'enfant disparu, lire les journaux de ses groupes. |
+| Direction de centre / administration de l'agence | Tout cela pour ses centres, et nommer les superviseurs suppléants et activer ou désactiver les rappels. |
+| Parent | Ne voit pas cet écran. |
+
+## FAQ et quand quelque chose ne va pas
+
+??? Mon groupe n'est pas dans Salles en ce moment. | Vous ne voyez que les groupes auxquels vous êtes affecté·e. Demandez à votre direction de vous y affecter.
+??? Un enfant que je vois n'est pas dans la liste. | La liste montre les enfants présents. Faites d'abord son arrivée; le comptage le reprendra.
+??? J'ai touché Alert director now par erreur. | Touchez **✅ Found — all accounted for** et indiquez que c'était une erreur. Toutes les personnes alertées en sont avisées.
+??? Aucun superviseur suppléant n'apparaît sur l'écran rouge. | Personne n'a été nommé pour votre centre. Une direction ou l'administration de l'agence le fait dans l'écran **Comptages**.
+??? Le message dit « Could not save ». | Le comptage n'a pas atteint le serveur. Vérifiez votre connexion et touchez de nouveau le bouton d'enregistrement.
+
+## Écrans liés
+
+[[open: #today | Aujourd’hui]]
+[[open: #incidents | Incidents]]
+[[open: #reports | Rapports]]
+[[when-something-happens]]

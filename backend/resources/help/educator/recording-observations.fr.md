@@ -1,99 +1,67 @@
 ---
 title: Consigner des observations
-category: Daily Workflows
-order: 3
 ---
 
 # Consigner des observations
 
-Les observations sont plus substantielles que les événements rapides. Elles servent pour les moments à retenir : une étape franchie, une interaction notable, un progrès.
+Une observation va plus loin qu'une entrée rapide : elle capte un moment d'apprentissage ou de croissance, comme une première fois où l'enfant partage sans qu'on le lui demande, un nouveau mot bien utilisé, une nouvelle habileté physique ou de l'empathie envers un ami. **Observations d’apprentissage** liste les observations des enfants avec qui vous travaillez; **+ Nouvelle observation** vous permet d'écrire ou de dicter ce que vous avez vu, de laisser l'IA le structurer et de le partager avec la famille.
 
-## Qu’est-ce qu’une observation ?
+[[open: #observations | Ouvrir les observations]]
 
-Une observation capture :
+## Consigner une observation
 
-- Un moment précis d’apprentissage, de croissance ou de comportement
-- Ce que l’enfant a fait, en détail (1 à 2 phrases au minimum)
-- Le domaine d’apprentissage concerné
-- Au besoin, une photo
+1. Ouvrez **Observations** dans le menu et touchez **+ Nouvelle observation**. (Depuis le **Journal quotidien**, vous pouvez aussi toucher **🌱 Observation** avec l'enfant déjà choisi.)
+2. Choisissez l'**Enfant**.
+3. Dans **What did you observe?**, écrivez ce que l'enfant a fait, avec qui et avec quoi. Soyez factuel et précis; au moins une phrase ou deux.
+4. Touchez **Structurer avec l’IA**. KiddieTrac transforme vos mots en observation structurée et la relie au cadre d'apprentissage de votre agence. Vous préférez ne pas utiliser l'IA? Touchez **Write it myself**.
+5. Vérifiez l'étape de révision : le **Domain**, les étiquettes du cadre et le **Family summary (parent will see this)**. Corrigez ce qui ne convient pas.
+6. Laissez **Partager immédiatement avec la famille** coché, ou décochez-le pour la garder pour le personnel pour l'instant.
+7. Touchez **Enregistrer l’observation**. Le message **Observation saved** s'affiche et l'observation est en haut de la liste. **Start over** vide le formulaire si vous voulez recommencer.
 
-Exemples de moments dignes d’une observation :
+> ⚠️ Rien n'est enregistré tant que vous n'avez pas touché **Enregistrer l’observation** : l'écran indique « Not saved yet. » Si vous partez en plein milieu, on vous propose votre observation inachevée à votre retour.
 
-- La première fois qu’un enfant partage un jouet sans y être invité
-- Un nouveau mot ou une nouvelle expression utilisé correctement
-- La maîtrise d’une habileté physique (grimper, garder l’équilibre)
-- Une marque d’empathie envers un autre enfant
-- Une question réfléchie
-- Une expression créative (un dessin, une histoire inventée)
+## Le dire au lieu de l'écrire
 
-## Comment en consigner une
+1. Sous la case de texte, appuyez sur **Dites-le** et parlez naturellement : ce que l'enfant a fait, avec qui, et ce que vous avez remarqué.
+2. Les mots s'inscrivent dans la case pendant que vous parlez, dans la langue choisie dans le portail. Appuyez sur **Stop** quand vous avez fini.
+3. Relisez et corrigez ce que le micro a mal compris avant de continuer.
 
-1. Touchez la fiche de l’enfant
-2. Touchez **Observation**
-3. Choisissez un domaine :
-   - **Social et affectif** — partage, empathie, amitié, régulation des émotions
-   - **Langage et littératie** — mots, expressions, questions, écoute
-   - **Physique / motricité** — motricité globale ou fine, équilibre, coordination
-   - **Cognitif** — résolution de problèmes, prédiction, dénombrement, tri
-   - **Arts créatifs** — dessin, peinture, musique, jeu dramatique
-   - **Soins personnels** — propreté, lavage des mains, habillage, repas
-   - **Jeux extérieurs** — courir, grimper, explorer la nature
-4. Ajoutez un court titre (p. ex. « A posé une question réfléchie pendant l’heure du conte »)
-5. Rédigez 1 à 3 phrases de détails
-6. Joignez une photo si vous le souhaitez
-7. Enregistrez
+La première fois, votre navigateur demande à utiliser le micro : choisissez **Autoriser**. Dans l'application mobile KiddieTrac, ou dans un navigateur sans reconnaissance vocale, touchez plutôt le micro de votre clavier. Rien n'est enregistré ni conservé; seul le texte de la case est sauvegardé.
 
-## Dites-le au lieu de le taper
+> 💡 Dictez comme vous l'écririez : les faits d'abord (« a empilé cinq blocs, puis les a comptés à voix haute »), pas ce que vous en avez pensé.
 
-Dans **Nouvelle observation**, appuyez sur **🎤 Dicter** sous la zone de texte et parlez simplement : ce que l’enfant a fait, avec qui, et ce que vous avez remarqué. Les mots apparaissent dans la zone au fur et à mesure, dans la langue du portail. Appuyez sur **Arrêter** quand vous avez terminé, puis relisez et corrigez ce que le microphone a mal compris avant de continuer.
+## Le cadre d'apprentissage de votre agence
 
-- La première fois, votre navigateur demande l’autorisation d’utiliser le microphone. Choisissez **Autoriser**.
-- Dans l’appli téléphone KiddieTrac, ou dans un navigateur sans reconnaissance vocale, touchez plutôt le **microphone de votre clavier**. Il fait le même travail.
-- Rien n’est enregistré ni conservé : seul le texte de la zone est sauvegardé, et seulement lorsque vous enregistrez l’observation.
+**Structurer avec l’IA** relie l'observation au cadre utilisé par votre agence, par exemple les fondements de *Comment apprend-on?* (appartenance, bien-être, engagement et expression) ou les sept domaines de l'EYFS. Les étiquettes alimentent les bulletins et le rapport des écarts du cadre. L'administration de votre agence choisit le cadre dans **Learning framework**, dans les paramètres.
 
-> **Astuce :** Parlez comme vous écririez : les faits d’abord (« Aria a empilé cinq blocs, puis les a comptés à voix haute »), pas ce que vous en avez ressenti.
+## Lire la liste
 
-## Le cadre d’apprentissage de votre agence
+La liste montre le **When**, l'**Enfant**, le **Domain** et l'**Educator** de chaque observation, avec la pastille **SHARED** quand la famille peut la voir. Utilisez le menu de tri (**Newest first**, **Oldest first**, **Child (A-Z)**, **Domain (A-Z)**, **Educator (A-Z)**) pour réordonner la liste.
 
-Lorsque vous appuyez sur **Structurer avec l’IA**, KiddieTrac associe l’observation aux domaines du cadre d’apprentissage utilisé par votre agence : par exemple Appartenance, Bien-être, Engagement et Expression de HDLH, ou les sept domaines de l’EYFS. Vous les voyez sous forme d’étiquettes de couleur à l’étape de révision; elles alimentent les bulletins et le rapport sur les lacunes du cadre. L’administrateur de votre agence choisit le cadre sous **Paramètres → Cadre d’apprentissage**.
+## Bulletins
 
-## Ce qui fait une bonne observation
+Dans **Report cards**, **All report cards** liste les bulletins des enfants de vos groupes et ceux que vous avez écrits. Ouvrez un brouillon pour le terminer et touchez **Signer et soumettre**; votre direction ou l'administration de l'agence l'approuve avant que la famille le voie, puis il est marqué **Sent**. Pour changer un bulletin envoyé que vous avez écrit, utilisez **Edit (new version)**. Pour en écrire un nouveau, ouvrez **✨ Generate with AI**.
 
-Une bonne observation comprend :
+## Qui peut faire quoi
 
-- **Ce que l’enfant a fait** (comportement précis)
-- **Le contexte** (quand, avec qui, avec quel matériel)
-- **Pourquoi c’est important** (quelle habileté cela démontre)
-
-Exemple :
-
-> Titre : « A posé une question réfléchie pendant l’heure du conte »
->
-> Pendant la lecture de « Le tigre qui s’invita pour le thé », Aria a levé la main et demandé : « Pourquoi le tigre boit-il tout le thé ? » Elle faisait des prédictions sur l’histoire et reliait les actions du tigre à sa propre expérience d’avoir faim. Magnifique raisonnement pour son âge.
-
-par opposition à une mauvaise observation :
-
-> Titre : « Elle a lu un livre »
->
-> Aria a lu un livre aujourd’hui.
-
-## Observer ou simplement consigner
-
-| Situation | Que faire |
+| Rôle | Ce qu'il peut faire |
 |---|---|
-| Repas, sieste, change de couche | Consignation rapide |
-| Activité de jeu libre qui a duré un moment | Consignation rapide (type Activité) |
-| Moment précis de croissance ou d’apprentissage | Observation |
-| Une photo qui montre quelque chose de significatif | Observation (avec photo) |
-| Une étape franchie (première fois que…) | Observation |
-| Simplement une chose mignonne qu’il a dite | Consignation rapide (type Note) |
+| Éducatrice ou éducateur | Consigner des observations pour les enfants de ses groupes et choisir de les partager ou non. |
+| Direction de centre / administration de l'agence | Consigner et lire les observations de ses centres. |
+| Parent | Voit les observations partagées de son enfant (le résumé pour la famille), avec un avis instantané. |
 
-## À quelle fréquence
+## FAQ et quand quelque chose ne va pas
 
-Visez 2 à 4 observations par enfant par semaine. Elles sont précieuses pour les parents : elles montrent une vraie progression, pas seulement des activités de routine.
+??? Le message dit « No children found in your rooms. Ask your director to assign you to a room. » | Vous n'êtes pas encore affecté·e à un groupe, donc personne n'est à choisir.
+??? Structurer avec l'IA est absent ou ne fait rien. | L'IA est peut-être désactivée pour votre agence. Utilisez **Write it myself**.
+??? Le message dit « Microphone access was blocked. » | Autorisez le micro pour ce site dans les paramètres de votre navigateur, ou utilisez le micro de votre clavier.
+??? Le message dit « We didn’t hear anything. » | Réessayez un peu plus près du micro, dans un endroit plus calme.
+??? La famille est-elle avisée? | Si **Partager immédiatement avec la famille** était coché, les tuteurs de l'enfant reçoivent un avis dans l'application et une notification sur leur téléphone, sauf s'ils ou l'agence ont désactivé les observations d'apprentissage.
+??? La liste dit « No observations yet ». | Rien n'a été consigné pour les enfants que vous voyez. Touchez **+ Nouvelle observation**.
 
-## Ce que voient les parents
+## Écrans liés
 
-Les observations apparaissent dans l’appli du parent sous **Aujourd’hui → Observations récentes** et sur la page de détail de l’enfant. Elles sont conservées en permanence dans le portfolio de l’enfant.
-
-À la fin de l’année, vous pouvez exporter toutes les observations d’un enfant sous forme de sommaire du développement, utile pour la transition vers la maternelle.
+[[open: #care-log | Journal quotidien]]
+[[open: #curriculum | Bibliothèque de programmes]]
+[[quick-logging-events]]
+[[lesson-plans-and-curriculum]]

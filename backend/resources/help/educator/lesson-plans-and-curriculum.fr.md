@@ -1,59 +1,63 @@
 ---
 title: Plans de leçon et programme
-category: Daily Workflows
-order: 5
 ---
 
 # Plans de leçon et programme
 
-Un plan hebdomadaire partagé donne une intention à votre salle et permet aux parents de voir ce que leurs enfants apprennent. Kiddietrac rend la planification rapide et vous permet de réutiliser ce qui fonctionne.
+La **Bibliothèque de programmes** contient des unités prêtes à l'emploi fondées sur *Comment apprend-on?*, le document de l'Ontario, et ses quatre fondements : appartenance, bien-être, engagement et expression. Chaque unité a des objectifs, des activités, des pistes d'observation, des idées pour impliquer les familles et un plan hebdomadaire. Vous prévisualisez une unité et l'utilisez pour créer des plans de leçon hebdomadaires en **brouillon** pour votre groupe. Vous vérifiez et publiez ensuite la semaine dans **Play Spark → Cette semaine**, où les familles la voient.
 
-## Le plan de la semaine
+[[open: #curriculum | Ouvrir la bibliothèque de programmes]]
 
-Ouvrez **Plans de leçon** pour voir la semaine en cours jour par jour. Chaque jour contient les activités que vous avez prévues : cercle, bricolage, jeux extérieurs, histoire. Les activités peuvent être **codées par couleur** pour lire la semaine d’un coup d’œil.
+## Trouver une unité
 
-Pour ajouter au plan :
+1. Ouvrez **Bibliothèque de programmes** dans le menu. Elle s'ouvre sur **📖 Bibliothèque de l’Ontario**.
+2. Réduisez la liste avec la case de recherche (**Search units, themes, activities…**) et les filtres **All ages**, **All foundations**, **All seasons** et **All themes**.
+3. Touchez une unité pour la prévisualiser : ses **🎯 Goals**, ses activités, son **🗓 Weekly plan**, ses pistes d'observation, ses notes de sécurité et ses conseils pour les apprenants francophones et bilingues.
 
-1. Ouvrez **Plans de leçon** et assurez-vous d’être sur la bonne **semaine**.
-2. Ajoutez une activité à un jour : un titre, et au besoin des notes ou du matériel.
-3. Enregistrez. Elle est visible tout de suite par votre salle et par les parents.
+[[show: #curriculum @ 🏠 Our units | Me montrer nos unités]]
 
-## Modèles hebdomadaires
+**🏠 Our units** liste les unités que votre agence a copiées et adaptées. Une direction ou l'administration les crée avec **⧉ Copier pour modifier**.
 
-Vous n’avez pas à partir de zéro. KiddieTrac propose une bibliothèque de semaines toutes prêtes (thèmes pour les tout-petits, les préscolaires et les groupes d’âges mixtes, comme Récolte d’automne, Les aides de la communauté et Pays des merveilles d’hiver), en plus des semaines que votre agence a enregistrées.
+## Créer des plans en brouillon à partir d'une unité
 
-1. Ouvrez **Plans de leçon** et allez à la semaine à planifier.
-2. Choisissez **📋 Modèles**. Filtrez par âge ou cherchez par thème.
-3. Ouvrez un modèle pour **voir toute la semaine** : chaque activité, jour par jour, avec ses notes et une adaptation suggérée pour les plus jeunes ou les plus vieux.
-4. Choisissez **Utiliser ce modèle**. Si la semaine contient déjà des activités, choisissez **Remplacer** ou **Ajouter à cette semaine**.
-5. La semaine se remplit en **brouillon**. Rien n’est encore enregistré : relisez, modifiez ce que vous voulez, puis appuyez sur **Enregistrer**. Vous changez d’avis? **Annuler les changements** remet la semaine comme avant.
+1. Dans la prévisualisation de l'unité, touchez **📅 Utiliser cette unité**.
+2. Dans **Room or centre**, choisissez votre groupe.
+3. Dans **Start the week of (Monday)**, choisissez la première semaine.
+4. Sous **Which weeks**, cochez les semaines de l'unité que vous voulez.
+5. Touchez **Créer les plans en brouillon**. **✓ Draft lesson plans** liste chaque semaine créée en brouillon, et toute semaine **Left as they were** parce qu'elle avait déjà un plan.
+6. Touchez **Ouvrir les plans de leçon** pour aller à **Play Spark → Cette semaine**, ou **Stay here** pour continuer à parcourir.
 
-Pour conserver une semaine dont vous êtes fier, choisissez **💾 Enregistrer comme modèle** et donnez-lui un titre et un groupe d’âge. Elle rejoint la bibliothèque de votre agence pour tous ceux qui planifient. La personne qui l’a enregistrée, un directeur ou un administrateur de l’agence peut la supprimer plus tard.
+> ℹ️ Les brouillons sont réservés au personnel. Les familles ne voient rien tant que la semaine n'est pas publiée.
 
-## Plan du centre ou plan de la salle
+## Vérifier et publier la semaine
 
-Certains plans sont établis au niveau du **centre** et s’appliquent à toutes les salles; d’autres sont propres à votre salle. Si votre salle n’a pas de plan à elle pour la semaine, vous verrez le **plan du centre** : il y a donc toujours quelque chose à suivre, et jamais de semaine vide.
+1. Dans **Play Spark → Cette semaine**, ouvrez la semaine où les brouillons ont été créés.
+2. Modifiez, ajoutez ou retirez des activités. **📋 Modèles** remplit une semaine à partir d'un modèle enregistré (**Use this template**, puis **Replace** ou **Ajouter à cette semaine**).
+3. Faites passer la semaine de **Brouillon** à **Publié** et touchez **💾 Enregistrer la semaine**. L'étiquette devient « Published · families can see it ».
+4. Pour réutiliser une bonne semaine, touchez **Save template**. Elle s'ajoute aux modèles de votre agence pour tous ceux qui planifient.
 
-Si vous ajoutez un plan propre à votre salle, il prend le dessus pour votre salle pendant que les autres gardent le plan du centre.
+Si votre groupe n'a pas son propre plan pour une semaine, vous voyez le plan du centre. Un plan de groupe, une fois ajouté, le remplace pour votre groupe seulement.
 
-## Pourquoi les parents l’adorent
+## Qui peut faire quoi
 
-Quand vous établissez un plan, les parents le voient dans leur application. La question « Qu’as-tu fait aujourd’hui? » devient une vraie conversation : ils peuvent s’informer du projet ou de l’histoire que vous aviez prévus. Un plan établi est l’un des moyens les plus rapides de mobiliser les parents, et c’est pourquoi le résumé **Aujourd’hui en un coup d’œil** vous le rappelle quand le plan de la semaine est encore vide.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Éducatrice ou éducateur | Parcourir la bibliothèque et les unités de l'agence, créer des brouillons pour ses groupes, modifier et publier la semaine de son groupe. |
+| Direction de centre / administration de l'agence | Tout cela pour n'importe quel groupe ou centre, plus **⧉ Copier pour modifier**, **✏️ Modifier** et **Supprimer** sur les unités de l'agence, et l'onglet **💡 Activity ideas**. |
+| Parent | Voit les semaines publiées du groupe de son enfant, jamais les brouillons. |
 
-## Conseils
+## FAQ et quand quelque chose ne va pas
 
-- **Planifiez une semaine à l’avance** quand c’est possible : les matins sont plus calmes.
-- **Réutilisez et peaufinez.** Utilisez **Enregistrer comme modèle** pour vos meilleures semaines afin que les bonnes idées reviennent.
-- **Restez léger dans les notes.** Un titre et une ligne d’intention suffisent; le plan est un guide, pas une dissertation.
-- **Codez par couleur selon le type** (littératie, arts, motricité globale, extérieur) pour voir l’équilibre de la semaine.
+??? Je ne vois ni Copier pour modifier ni Modifier. | Seules la direction et l'administration de l'agence peuvent copier ou modifier des unités. Demandez-leur d'en adapter une pour votre agence.
+??? Le message dit « No rooms or centres were found for you to plan for. » | Vous n'êtes pas encore affecté·e à un groupe. Demandez à votre direction.
+??? Le message dit « You cannot plan for that room. » | Vous ne pouvez créer des plans que pour les groupes auxquels vous êtes affecté·e.
+??? Une semaine indique « already has a published plan » sous Left as they were. | Les semaines existantes ne sont jamais écrasées. Modifiez cette semaine dans **Play Spark → Cette semaine**, ou choisissez d'autres semaines.
+??? Les parents disent qu'ils ne voient pas le plan. | Il est encore en brouillon. Passez-le à **Publié** et touchez **💾 Enregistrer la semaine**.
+??? Le message dit « No units match these filters. » | Videz la case de recherche et remettez les filtres à **All ages**, **All foundations**, **All seasons** et **All themes**.
+??? Les idées de Play Spark sont grisées. | Si l'IA est désactivée pour votre agence, **Spark an idea** et le balayage du matériel sont en pause; les idées enregistrées et les plans de leçon fonctionnent toujours.
 
-## Questions courantes
+## Écrans liés
 
-**« J’ai établi un plan, mais les parents ou ma salle ne le voient pas. »**
-Vérifiez que vous l’avez enregistré dans la bonne **semaine**, et s’il s’agit d’un plan du centre ou d’un plan de salle. Une cause fréquente : modifier la semaine prochaine par erreur.
-
-**« Un modèle que j’attendais n’est pas dans la bibliothèque. »**
-La bibliothèque montre les semaines intégrées de KiddieTrac et celles que votre agence a enregistrées. Toute personne qui planifie peut en ajouter une avec **Enregistrer comme modèle**.
-
-**« Puis-je copier la semaine dernière? »**
-Enregistrez-la avec **Enregistrer comme modèle**, puis utilisez-la sur la semaine de votre choix.
+[[open: #play-spark?tab=week | Play Spark : cette semaine]]
+[[open: #observations | Observations]]
+[[recording-observations]]

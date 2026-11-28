@@ -2,63 +2,65 @@
 title: Lesson plans and curriculum
 category: Daily Workflows
 order: 5
-screens: ~play-spark, curriculum
+screens: curriculum
 ---
 
 # Lesson plans and curriculum
 
-A shared weekly plan keeps your room intentional and lets parents see what their children are learning. Kiddietrac makes planning quick — and lets you reuse what works.
+The **Curriculum library** holds ready-made units built on Ontario's *How Does Learning Happen?* and its four foundations: Belonging, Well-being, Engagement and Expression. Each unit has goals, activities, observation prompts, family engagement ideas and a weekly plan. You preview a unit and use it to make **draft** weekly lesson plans for your room. You then check and publish the week in **Play Spark → This week**, where families see it.
 
-## The weekly plan
+[[open: #curriculum | Open Curriculum library]]
 
-Open **Lesson plans** to see the current week laid out day by day. Each day holds the activities you've planned — circle time, an art project, outdoor play, a story. Activities can be **colour-coded** so the week is easy to read at a glance.
+## Finding a unit
 
-To add to the plan:
+1. Open **Curriculum library** from the menu. It opens on **📖 Ontario library**.
+2. Narrow the list with the search box (**Search units, themes, activities…**) and the **All ages**, **All foundations**, **All seasons** and **All themes** filters.
+3. Tap a unit to preview it: its **🎯 Goals**, activities, **🗓 Weekly plan**, observation prompts, safety notes, and tips for French and bilingual learners.
 
-1. Open **Lesson plans** and make sure you're on the right **week**.
-2. Add an activity to a day — a title, and any notes or materials.
-3. Save. It's immediately visible to your room and to parents.
+[[show: #curriculum @ 🏠 Our units | Show me Our units]]
 
-## Weekly templates
+**🏠 Our units** lists the units your agency copied and adapted. A director or admin makes these with **⧉ Copy to edit**.
 
-You don't have to start from scratch. KiddieTrac comes with a library of ready-made weeks (toddler, preschool and mixed-age themes such as Fall Harvest, Community Helpers and Winter Wonderland) plus any weeks your agency has saved.
+## Making draft lesson plans from a unit
 
-1. Open **Lesson plans** and go to the week you want to plan.
-2. Choose **📋 Templates**. Filter by age or search by theme.
-3. Open a template to **preview the whole week**: every activity, day by day, with its notes and a suggested adaptation for younger or older children.
-4. Choose **Use this template**. If the week already has activities, pick **Replace** or **Add to this week**.
-5. The week fills in as a **draft**. Nothing is saved yet: review it, change anything you like, then press **Save**. Changed your mind? **Discard** puts the week back.
+1. In the unit preview, tap **📅 Use this unit**.
+2. In **Room or centre**, pick your room.
+3. In **Start the week of (Monday)**, pick the first week.
+4. Under **Which weeks**, tick the unit weeks you want.
+5. Tap **Make draft plans**. **✓ Draft lesson plans** lists each draft week that was made, and any week **Left as they were** because it already had a plan.
+6. Tap **Open lesson plans** to go to **Play Spark → This week**, or **Stay here** to keep browsing.
 
-To keep a week you're proud of, choose **💾 Save as template** and give it a title and an age group. It joins your agency's library for everyone who plans. The person who saved it, a director or an agency admin can remove it later.
+> ℹ️ Drafts are staff only. Families see nothing until someone publishes the week.
 
-## Centre-wide vs room plans
+## Checking and publishing the week
 
-Some plans are set at the **centre** level and apply to every room; others are specific to your room. If your room doesn't have its own plan for the week, you'll see the **centre-wide plan** instead — so there's always something to follow, and you're never staring at a blank week.
+1. In **Play Spark → This week**, open the week the drafts went to.
+2. Change, add or remove activities. **📋 Templates** fills a week from a saved template (**Use this template**, then **Replace** or **Add to this week**).
+3. Switch the week from **Draft** to **Published** and tap **💾 Save week**. The chip changes to "Published · families can see it".
+4. To reuse a good week, tap **Save template**. It joins your agency's templates for everyone who plans.
 
-If you add a room-specific plan, it takes over for your room while other rooms keep the centre plan.
+If your room has no plan of its own for a week, you see the centre-wide plan instead. A room plan, once added, takes over for your room only.
 
-## Why parents love it
+## Who can do what
 
-When you set a plan, parents can see it in their app. It turns "what did you do today?" into a real conversation — they can ask about the specific project or story you had planned. A set plan is one of the quickest wins for parent engagement, which is why the **Today at a glance** brief nudges you when the week's plan is still empty.
+| Role | What they can do |
+|---|---|
+| Educator | Browse the library and your agency's units, make draft plans for rooms they are assigned to, edit and publish their room's week. |
+| Centre director / agency admin | All of that for any room or centre, plus **⧉ Copy to edit**, **✏️ Edit** and **Delete** on the agency's own units, and the **💡 Activity ideas** tab. |
+| Parent | Sees published weeks for their child's room, never drafts. |
 
-## Play Spark when AI is switched off
+## FAQs and when something goes wrong
 
-If AI is switched off for your agency, **Spark an idea** and the materials **Scan** are paused. Your saved ideas, their pictures and **We did it** still work: open **Play Spark → Library → My ideas**. Families still see the activity in their day and in **Play at home**.
+??? I don't see Copy to edit or Edit. | Only directors and agency admins can copy or change units. Ask them to adapt one for your agency.
+??? It says "No rooms or centres were found for you to plan for." | You are not assigned to a room yet. Ask your director.
+??? It says "You cannot plan for that room." | You can only make plans for rooms you are assigned to.
+??? A week shows "already has a published plan" under Left as they were. | Existing weeks are never overwritten. Edit that week in **Play Spark → This week**, or pick other weeks.
+??? Parents say they cannot see the plan. | It is still a draft. Switch it to **Published** and tap **💾 Save week**.
+??? It says "No units match these filters." | Clear the search box and set the filters back to **All ages**, **All foundations**, **All seasons** and **All themes**.
+??? Play Spark ideas are greyed out. | If AI is switched off for your agency, **Spark an idea** and the materials scan pause; saved ideas and lesson plans still work.
 
-## Tips
+## Related screens
 
-- **Plan a week ahead** where you can — it makes mornings calmer.
-- **Reuse and refine.** Use **Save as template** on your best weeks so good ideas come back around.
-- **Keep notes light.** A title and a line of intent is plenty; the plan is a guide, not an essay.
-- **Colour-code by type** (literacy, art, gross-motor, outdoor) so the balance of the week is visible.
-
-## Common questions
-
-**"I set a plan but parents / my room don't see it."**
-Check you saved it to the correct **week**, and whether it's a centre plan or a room plan. A common cause is editing next week by mistake.
-
-**"A template I expected isn't in the library."**
-The library shows KiddieTrac's built-in weeks and your own agency's saved weeks. Anyone who plans can add one with **Save as template**.
-
-**"Can I copy last week?"**
-Save it with **Save as template**, then use it on any week you like.
+[[open: #play-spark?tab=week | Play Spark: This week]]
+[[open: #observations | Observations]]
+[[recording-observations]]

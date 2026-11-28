@@ -1,76 +1,66 @@
 ---
 title: Registro rápido de eventos
-category: Daily Workflows
-order: 1
 ---
 
 # Registro rápido de eventos
 
-Registrar las actividades diarias es lo que más hará. El objetivo es que sea rápido: menos de 5 segundos por evento.
+La pantalla **Registro diario** (su banner dice **Registrar un momento**) sirve para anotar el día de un niño con un par de toques: pañales, siestas, comidas, biberones, juego al aire libre, protector solar, ánimo, medicina, cambio de ropa, fotos y videos. Cada registro llega de inmediato a la pantalla Hoy de la familia y forma parte del resumen del final del día.
 
-## Los 8 tipos de evento
+[[open: #care-log | Abrir el registro diario]]
 
-| Evento | Cuándo registrarlo |
+## Registrar un momento para un niño
+
+1. Abra **Registro diario** desde el menú.
+2. En **Niño**, elija al niño.
+3. Toque un mosaico: **Pañal**, **Baño**, **Siesta**, **Comida**, **Merienda**, **Biberón**, **Juego al aire libre**, **Protector solar**, **Ánimo**, **Medicine** o **Change of clothes**.
+4. En la ventana, toque una opción rápida (por ejemplo **Wet**, **Ate most** o **Happy**), o toque **Other** y escríbalo.
+5. Si ocurrió antes, cambie **When did it happen? (optional)**. Para una siesta, complete en su lugar **Fell asleep** y **Woke up**.
+6. Agregue una **Nota (opcional)** o **📷 Add a photo or video** si le sirve a la familia.
+7. Toque **Registrar**. El registro aparece arriba del registro de hoy, debajo de los mosaicos.
+
+> 💡 La ventana del pañal tiene un interruptor **🧴 Cream applied**, el biberón pide la cantidad en **oz**, y **Medicine** pide **Medicine and dose** (por ejemplo "Tylenol infantil 5 ml").
+
+## Registrar para todo el salón a la vez
+
+1. En **Niño**, elija **Todos los niños**.
+2. Toque **Comida**, **Merienda**, **Biberón**, **Juego al aire libre**, **Protector solar**, **Ánimo** o **Siesta**.
+3. Elija los detalles y toque **Registrar**. Se guarda un registro para cada niño que está presente ahora.
+
+> ⚠️ **Pañal**, **Baño**, **Medicine** y **Change of clothes** siempre son de un solo niño, así que hay que elegir uno.
+
+## Fotos, videos, observaciones, retrasos y suministros
+
+1. Toque **Foto** o **Video**, elija el archivo, etiquete a los niños, agregue una descripción y toque **Share it**. Los archivos pueden pesar hasta 30 MB (unos 30 segundos de video).
+2. Toque **🌱 Observation** para abrir el formulario de observación con el niño ya elegido (vea [Registro de observaciones](recording-observations)).
+3. Toque **Tarde** para registrar un **Late pick-up** o un **Late arrival**: elija **How late**, agregue lo que pasó y toque **Registrar**. Su director lo revisa; usted no cobra nada.
+4. Toque **Suministros** para pedir a la familia que traiga algo de casa (pañales, toallitas, ropa de cambio).
+
+## Ver otro día
+
+Debajo de los mosaicos, el registro de hoy muestra lo registrado para el niño (o para todos con **Todos los niños**), del más reciente al más antiguo, con quién lo registró. Use **‹** y **›** o la casilla de fecha para ver un día anterior, y **Hoy** para volver. No se pueden elegir días futuros.
+
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer aquí |
 |---|---|
-| **Comida** | Desayuno, almuerzo — cualquier comida completa |
-| **Merienda** | Merienda de la mañana, merienda de la tarde |
-| **Inicio / fin de siesta** | Cuando se duerme, cuando despierta |
-| **Pañal** | Cada cambio (mojado / deposición / ambos) |
-| **Baño** | Para los niños mayores que usan el baño |
-| **Actividad** | Juego estructurado o libre (hora del cuento, arenero, arte, etc.) |
-| **Ánimo** | Cuando ocurre un cambio notable (se molestó, se calmó, etc.) |
-| **Nota** | Observación de texto libre que no encaja en otras categorías |
+| Educador | Registrar para los niños de sus propios salones. |
+| Director de centro / administrador de la agencia | Registrar para cualquier niño de sus centros; el administrador primero elige un **Provider**. |
+| Padre o madre | Ve los registros en la pantalla Hoy de su hijo y en el resumen diario. |
 
-## Cómo registrar rápido
+## Preguntas frecuentes y cuando algo sale mal
 
-Para cada evento, el procedimiento es:
+??? La lista Niño dice "No children in your room yet. Ask your director to assign you a room." | Todavía no tiene un salón asignado. Su director asigna los salones; mientras tanto la lista queda vacía.
+??? Elegí Todos los niños y dice "No children are checked in right now, so there is nobody to log this for." | Los registros de salón solo van a los niños presentes. Registre primero su llegada o elija un niño.
+??? Dice "That time is later today. A log records what has already happened". | La hora en **When did it happen?** está en el futuro. Elija la hora real.
+??? Dice "Pick a child to log for — All children does not apply to diaper." | Pañal, baño, medicina y ropa se registran para un solo niño. Elija al niño y toque el mosaico otra vez.
+??? Me equivoqué. ¿Puedo editar o borrar el registro? | En esta pantalla no se pueden editar ni borrar registros. Registre el correcto y avise a su director, que puede corregir el expediente.
+??? ¿Medicine reemplaza el registro de medicamentos? | No. Solo informa a la familia de lo que se dio. Las dosis de un medicamento autorizado se siguen registrando en **Medicamentos** con **+ Registrar dosis**.
+??? ¿A quién se le avisa cuando registro algo? | Los tutores del niño reciben un aviso en la app y una notificación en el teléfono, salvo que hayan desactivado los momentos diarios o que su agencia haya desactivado los momentos instantáneos. Varios registros en dos minutos se agrupan en un solo aviso.
 
-1. Toque la tarjeta del niño
-2. Toque el tipo de evento (uno de los 8 iconos grandes)
-3. Si lo desea, añada detalles (qué comió, qué actividad, etc.)
-4. Toque **Guardar**
+## Pantallas relacionadas
 
-Eso es todo. En total: 4 toques.
-
-## Detalles de la comida
-
-Al registrar una comida o merienda, puede añadir:
-
-- **Qué comida** (desayuno / merienda de la mañana / almuerzo / merienda de la tarde)
-- **Qué comió** — lista separada por comas
-- **Cantidad** — nada / un poco / la mayor parte / todo
-
-No escriba ensayos. «Plátano, galletas — la mayor parte» es perfecto.
-
-## Detalles de la actividad
-
-Para las actividades:
-
-- **Nombre** — ¿qué fue? (p. ej. «Construcción con bloques», «Hora del cuento», «Juego al aire libre»)
-- **Ámbito** — ¿qué ámbito de aprendizaje? Socioemocional, lenguaje/alfabetización, físico, cognitivo, artes creativas, cuidado personal, exterior
-- **Duración en minutos** — ¿cuánto tiempo participó?
-
-La etiqueta de ámbito importa para las **observaciones** (consulte Registro de observaciones).
-
-## Por qué es importante
-
-Cada evento que registra aparece en la app del padre o la madre en segundos. Al final del día:
-
-- El resumen de IA lo resume todo para la familia (se acabó el silencio ante «¿qué hiciste hoy?»)
-- Las familias ven la cronología completa
-- La dirección ve las métricas agregadas
-- Usted tiene un registro de lo ocurrido, útil para responder preguntas de las familias más adelante
-
-## ¿Y si se me pasa algo?
-
-Puede registrar eventos con retraso indicando una hora anterior:
-
-1. Registre el evento normalmente
-2. Cuando se abra la ventana, cambie la hora de **ocurrió a las** por la hora en que realmente sucedió
-3. Guarde
-
-No registre eventos con más de un día de retraso: se vuelve confuso en la cronología.
-
-## ¿Y si me equivoqué?
-
-Toque el evento en la cronología → **Editar** o **Eliminar**. No intente «arreglarlo» añadiendo una nota que lo contradiga: simplemente edite el original.
+[[open: #observations | Observaciones]]
+[[open: #medications | Medicamentos]]
+[[open: #late-pickups | Recogidas tardías]]
+[[giving-medications]]
+[[recording-observations]]

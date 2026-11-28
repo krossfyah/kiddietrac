@@ -1,100 +1,69 @@
 ---
 title: Pointer son arrivée et son départ
-category: Getting Started
-order: 2
 ---
 
 # Pointer son arrivée et son départ
 
-Votre pointeuse sert à enregistrer vos heures et à garder les ratios du centre honnêtes. Il suffit d’un toucher.
+La **Pointeuse** enregistre vos heures de travail et indique au centre qui est sur le plancher, ce qui garde les ratios exacts. La plupart des centres exigent que vous ayez pointé votre arrivée avant de faire l'arrivée ou le départ des enfants ou de consigner des soins. Vous pouvez pointer depuis l'écran **Pointeuse** ou depuis la bande de pointage en haut de vos écrans Accueil et Aujourd'hui.
 
+[[open: #time-clock | Ouvrir la pointeuse]]
 
-## Étapes rapides
+## Pointer votre arrivée
 
-1. Ouvrez votre écran **Accueil / Aujourd’hui**.
-2. Touchez la **bande de la pointeuse** en haut. Elle passe à **Arrivée pointée** et commence à compter.
-3. Occupez-vous de votre salle comme d’habitude — les enregistrements d’arrivée et les consignations de soins fonctionnent une fois votre arrivée pointée.
-4. À la fin de votre quart, touchez de nouveau la bande et **confirmez**.
-5. Consultez **Mes heures** si vous voulez voir le total cumulé de la semaine.
+1. Ouvrez **Pointeuse** dans le menu (ou touchez la bande de pointage en haut d'**Aujourd’hui**).
+2. Touchez le bouton vert **Pointer l’arrivée**.
+3. La ligne au-dessus devient « You're clocked in since … » avec les heures écoulées, et le bouton devient rouge et dit **Pointer le départ**.
 
-Si l’enregistrement d’une arrivée ne fait rien, c’est presque certainement que vous n’avez pas encore pointé votre arrivée — recommencez à l’étape 2.
+> ℹ️ Si votre agence utilise le module RH avec vérification de l'emplacement, on peut vous demander de partager votre position une fois pour ce pointage.
 
-## Pointer son arrivée
+## Prendre votre dîner ou une courte pause
 
-Au début de votre quart, touchez la **bande de la pointeuse** en haut de votre écran Accueil/Aujourd’hui. Elle passe instantanément à **« Arrivée pointée »** et commence à compter votre quart.
+1. Une fois l'arrivée pointée, touchez **🍽️ Dîner** ou **☕ Short break** sous le gros bouton.
+2. L'écran affiche « You're on lunch » (ou « a break ») et le bouton dit **I'm back**. Vous restez sur votre quart de la journée; vous êtes seulement hors du plancher.
+3. À votre retour, touchez **I'm back** et confirmez.
 
-Pas besoin d’ouvrir un autre écran — la bande agit sur place, vous êtes donc prêt(e) à rejoindre les enfants tout de suite.
+> ⚠️ Pendant une pause, vous ne pouvez pas faire l'arrivée ni le départ des enfants : le ratio ne vous compte plus sur le plancher.
 
-## Pointer son départ
+## Pointer votre départ
 
-À la fin de votre quart, touchez de nouveau la bande. Elle vous demande de confirmer (pour que vous ne pointiez pas votre départ par accident), puis clôt votre quart.
+1. Touchez le bouton rouge **Pointer le départ** (sur la bande de pointage, choisissez **👋 End my day**).
+2. Si des enfants dont vous avez fait l'arrivée sont encore présents, un avertissement les liste. Faites d'abord leur départ, ou touchez **Go ahead anyway** si quelqu'un d'autre prend le relais.
+3. Le quart se ferme et apparaît sous **Pointages récents** avec sa durée.
 
-## Pourquoi pointer avant de s’occuper des enfants
+## Vérifier vos heures
 
-La plupart des centres exigent que vous ayez pointé votre arrivée avant de pouvoir **enregistrer l’arrivée ou le départ des enfants** ou consigner des soins. Ce n’est pas de la paperasse : cela rattache chaque action consignée à un éducateur réellement présent sur le plancher, ce qui compte pour les ratios et pour les dossiers de sécurité.
+**Pointages récents** liste vos quarts : la date, les heures d'arrivée et de départ, les dîners ou pauses, et la durée. Un quart encore ouvert affiche **In progress**. Pour les totaux de la semaine et vos talons de paie, ouvrez **My hours** (il peut s'appeler **Payroll** à l'écran; voir [Mes heures et ma paie](my-hours-and-pay)).
 
-Si vous touchez un enregistrement d’arrivée et que rien ne se passe, vérifiez d’abord que vous avez pointé votre arrivée.
+## Rappels et départs pointés automatiquement
 
-## Consulter vos heures
+Votre agence peut envoyer des rappels par courriel, par notification ou les deux, en plus d'un avis dans l'application :
 
-Vos quarts enregistrés se trouvent sous **Mes heures** (et **Mon horaire** si votre centre planifie les quarts). Vous y voyez :
+- **Toujours pointé·e** — après la fin de votre quart prévu (ou de votre journée habituelle plus environ une heure, jamais plus de 8 heures), vous recevez un rappel en soirée. Un quart resté ouvert un jour précédent en reçoit un aussi.
+- **Enfants encore présents** — la liste des enfants dont vous avez fait l'arrivée et jamais le départ. Faites le départ de chacun, ou utilisez **⏱ Fix** pour noter l'heure réelle du départ.
+- **Départ pointé automatiquement** — si vous n'avez toujours pas pointé votre départ, la fermeture automatique de l'agence ferme votre quart en soirée. Vous, votre direction et l'administration de l'agence en êtes avisés. L'heure utilisée est provisoire, ce n'est pas l'heure où vous êtes parti·e.
 
-- Les heures que vous avez réellement pointées
-- Vos quarts planifiés, le cas échéant
-- Le total cumulé de la semaine
+Si cela arrive 3 fois ou plus en 7 jours, votre direction et l'administration de l'agence sont avisées que c'est devenu une habitude.
 
-## Si la bande indique qu’elle n’a pas pu vérifier
+## Qui peut faire quoi
 
-Il arrive que la bande affiche **« Impossible de vérifier votre quart »** au lieu de votre statut. Cela
-signifie que l’application n’a pas pu joindre le serveur un instant — un ascenseur, une zone morte, un
-matin où le réseau est lent. Ce n’est pas le signe d’un problème avec votre compte.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Éducatrice ou éducateur | Pointer son arrivée et son départ, prendre des pauses, voir ses propres pointages. |
+| Direction de centre / administration de l'agence | La même chose pour soi, et corriger le pointage de n'importe qui dans les feuilles de temps. |
+| Parent | Ne voit pas cet écran. |
 
-Touchez **Réessayer**. La bande reste cliquable dans cet état, vous pouvez donc aussi pointer votre arrivée directement
-depuis celle-ci une fois la connexion rétablie. Si l’échec persiste, avisez votre direction plutôt que de
-commencer la journée sans avoir pointé.
+## FAQ et quand quelque chose ne va pas
 
-## Où voir votre paie
+??? J'ai touché une arrivée d'enfant et le message dit « Clock in first ». | Vous devez avoir pointé votre arrivée avant de faire l'arrivée ou le départ des enfants. Touchez **Clock in now**, ou **Pas maintenant** pour laisser tomber.
+??? La bande dit « Couldn't check your shift ». | L'application n'a pas pu joindre le serveur un instant. Touchez **Retry**. Si ça continue, prévenez votre direction plutôt que de commencer la journée sans pointer.
+??? J'ai oublié de pointer mon arrivée ou mon départ. | Prévenez votre direction : elle peut ajouter ou corriger le pointage. Ne pointez pas votre départ le lendemain pour fermer un vieux quart : cela compterait toutes les heures entre les deux.
+??? J'ai reçu un courriel disant que mon départ a été pointé automatiquement. | Votre agence ferme chaque soir les quarts restés ouverts. Dites à votre direction l'heure réelle de votre départ pour qu'elle la corrige.
+??? Le message dit « Could not update the clock. » | Le changement n'a pas été enregistré. Attendez un instant et touchez de nouveau le bouton; l'écran se remet à votre état réel.
+??? Pointer mon départ me déconnecte-t-il de l'application? | Non. Cela termine seulement votre quart. Utilisez **Sign out** sur une tablette partagée pour que la personne suivante se connecte avec son propre compte.
 
-**Mes heures** comporte un onglet **Délivré** qui affiche les bulletins de paie que l’agence vous a
-réellement délivrés, ainsi que ce que vous avez gagné par semaine. Vos coordonnées de paiement — virement Interac ou dépôt
-direct — se trouvent sous **Paramètres → Mon profil et sécurité**. Voir
-[Mes heures et ma paie](my-hours-and-pay).
+## Écrans liés
 
-## « Paie » signifie heures, pas salaire
-
-Dans Kiddietrac, la pointeuse enregistre les **heures travaillées** — ce n’est pas un système de paie ni de taux horaires. Votre centre utilise ces heures comme il gère sa paie. Si un quart semble erroné, avisez votre direction; elle peut corriger un pointage.
-
-## Rappels et départs automatiques
-
-Votre agence peut vous envoyer des rappels, par courriel, par notification push ou les deux, ainsi qu’un avis dans l’application.
-
-- **Toujours en poste.** Si vous êtes encore pointé(e) après la fin de votre quart prévu, ou après votre journée habituelle plus environ une heure (jamais plus de 8 heures), vous recevez un rappel « vous êtes toujours pointé(e) » en soirée. Un quart resté ouvert un jour précédent donne aussi lieu à un rappel, vous demandant de faire fixer l’heure de départ correcte par votre direction.
-- **Enfants toujours présents.** En même temps, si des enfants dont vous avez enregistré l’arrivée n’ont pas été enregistrés au départ, vous recevez la liste de ces enfants. Enregistrez le départ de chacun à la sortie. S’ils sont partis plus tôt, utilisez **⏱ Corriger** pour consigner l’heure réelle de départ.
-- **Départ pointé automatiquement.** Si vous n’avez toujours pas pointé votre départ, la fermeture automatique de l’agence clôt votre quart ce soir-là. Vous recevez une notification, un push et un courriel à ce sujet, et votre direction et les administrateurs de l’agence en reçoivent une copie.
-
-Si cela se produit **3 fois ou plus en 7 jours**, votre direction et les administrateurs de l’agence sont avisés qu’il s’agit d’une tendance.
-
-Les rappels de dénombrement cessent à la fin de votre quart prévu, ou à l’heure de fermeture du centre si vous n’avez pas d’horaire, de sorte que rester tard n’entraîne pas une série de rappels.
-
-## Questions courantes
-
-**« J’ai oublié de pointer mon arrivée ce matin. »**
-Avisez votre direction dès que vous y pensez — elle peut ajouter ou ajuster le pointage pour que vos heures soient justes.
-
-**« J’ai oublié de pointer mon départ et le quart a continué toute la nuit. »**
-Même chose — informez votre direction et elle corrigera la durée du quart. Ne pointez pas votre départ le lendemain pour le fermer : cela enregistrerait toutes les heures depuis votre arrivée.
-
-**« J’ai reçu un courriel disant que mon départ avait été pointé automatiquement. »**
-Votre agence ferme les quarts dont personne n’a pointé le départ, à une heure fixe chaque soir. L’heure utilisée est une valeur provisoire, pas celle de votre départ réel. Indiquez à votre direction ou à votre administrateur l’heure à laquelle vous êtes réellement parti(e) pour qu’il corrige. Voir **Rappels et départs automatiques** ci-dessus.
-
-**« L’horloge indique que mon arrivée est pointée, mais je suis certain(e) d’avoir pointé mon départ. »**
-Touchez la bande pour vérifier l’état actuel, puis pointez votre départ au besoin. Si elle est vraiment bloquée, actualisez l’application; si cela persiste, avisez votre direction.
-
-**« Pointer mon départ me déconnecte-t-il de l’application? »**
-Non. Pointer son départ met simplement fin à votre quart. Pour quitter complètement l’application, utilisez **Se déconnecter** — faites-le sur une tablette partagée afin que l’éducateur suivant se connecte sous son propre nom.
-
-## Bonnes habitudes
-
-- Pointez votre arrivée dès que vous êtes sur le plancher, et votre départ quand vous partez.
-- Sur une tablette partagée, déconnectez-vous à la fin de votre journée pour que les heures ne soient jamais consignées sous le mauvais nom.
-- Jetez un œil à **Mes heures** à la fin de la semaine pour repérer tôt les pointages manqués.
+[[open: #my-hours | Mes heures (Payroll)]]
+[[open: #today | Aujourd’hui]]
+[[my-hours-and-pay]]
+[[checking-children-in-and-out]]

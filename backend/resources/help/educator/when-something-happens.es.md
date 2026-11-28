@@ -1,81 +1,71 @@
 ---
 title: Cuando algo sucede
-category: Safety
-order: 1
 ---
 
 # Cuando algo sucede — incidentes
 
-Los incidentes son todo lo que se sale de la rutina: golpes y raspones leves, problemas de conducta, cualquier cosa que quiera documentar.
+Un informe de incidente deja constancia de todo lo que sale de la rutina: un golpe o raspón, una enfermedad, una conducta, un error de medicamento o un incidente grave. Usted lo escribe y lo firma en **Incidentes**; su director lo revisa y avisa a la familia. Atienda primero al niño y luego escriba el informe mientras lo tiene fresco.
 
-## Tres categorías
+[[open: #incidents | Abrir incidentes]]
 
-| Gravedad | Ejemplos | Qué hacer |
-|---|---|---|
-| **Leve** | Golpe pequeño, raspón, malestar leve | Registre el incidente, consuele al niño, coméntelo con el padre o la madre a la hora de la recogida |
-| **Moderado** | Moretón visible, caída importante, mordedura | Registre el incidente, avise de inmediato a la dirección, el padre o la madre recibe un mensaje |
-| **Grave** | Lesión en la cabeza, reacción alérgica, cualquier cosa que requiera atención médica | Registre el incidente, llame al 911 si es necesario, avise de inmediato a la dirección, llame al padre o a la madre |
+## Escribir un informe de incidente
 
-## Cómo registrar un incidente
+1. Abra **Incidentes** desde el menú y toque **+ Nuevo informe**.
+2. Elija el **Niño** y complete **When did it happen?**.
+3. Elija el **Tipo**: **General**, **Injury**, **Illness**, **Behavioural**, **Medication error**, **Other**, o el tipo de incidente grave de su provincia.
+4. Elija la **Gravedad**: **Low**, **Medium** o **High**, y agregue la **Ubicación**.
+5. Describa **¿Qué pasó?**: cuándo, dónde, cómo y quién lo vio.
+6. Complete **Action taken** (primeros auxilios, a quién llamó) y **Follow-up required**.
+7. Toque **Guardar y enviar**. En **Sign this incident report**, dibuje su firma y toque **Firmar y enviar**. Aparece el mensaje verde **Submitted for review**.
 
-1. Desde la ficha del niño, toque **Incidente**
-2. Elija la gravedad
-3. Describa lo que pasó — cuándo, dónde, cómo
-4. Indique los primeros auxilios prestados
-5. Anote los testigos (otros educadores, niños)
-6. Envíe
-
-La dirección lo ve de inmediato en su cola de revisión.
+> 💡 ¿No terminó? Toque **Guardar como borrador**. Un borrador es solo suyo; ábralo después desde la lista con **✏️ Open to take action** para terminarlo y firmarlo.
 
 ## Qué escribir
 
-Sea objetivo. Evite culpar. Evite especular.
+Sea objetivo. Evite culpar y suponer.
 
-**Bien:**
+> **Bien:** "A las 10:35, durante el juego al aire libre, la niña tropezó con el borde del arenero y cayó sobre el codo izquierdo. Raspón visible, sin hinchazón. Se limpió con agua y se cubrió. Estuvo molesta unos 3 minutos y luego volvió a jugar. Lo vio Sam (educador)."
 
-> «A las 10:35 a. m., durante el juego al aire libre, Aria tropezó con el borde del arenero y cayó sobre el codo izquierdo. Raspón visible, sin hinchazón. Se limpió con agua y se aplicó un vendaje. Estuvo molesta unos 3 minutos y luego volvió a jugar. Testigo: James (educador).»
-
-**Mal:**
-
-> «Aria se cayó afuera. Ya está bien.»
-
-(Demasiado vago — sin detalles, sin primeros auxilios anotados, sin hora)
+> **Demasiado vago:** "Se cayó afuera. Ya está bien."
 
 ## Cuándo llamar al 911
 
-- Lesión en la cabeza con pérdida del conocimiento, vómitos o pupilas desiguales
+- Un golpe en la cabeza con pérdida del conocimiento, vómitos o pupilas desiguales
 - Dificultad para respirar
-- Reacción alérgica grave (use primero el EpiPen y luego llame)
-- Sospecha de hueso roto
-- Cualquier situación en la que dudaría si fuera su propio hijo — llame
+- Una reacción alérgica grave (use primero el autoinyector de epinefrina y luego llame)
+- Sospecha de un hueso roto
+- Cualquier cosa que le haría dudar si fuera su propio hijo
 
-Después de llamar al 911, avise de inmediato a la dirección y luego llame al padre o a la madre.
+Después de llamar al 911, avise de inmediato a su director y luego a la familia. Escriba el informe en cuanto el niño esté seguro.
 
-## Después del incidente
+## Después de enviarlo
 
-- La dirección revisa cada incidente en su panel
-- En los incidentes moderados y graves, la dirección puede tener que:
-  - Llamar directamente al padre o a la madre
-  - Presentar un informe de incidente grave según la CCEYA (dentro de las 24 horas en incidentes graves)
-  - Realizar una reunión de balance con todo el personal presente
+1. Los directores de su centro y los administradores de la agencia reciben al instante una notificación ("🚨 Incident report — action needed", o "🚨 SERIOUS OCCURRENCE — action needed").
+2. El director lo revisa, puede agregar notas y avisa a la familia. La familia puede confirmar que lo leyó y agregar un comentario.
+3. Usted puede seguir abriendo su informe desde la lista: **📄 Ver informe** abre el informe para imprimir y **📧 Email report** lo envía a la familia, al director o al administrador de la agencia.
 
-## Medicamentos
+## Quién puede hacer qué
 
-Si administra un medicamento a un niño (p. ej., un inhalador para el asma, un EpiPen para una alergia):
+| Rol | Qué puede hacer |
+|---|---|
+| Educador | Escribir, firmar y enviar informes de los niños de sus salones; terminar sus borradores; leer y enviar por correo los informes enviados. |
+| Director de centro / administrador de la agencia | Todo lo anterior, además de revisar, avisar a la familia, cambiar el estado, firmar y cerrar. |
+| Padre o madre | Ve los informes sobre su hijo una vez avisado, confirma que los leyó y agrega comentarios. |
 
-1. Desde la ficha del niño, toque **Registrar medicamento**
-2. Anote: nombre del medicamento, dosis, hora de administración, motivo
-3. Esto crea automáticamente un registro de incidente
+Una vez enviado, el educador que lo escribió ya no puede editar el informe; desde entonces solo un director puede cambiarlo.
 
-Informe siempre a su dirección de cualquier medicamento administrado. La mayoría de los centros exigen un formulario de autorización por escrito archivado antes de administrar cualquier medicamento.
+## Preguntas frecuentes y cuando algo sale mal
 
-## La documentación importa
+??? Dice "Not submitted — the report needs your signature." | Cerró el paso de la firma. Toque **Guardar y enviar** otra vez y firme, o **Guardar como borrador** para terminar después.
+??? La lista Niño está vacía. | Todavía no tiene un salón asignado. Pida a su director que lo asigne.
+??? Dice "Cannot edit a submitted incident. Contact your director." | Una vez enviado, solo un director puede cambiar el informe. Dígale qué hay que corregir.
+??? La lista dice "No incident reports". | No hay informes de los niños que usted ve. Toque **+ Nuevo informe** para escribir uno.
+??? ¿Igual tengo que avisar a mi director en persona? | Sí, para todo lo que sea Medium o High, y siempre para un incidente grave. La notificación es un respaldo, no un reemplazo.
+??? Se dio mal un medicamento. | Elija **Medication error** como tipo y avise a su director de inmediato.
 
-Por qué registramos todo:
+## Pantallas relacionadas
 
-- Lo protege a usted y al centro desde el punto de vista legal
-- Ayuda a identificar patrones (mordeduras recurrentes entre dos niños, eccema persistente, etc.)
-- Genera confianza en los padres mediante la transparencia
-- La CCEYA lo exige para varios tipos de incidentes
-
-Ante la duda, regístrelo. Es más difícil documentar algo con retraso que documentar de más y recortar después.
+[[open: #medications | Medicamentos]]
+[[open: #headcounts | Recuentos]]
+[[giving-medications]]
+[[headcounts]]
