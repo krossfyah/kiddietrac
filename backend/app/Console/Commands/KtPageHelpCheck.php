@@ -45,6 +45,9 @@ class KtPageHelpCheck extends Command
     public const EXTRA = [
         'agency_admin' => [],
         'centre_director' => [],
+        // The phone bottom bar's Message Centre (kt-mobilenav.js) - not in the home visitor's sidebar menu, so the
+        // banner on it had no "?" and nothing here noticed (2026-11-27).
+        'home_visitor' => ['chat'],
     ];
 
     private const LOCALES = ['fr', 'es', 'hi'];

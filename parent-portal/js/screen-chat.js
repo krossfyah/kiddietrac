@@ -231,7 +231,13 @@
       + 'html:not(.kt-tinted) .kt-st-mine .kt-rp-q.kt-rp-dark b{color:#0E7490!important}'
       + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine){background:#134E5E!important;color:#E6FFFB!important;border-color:#134E5E!important}'
       + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine) .kt-rp-q{background:rgba(255,255,255,.12)!important;border-left-color:#7DD3FC!important}'
-      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine) .kt-rp-q b{color:#BAE6FD!important}';
+      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine) .kt-rp-q b{color:#BAE6FD!important}'
+      /* The team thread's "+ Add people" is a header button: 28px tall like the other tight controls, not the 42px
+         page button the global #appMain button rule makes it (2026-11-27). The details button beside it is text. */
+      + ':is(#appMain,body) #kt-st-addppl#kt-st-addppl{height:28px!important;min-height:28px!important;max-height:28px!important;padding:0 10px!important;'
+      + 'display:inline-flex!important;align-items:center!important;gap:4px;line-height:1!important;font-size:12px!important;border-radius:7px!important;box-shadow:none!important}'
+      + ':is(#appMain,body) #kt-st-addppl#kt-st-addppl:hover{background:#F1F5F9!important;border-color:#94A3B8!important}'
+      + ':is(#appMain,body) #kt-st-details#kt-st-details{min-height:0!important;height:auto!important;box-shadow:none!important}';
     document.head.appendChild(st);
   }
 
@@ -2221,7 +2227,7 @@
                     '</button>';
                   })()
                 : '<span style="min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Private with ' + escapeHtml(names || 'a colleague') + '</span>') +
-              '<button id="kt-st-addppl" type="button" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;color:#1F6080;cursor:pointer;white-space:nowrap;">\uFF0B Add people</button>' +
+              '<button id="kt-st-addppl" type="button" data-kt-iconized="1" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:7px;padding:3px 9px;font-size:12px;font-weight:700;color:#1F6080;cursor:pointer;white-space:nowrap;">\uFF0B Add people</button>' +
             '</div>';
           })() +
           /* kt-thread-body: the same class the family thread uses, so the phone rules
