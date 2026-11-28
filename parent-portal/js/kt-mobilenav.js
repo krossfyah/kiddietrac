@@ -21,6 +21,7 @@
      alone. Everything returns the moment the dialog closes. (Anthony, 2026-09-07) */
   var DUCK_CSS = 'body.kt-dialog-open #kt-mobilenav,'
     + 'body.kt-dialog-open #kt-gear,'
+    + 'body.kt-dialog-open #kt-hrq-fab,'
     + 'body.kt-dialog-open #kt-agency-switcher{z-index:500 !important;}'
     // The dial pad's floating 📞 sat ON TOP of every popup (z 9300). Gone while one is open (2026-10-23).
     + 'body.kt-dialog-open #kt-dp-fab{display:none !important;}'
@@ -322,10 +323,16 @@
         '#kt-mnav-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9550;}',
         'body.kt-mnav-open #kt-mnav-scrim{display:block;}',
       '}',
-      '@media(min-width:' + GEARBP + 'px){#kt-gear{display:none !important;}}',
-      'body.kt-mnav-open #kt-gear{display:none;}',
+      /* The HR "+" (#kt-hrq-fab) lives on the gear's row, so it goes wherever the gear goes: every rule that hides the
+         gear hides it too (2026-11-27, Anthony's phone: the "+" stayed over a team chat thread's "+ Add people" after
+         the gear had gone - the gear is hidden here by CSS the moment the thread draws, and kt-hr-quick only looked
+         again on a hash change). */
+      '@media(min-width:' + GEARBP + 'px){#kt-gear,#kt-hrq-fab{display:none !important;}}',
+      'body.kt-mnav-open #kt-gear,body.kt-mnav-open #kt-hrq-fab{display:none;}',
       // Hide the gear while a full-screen chat thread is open (it would float over the header).
-      'body:has(.kt-thread-compose) #kt-gear{display:none !important;}'
+      'body:has(.kt-thread-compose) #kt-gear,body:has(.kt-thread-compose) #kt-hrq-fab{display:none !important;}',
+      // The 📞 docked beside the gear (body.kt-dp-docked) is on that row too: it floated over a parent's chat thread.
+      'body.kt-dp-docked:has(.kt-thread-compose) #kt-dp-fab,body.kt-dp-docked.kt-mnav-open #kt-dp-fab{display:none !important;}'
     ].join('');
     document.head.appendChild(s);
   }

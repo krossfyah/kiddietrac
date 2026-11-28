@@ -31,9 +31,21 @@
       + '.kt-rp-q span{display:block;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}'
       + '.kt-rp-q.kt-rp-dark{background:rgba(255,255,255,.16);border-left-color:#7DD3FC}'
       + '.kt-rp-q.kt-rp-dark b{color:#BAE6FD}'
-      + '.kt-chr-btn{background:none!important;border:0!important;box-shadow:none!important;cursor:pointer;color:rgba(13,27,42,.32)!important;font-size:12px;font-weight:600;line-height:1;padding:0 2px;margin-left:4px;min-height:0;min-width:0;height:auto;border-radius:4px}.kt-chr-btn:hover{color:rgba(13,27,42,.6)!important}'
-      + '@media (hover:hover){.kt-chr-btn{opacity:0;transition:opacity .12s}[data-mid]:hover .kt-chr-btn,.kt-chr-btn:focus-visible{opacity:1}}'
-      + '@media (hover:none){.kt-chr-btn{opacity:.4}}'
+      /* REACT + REPLY, ONE MATCHED PAIR (2026-11-27, Anthony: "the reply to message is barely visible"). The ↩ had
+         been made very quiet that morning (it was a filled green button) and ended up at 32% ink and 40% opacity, a
+         12px glyph beside a bold 15px "+". Now both are the same quiet slate line icon (16px, #64748B, AA against
+         every bubble and the page), never a filled button, with a 28px hit area - 32px on a touch screen - that
+         negative margins keep from making the time row taller. :is(#appMain,body) lifts these over
+         kt-mobile-app.css's "#appMain .kt-msg-react{width:auto!important}" sizing for the old text "+". */
+      + ':is(#appMain,body) .kt-chat-act.kt-chat-act{display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 auto!important;box-sizing:border-box!important;'
+      +   'width:28px!important;height:28px!important;min-width:0!important;min-height:0!important;max-height:none!important;margin:-5px 0 -5px 1px!important;padding:0!important;'
+      +   'border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;color:#64748B!important;opacity:1!important;cursor:pointer;line-height:1!important;font-size:0!important;vertical-align:middle;transition:background .12s,color .12s}'
+      + '.kt-chat-act svg{width:16px;height:16px;display:block;pointer-events:none;overflow:visible}'
+      + ':is(#appMain,body) .kt-chat-act.kt-chat-act:hover,:is(#appMain,body) .kt-chat-act.kt-chat-act:focus-visible{background:rgba(100,116,139,.14)!important;color:#334155!important;outline:none}'
+      + ':is(#appMain,body) .kt-chat-act.kt-chat-act:focus-visible{box-shadow:0 0 0 2px rgba(14,116,144,.45)!important}'
+      + '@media (pointer:coarse),(hover:none){:is(#appMain,body) .kt-chat-act.kt-chat-act{width:32px!important;height:32px!important;margin:-7px 0 -7px 0!important}}'
+      + ':is(html.kt-dark,html[data-theme="dark"]) .kt-chat-act.kt-chat-act{color:#94A3B8!important}'
+      + ':is(html.kt-dark,html[data-theme="dark"]) .kt-chat-act.kt-chat-act:hover{color:#E2E8F0!important;background:rgba(148,163,184,.16)!important}'
       + '.kt-rp-strip{display:flex;align-items:center;gap:8px;padding:7px 10px 0;background:transparent}'
       + '.kt-rp-strip .kt-rp-q{margin:0;flex:1;min-width:0;cursor:default}'
       + '.kt-rp-strip .kt-rp-q span{max-width:none}'
@@ -56,11 +68,24 @@
     return '📎 Attachment';
   }
 
+  var ICON_REPLY = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 16 4 11l5-5"/><path d="M4 11h10a6 6 0 0 1 6 6v1"/></svg>';
+  var ICON_REACT = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  function tipOf(s) { try { return (KT.i18n && KT.i18n.t) ? KT.i18n.t(s) : s; } catch (e) { return s; } }
+
   /* The ↩ control for one bubble. who = the author's first name, text = what the quote will show. */
   function btn(mid, who, text, attachments) {
     css();
-    return '<button type="button" class="kt-chr-btn" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
-      + '" data-rp-text="' + esc(snippetOf(text, attachments)) + '" title="Reply" aria-label="Reply to this message">↩</button>';
+    var tip = tipOf('Reply');
+    return '<button type="button" class="kt-chr-btn kt-chat-act" data-kt-iconized="1" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
+      + '" data-rp-text="' + esc(snippetOf(text, attachments)) + '" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + ICON_REPLY + '</button>';
+  }
+  /* Its partner, the "+" that offers a reaction. cls = the renderer's own hook (kt-msg-react / kt-st-react),
+     which its click handler already looks for. */
+  function reactBtn(mid, cls) {
+    css();
+    var tip = tipOf('React');
+    return '<button type="button" class="' + esc(cls || 'kt-msg-react') + ' kt-chat-act" data-kt-iconized="1" data-react-mid="' + esc(mid)
+      + '" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + ICON_REACT + '</button>';
   }
 
   /* The quote above a reply. m.reply_to = { id, author_first_name, snippet, deleted } from the server. */
@@ -164,6 +189,7 @@
 
   KT.chatReply = {
     btn: btn,
+    reactBtn: reactBtn,
     quote: quote,
     wire: wire,
     snippet: snippetOf,

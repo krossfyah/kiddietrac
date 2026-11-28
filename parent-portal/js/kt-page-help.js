@@ -106,7 +106,23 @@
       + 'html.kt-dark .kt-pghelp:hover{background:#0E7490;color:#fff;}'
       // The phone banner hides everything but its title; the "?" stays (top-right, which is mid-height on the one-line phone banner).
       + '#appMain :is(.kt-hero,.kt-page-hero,.page-header-v17,[data-kt-brief-banner],[data-kt-page-banner]) > .kt-pghelp{display:inline-flex!important;visibility:visible!important;opacity:1!important;}'
-      + '@media (max-width:600px){#appMain .kt-pghelp{top:7px;right:10px;width:28px;height:28px;min-width:28px;font-size:14px;}}'
+      /* PHONES: ONE PLACE ON EVERY BANNER (2026-11-27, Anthony's HR dashboard screenshot: "look at where the ? is
+         positioned - full sweep in mobile"). It sat at a fixed 7px from the top, so it was mid-height only on the
+         one-line banner, high on a taller one (the home greeting), and always ON the floating banner art, which
+         phones draw at right:12px (kt-mobile-app.css / kt-consistency-polish.css). Now it is the same 28px circle,
+         10px in from the right and centred top-to-bottom on every one-line banner (nearly all of them on a phone);
+         on a taller banner (the educator's Today card, a greeting) it sits level with the title instead of in the
+         middle of the content (data-kt-pghelp-tall, set by place()). The art steps left of it and the words keep
+         clear of it. A global 32px min-height on role=button made it an oval, hence the !important size. */
+      + '@media (max-width:768px){'
+      +   '#appMain .kt-pghelp{top:50%!important;right:10px!important;bottom:auto!important;left:auto!important;margin:0!important;transform:translateY(-50%)!important;'
+      +     'width:28px!important;height:28px!important;min-width:28px!important;min-height:0!important;max-height:28px!important;font-size:14px!important;}'
+      +   '#appMain .kt-pghelp[data-kt-pghelp-tall]{top:12px!important;transform:none!important;}'
+      +   '#appMain :is(.kt-hero,.kt-page-hero,.page-header-v17,[data-kt-brief-banner],[data-kt-page-banner]):has(> .kt-pghelp:not([data-kt-pghelp-tall])){padding-right:48px!important;}'
+      +   '#appMain :is(.kt-hero,.kt-page-hero,.page-header-v17,[data-kt-brief-banner],[data-kt-page-banner]):has(> .kt-pghelp[data-kt-pghelp-tall]) :is(h1,h2),'
+      +   '#appMain :is(.kt-hero,.kt-page-hero,.page-header-v17,[data-kt-brief-banner],[data-kt-page-banner]):has(> .kt-pghelp[data-kt-pghelp-tall]) > div:first-of-type{padding-right:34px!important;box-sizing:border-box;}'
+      +   '#appMain :is(.kt-hero,.kt-page-hero,.page-header-v17,[data-kt-brief-banner],[data-kt-page-banner]):has(> .kt-pghelp) :is(.kt-hero-emoji,.kt-banner-art){right:46px!important;}'
+      + '}'
       + '@media print{.kt-pghelp{display:none!important;}}';
     (document.head || document.documentElement).appendChild(s);
   }
@@ -162,9 +178,15 @@
     for (var i = 0; i < mine.length; i++) {
       if (!hero || mine[i].parentNode !== hero || mine[i].getAttribute('data-kt-pghelp') !== e.key) mine[i].remove();
     }
-    if (!hero || hero.querySelector(':scope > .kt-pghelp')) return;
-    if (getComputedStyle(hero).position === 'static') hero.style.position = 'relative';
-    hero.appendChild(makeBtn(e.key));
+    if (!hero) return;
+    var b = hero.querySelector(':scope > .kt-pghelp');
+    if (!b) {
+      if (getComputedStyle(hero).position === 'static') hero.style.position = 'relative';
+      b = hero.appendChild(makeBtn(e.key));
+    }
+    // A banner taller than one row: level with the title, not in the middle of the content (phone CSS above).
+    var tall = hero.offsetHeight > 72;
+    if (tall !== b.hasAttribute('data-kt-pghelp-tall')) { if (tall) b.setAttribute('data-kt-pghelp-tall', '1'); else b.removeAttribute('data-kt-pghelp-tall'); }
   }
   function queue() {
     if (queued) return;

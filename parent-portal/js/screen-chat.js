@@ -216,6 +216,25 @@
      then simply draws and sends what it always did. */
   function RP() { return (window.KT && KT.chatReply) || null; }
 
+  /* YOUR OWN MESSAGES ARE A SOFT TEAL (2026-11-27, Anthony: "lighten up the darker teal colour for the chat"). The
+     colleague thread drew your bubbles in the dark navy-teal #1F6080 with white text; it now matches the family
+     thread's #DCF1F4 with dark ink (15:1). A white-label agency keeps its own look: its bubble stays the brand colour
+     that branding-loader paints over the inline #1F6080 (html.kt-tinted is set only for a white-label brand), so
+     only plain KiddieTrac gets the light bubble. Dark mode gets a deep teal with light ink (9:1). */
+  function ensureBubbleCss() {
+    if (document.getElementById('kt-chat-bubble-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-chat-bubble-css';
+    st.textContent =
+      'html:not(.kt-tinted) .kt-st-mine{background:#DCF1F4!important;color:#0D1B2A!important;border-color:#C9E7EC!important}'
+      + 'html:not(.kt-tinted) .kt-st-mine .kt-rp-q.kt-rp-dark{background:rgba(15,23,42,.06)!important;border-left-color:#159FB4!important}'
+      + 'html:not(.kt-tinted) .kt-st-mine .kt-rp-q.kt-rp-dark b{color:#0E7490!important}'
+      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine){background:#134E5E!important;color:#E6FFFB!important;border-color:#134E5E!important}'
+      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine) .kt-rp-q{background:rgba(255,255,255,.12)!important;border-left-color:#7DD3FC!important}'
+      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) :is(.kt-st-mine,.kt-msg-mine) .kt-rp-q b{color:#BAE6FD!important}';
+    document.head.appendChild(st);
+  }
+
   /* Ask the server who this reaches, then send. Two steps on purpose: the count
      comes back from the same resolver that will do the sending, so the number on the
      button is the number that gets the message — not a guess made in the browser. */
@@ -2017,6 +2036,7 @@
     }
     function bubbleBase(m) {
       var mine = !!m.mine;
+      ensureBubbleCss();
       // Their photo beside their bubble, matching the family thread. Own messages get
       // none — you know who you are.
       /* "Emily added Olivia" is the conversation reporting what happened, not somebody
@@ -2048,7 +2068,8 @@
           : ' <span title="Sent — not read yet" style="opacity:.85;">✓</span>';
       }
       // '+' and inline chips - same reasoning as the family bubble.
-      var rBtn = '<button type="button" class="kt-st-react" data-react-mid="' + m.id + '" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">\uFF0B</button>';
+      var rBtn = (RP() && RP().reactBtn) ? RP().reactBtn(m.id, 'kt-st-react')
+        : '<button type="button" class="kt-st-react" data-react-mid="' + m.id + '" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:#94A3B8;font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">\uFF0B</button>';
       var rHtml = '<span class="kt-st-reactions" style="display:contents;">'
         + ((m.reactions && m.reactions.length)
             ? m.reactions.map(function (rx) { return staffChip(m.id, rx); }).join('') : '')
@@ -2061,7 +2082,7 @@
         pic +
         '<div style="max-width:78%;">' +
           (mine ? '' : '<div style="font-size:11px;color:#64748B;font-weight:700;margin:0 0 3px 4px;">' + escapeHtml(m.sender || '') + '</div>') +
-          '<div data-kt-rp-bubble="1"' + (emo ? ' class="kt-emo-bubble"' : '') + ' style="background:' + (mine ? '#1F6080' : '#FFFFFF') + ';color:' + (mine ? '#FFFFFF' : '#0D1B2A') + ';' +
+          '<div data-kt-rp-bubble="1"' + (emo ? ' class="kt-emo-bubble"' : (mine ? ' class="kt-st-mine"' : '')) + ' style="background:' + (mine ? '#1F6080' : '#FFFFFF') + ';color:' + (mine ? '#FFFFFF' : '#0D1B2A') + ';' +
             'border:1px solid ' + (mine ? '#1F6080' : '#E7EBF0') + ';border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;">' +
             quote +
             (emo ? '<span class="kt-emo-big">' + escapeHtml(String(m.body).trim()) + '</span>' : escapeHtml(m.body || '')) +
@@ -3559,7 +3580,8 @@
        the control does - it OFFERS a choice. A plus is the universal "add one of
        these", and it stops the button competing with the reactions beside it, which
        are themselves emoji. (Anthony, 2026-09-09) */
-    const reactBtn = `<button type="button" class="kt-msg-react" data-react-mid="${m.id}" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.45);font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">＋</button>`;
+    const reactBtn = (RP() && RP().reactBtn) ? RP().reactBtn(m.id, 'kt-msg-react')
+      : `<button type="button" class="kt-msg-react" data-react-mid="${m.id}" title="Add a reaction" aria-label="Add a reaction" style="background:none;border:none;cursor:pointer;color:rgba(13,27,42,.45);font-size:15px;font-weight:700;line-height:1;padding:0 2px;margin-left:6px;">＋</button>`;
     /* Reactions live IN the meta row, beside the time - not in a block of their own
        underneath. A separate row cost a whole line of height per reacted message and
        read as a reply to the bubble rather than a mark ON it. Inline, a reaction
@@ -3576,7 +3598,7 @@
     return `
       <div data-mid="${m.id}" style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};gap:8px;align-items:flex-end;">
         ${avatar}
-        <div data-kt-rp-bubble="1"${emo ? ' class="kt-emo-bubble"' : ''} style="max-width:78%;padding:10px 13px;border-radius:16px;background:${mine ? '#DCF1F4' : '#EFEAFB'};color:${mine ? '#0D1B2A' : '#1E1B34'};${mine ? 'border-bottom-right-radius:5px;' : 'border-bottom-left-radius:5px;'}">
+        <div data-kt-rp-bubble="1"${emo ? ' class="kt-emo-bubble"' : (mine ? ' class="kt-msg-mine"' : '')} style="max-width:78%;padding:10px 13px;border-radius:16px;background:${mine ? '#DCF1F4' : '#EFEAFB'};color:${mine ? '#0D1B2A' : '#1E1B34'};${mine ? 'border-bottom-right-radius:5px;' : 'border-bottom-left-radius:5px;'}">
           ${!mine ? `<div style="font-size:11px;font-weight:800;color:${col};margin-bottom:2px;">${escapeHtml(m.sender_name)}</div>` : ''}
           ${quote}
           ${attachmentsHtml}

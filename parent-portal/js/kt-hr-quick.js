@@ -139,7 +139,10 @@
   var PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5" fill="rgba(14,116,144,.12)"/><path d="M12 8v8M8 12h8"/></svg>';
   function syncFab() {
     var gear = document.getElementById('kt-gear'), f = document.getElementById('kt-hrq-fab');
-    var want = !!gear && window.getComputedStyle(gear).display !== 'none' && items().length > 0;
+    /* The gear's presence, not its visibility: whenever the gear is hidden (a full-screen chat thread, the menu, a
+       wider screen) kt-mobilenav's gear rules hide this button too, at once and in CSS. Checking the gear's computed
+       display here only ran on a hash change, so a thread opened with a tap kept the "+" over its own header. */
+    var want = !!gear && items().length > 0;
     if (!want) { if (f) { f.remove(); if (KT.mnavPlace) KT.mnavPlace(); } return; }
     if (f) return;
     css();

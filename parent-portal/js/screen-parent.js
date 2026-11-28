@@ -4500,7 +4500,15 @@
           // Any non-deleted message can be reacted to — including the OTHER
           // person's (previously you could only act on your own messages).
           if (!m.deleted && !m.is_system) {
-            const reactBtn = Dom.el('button', { type: 'button', title: 'React', style: 'background:none;border:none;color:inherit;opacity:.7;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;' }, '☺');
+            /* The same quiet "+" every other chat thread uses (kt-chat-reply.js reactBtn, 2026-11-27): the faint ☺ at
+               70% was hard to see and read as "send a smiley". */
+            let reactBtn = null;
+            if (window.KT && KT.chatReply && KT.chatReply.reactBtn) {
+              const tpl = document.createElement('template');
+              tpl.innerHTML = KT.chatReply.reactBtn(m.id, 'kt-pm-react');
+              reactBtn = tpl.content.firstElementChild;
+            }
+            if (!reactBtn) reactBtn = Dom.el('button', { type: 'button', title: 'React', style: 'background:none;border:none;color:inherit;opacity:.7;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;' }, '☺');
             reactBtn.addEventListener('click', (ev) => { ev.stopPropagation(); showReactPicker(reactBtn, m); });
             foot.appendChild(reactBtn);
           }
