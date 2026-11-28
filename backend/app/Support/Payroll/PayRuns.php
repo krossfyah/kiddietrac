@@ -78,6 +78,12 @@ final class PayRuns
             $t['qpip'] += (float) $op->qpip;
             $t['income_tax'] += (float) $op->income_tax;
             $t['bonus'] += (float) $op->bonus;
+            /* NET (2026-11-27): the opening row has no net column, so its take-home pay was never counted and a payslip's
+               year-to-date net came out lower than gross less deductions (Starlight demo: short by exactly the opening's
+               $7,748.21). Net only feeds payslips and screens, never CPP/EI/tax or T4 boxes. 'opening_net' marks year-to-date
+               figures that include it, so payslips frozen before this fix can be corrected when they are drawn. */
+            $t['net'] += self::openingNet($op);
+            $src['opening_net'] = true;
         }
         $lines = DB::table('payroll_run_lines as l')->join('payroll_runs as r', 'r.id', '=', 'l.run_id')
             ->where('r.agency_id', $agencyId)->where('l.user_id', $userId)->where('r.status', 'finalized')->where('l.included', 1)
@@ -119,6 +125,31 @@ final class PayRuns
         $t['sources'] = $src;
 
         return $t;
+    }
+
+    /** Take-home pay inside an opening balance: gross less the deductions it records (it records no other deductions). */
+    public static function openingNet(object $op): float
+    {
+        return round((float) $op->gross - (float) $op->cpp - (float) $op->cpp2 - (float) $op->ei - (float) $op->qpip - (float) $op->income_tax, 2);
+    }
+
+    /**
+     * A finalized payslip's year-to-date net. Breakdowns frozen before 2026-11-27 left the opening balance's net out
+     * (ytd_sources.opening without opening_net); add it back when drawing. Nothing stored is edited.
+     */
+    public static function ytdNetOf(object $doc, array $b): float
+    {
+        $net = (float) ($b['ytd']['net'] ?? 0);
+        $src = $b['ytd_sources'] ?? [];
+        if (! empty($src['opening']) && empty($src['opening_net'])) {
+            $year = (int) substr((string) ($b['run']['pay_date'] ?? $doc->period_end), 0, 4);
+            $op = self::opening((int) $doc->agency_id, (int) $doc->user_id, $year);
+            if ($op) {
+                $net += self::openingNet($op);
+            }
+        }
+
+        return round($net, 2);
     }
 
     private static function ytdHash(array $y): string

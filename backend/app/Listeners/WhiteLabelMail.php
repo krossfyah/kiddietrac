@@ -27,6 +27,16 @@ final class WhiteLabelMail
     {
         try {
             $msg = $event->message;
+            /* A REVIEW COPY FOR THE PLATFORM OWNER (2026-11-27): a [TEST] / X-KT-Preview message that goes ONLY to
+               TestAgency::PREVIEW_INBOXES and asks with X-KT-Keep-Brand-Words keeps its words exactly as written. Test
+               sends must go through a test agency (6), which is white-label, and "[TEST] KiddieTrac payslip sample"
+               arrived as "[TEST] Little Steps payslip sample". Nobody at a tenant ever receives such a message. */
+            if ($msg->getHeaders()->has('X-KT-Keep-Brand-Words')) {
+                $to = array_map(fn ($a) => $a->getAddress(), array_merge($msg->getTo(), $msg->getCc(), $msg->getBcc()));
+                if (\App\Support\TestAgency::previewOnly($to, (string) $msg->getSubject(), $msg->getHeaders()->has('X-KT-Preview'))) {
+                    return;
+                }
+            }
             $agency = self::agencyFor($msg);
             if (! $agency || ! Brand::whiteLabel($agency)) {
                 return;

@@ -67,7 +67,7 @@ final class Payslip
             'earnings' => $earn, 'gross' => (float) ($t['gross'] ?? $doc->gross), 'deductions' => $ded,
             'total_deductions' => round(array_sum(array_column($ded, 'amount')), 2), 'reimbursements' => (float) ($t['reimbursements'] ?? 0),
             'benefits_noncash' => (float) ($t['benefits_noncash'] ?? 0), 'net' => (float) $doc->net,
-            'ytd' => ['gross' => (float) ($y['gross'] ?? 0), 'net' => (float) ($y['net'] ?? 0), 'vacation_pay' => (float) ($y['vacation_pay'] ?? 0),
+            'ytd' => ['gross' => (float) ($y['gross'] ?? 0), 'net' => PayRuns::ytdNetOf($doc, $b), 'vacation_pay' => (float) ($y['vacation_pay'] ?? 0),
                 'income_tax' => (float) ($y['income_tax'] ?? 0)],
             'ytd_sources' => $b['ytd_sources'] ?? null, 'employer' => $er, 'employer_total' => round(array_sum(array_column($er, 'amount')), 2),
             'table_version' => $b['table_version'] ?? null, 'status' => $doc->status];

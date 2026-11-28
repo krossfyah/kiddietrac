@@ -98,11 +98,32 @@ final class PayslipPdf
         return isset(self::WORDS[$l]) ? $l : 'en';
     }
 
-    /** Hindi needs a Devanagari font Dompdf can use; without one its words would print as boxes, so English is used. */
-    private static function devanagariFont(): ?string
+    /** Leave units, singular or plural, in the reader's language: 1 day, 0.5 day, 2 days. */
+    private const UNITS = [
+        'en' => ['days' => ['day', 'days'], 'hours' => ['hour', 'hours']],
+        'fr' => ['days' => ['jour', 'jours'], 'hours' => ['heure', 'heures']],
+        'es' => ['days' => ['día', 'días'], 'hours' => ['hora', 'horas']],
+        'hi' => ['days' => ['दिन', 'दिन'], 'hours' => ['घंटा', 'घंटे']],
+    ];
+
+    public static function unit(string $unit, float $n, string $lang = 'en'): string
     {
-        foreach (glob(storage_path('fonts/NotoSansDevanagari*.ttf')) ?: [] as $f) {
-            return $f;
+        $u = self::UNITS[$lang][$unit === 'hours' ? 'hours' : 'days'] ?? self::UNITS['en'][$unit === 'hours' ? 'hours' : 'days'];
+        // French uses the singular below 2 (0.5 jour, 1 jour); the others only for exactly 1.
+        $one = $lang === 'fr' ? abs($n) < 2 : abs(abs($n) - 1.0) < 0.0001;
+
+        return $one ? $u[0] : $u[1];
+    }
+
+    /** Hindi needs a Devanagari font Dompdf can use: Noto Sans Devanagari (SIL OFL 1.1, notofonts/devanagari), in
+     *  storage/fonts on the server, or the copy kept in the repo at resources/fonts (storage is a shared symlink outside
+     *  git). Without either, its words would print as boxes, so English is used. */
+    private static function devanagariFont(string $weight = 'Regular'): ?string
+    {
+        foreach ([storage_path('fonts'), resource_path('fonts')] as $dir) {
+            if (is_file($f = $dir . '/NotoSansDevanagari-' . $weight . '.ttf')) {
+                return $f;
+            }
         }
 
         return null;
@@ -281,7 +302,7 @@ final class PayslipPdf
 
         // Deductions: CPP/EI/QPIP year to date come frozen on the payslip; the tax split from the engine lines.
         $lineIds = DB::table('payroll_run_lines')->whereIn('payroll_document_id', $docs->pluck('id')->all() ?: [0]);
-        $sum = (clone $lineIds)->selectRaw('SUM(federal_tax) f, SUM(provincial_tax) p, SUM(other_deduction) o')->first();
+        $sum = (clone $lineIds)->selectRaw('SUM(federal_tax) f, SUM(provincial_tax) p, SUM(other_deduction) o, SUM(benefits_noncash) nc, SUM(reimbursements) rb')->first();
         $qc = ($b['jurisdiction'] ?? '') === 'QC';
         $plan = $qc ? 'QPP' : 'CPP';
         $ded = [];
@@ -317,11 +338,21 @@ final class PayslipPdf
         $totalDedCur = round(array_sum(array_column($ded, 'current')), 2);
         $totalDedYtd = round(array_sum(array_map(fn ($d) => (float) $d['ytd'], $ded)), 2);
         $after = [];
-        if ($v['benefits_noncash'] > 0) {
-            $after[] = ['label' => 'Less non-cash benefit (taxed, not paid in cash)', 'amount' => -$v['benefits_noncash']];
+        $ncY = round((float) ($sum->nc ?? 0), 2);
+        $rbY = round((float) ($sum->rb ?? 0), 2);
+        if ($v['benefits_noncash'] > 0 || $ncY > 0) {
+            $after[] = ['label' => 'Less non-cash benefit (taxed, not paid in cash)', 'amount' => -$v['benefits_noncash'], 'ytd' => -$ncY];
         }
-        if ($v['reimbursements'] > 0) {
-            $after[] = ['label' => 'Plus reimbursements (not taxable)', 'amount' => $v['reimbursements']];
+        if ($v['reimbursements'] > 0 || $rbY > 0) {
+            $after[] = ['label' => 'Plus reimbursements (not taxable)', 'amount' => $v['reimbursements'], 'ytd' => $rbY];
+        }
+        /* YEAR-TO-DATE NET = the year-to-date column above it (gross - total deductions -/+ the lines after), so the payslip
+           always adds up. Checked against the stored figure (PayRuns::ytdNetOf: frozen breakdowns from before 2026-11-27
+           left the opening balance's net out); a difference is logged, never hidden. */
+        $ytdNet = round($ytdGross - $totalDedYtd - $ncY + $rbY, 2);
+        $stored = PayRuns::ytdNetOf($doc, $b);
+        if (abs($stored - $ytdNet) >= 0.02) {
+            \Illuminate\Support\Facades\Log::warning('[payslip] year-to-date net does not match the stored figure', ['doc' => $doc->id, 'drawn' => $ytdNet, 'stored' => $stored]);
         }
 
         return self::base($doc, $plain) + [
@@ -335,7 +366,7 @@ final class PayslipPdf
             'deductions' => $ded,
             'deductions_total' => ['current' => $totalDedCur, 'ytd' => $totalDedYtd],
             'after' => $after,
-            'net' => ['current' => (float) $v['net'], 'ytd' => (float) ($y['net'] ?? 0)],
+            'net' => ['current' => (float) $v['net'], 'ytd' => $ytdNet],
             'employer_contrib' => array_map(fn ($e) => ['label' => $e['label'], 'current' => $e['amount'], 'ytd' => $e['ytd']], $v['employer']),
             'remarks' => $remarks,
             'basis' => 'Deductions worked out with the CRA payroll deductions formulas' . ($qc ? ' and Revenu Québec TP-1015.F' : '') . ' (tables ' . ($v['table_version'] ?? '') . ').',
@@ -564,7 +595,7 @@ final class PayslipPdf
             }
             $dr .= '<tr class="tot"><td>Total deductions</td><td class="r">' . $m($v['deductions_total']['current']) . '</td><td class="r">' . $m($v['deductions_total']['ytd']) . '</td></tr>';
             foreach ($v['after'] as $x) {
-                $dr .= '<tr><td>' . e($x['label']) . '</td><td class="r">' . $m($x['amount']) . '</td><td></td></tr>';
+                $dr .= '<tr><td>' . e($x['label']) . '</td><td class="r">' . $m($x['amount']) . '</td><td class="r">' . (isset($x['ytd']) ? $m($x['ytd']) : '') . '</td></tr>';
             }
             $dr .= '<tr class="net"><td>Net pay</td><td class="r" style="color:' . self::darken($c) . ';">' . $m($v['net']['current']) . '</td><td class="r">' . $m($v['net']['ytd']) . '</td></tr>';
             $deductions = '<div class="sec" style="color:' . self::darken($c) . ';">Deductions</div><table class="grid" style="border-top-color:' . $c . ';"><thead><tr><th>Description</th><th class="r" style="width:22%;">This pay</th><th class="r" style="width:22%;">Year to date</th></tr></thead><tbody>' . $dr . '</tbody></table>';
@@ -583,7 +614,7 @@ final class PayslipPdf
         if ($v['leave']) {
             $x = '';
             foreach ($v['leave'] as $r) {
-                $x .= '<tr><td' . $nt . '>' . e($r['name']) . '</td><td class="r">' . $h($r['balance']) . ' ' . e($r['unit']) . '</td></tr>';
+                $x .= '<tr><td' . $nt . '>' . e($r['name']) . '</td><td class="r"' . $nt . '>' . $h($r['balance']) . ' ' . e(self::unit($r['unit'], (float) $r['balance'], $lang)) . '</td></tr>';
             }
             $side .= '<td class="half"><div class="sec2">Leave balances <span class="muted">(as of ' . e(self::day(\App\Support\AgencyTime::today((int) $a['agency_id']))) . ')</span></div>'
                 . '<table class="grid sm"><thead><tr><th>Type</th><th class="r">Balance</th></tr></thead><tbody>' . $x . '</tbody></table></td>';
@@ -606,7 +637,10 @@ final class PayslipPdf
         $wm = '<div class="wm"' . $nt . '>' . e($w['wm']) . '</div>';
 
         $font = $lang === 'hi' ? "'Noto Sans Devanagari', 'DejaVu Sans'" : "'DejaVu Sans'";
-        $fontFace = $lang === 'hi' && ($f = self::devanagariFont()) ? "@font-face{font-family:'Noto Sans Devanagari';src:url('" . $f . "') format('truetype');}" : '';
+        $fontFace = $lang === 'hi' && ($f = self::devanagariFont())
+            ? "@font-face{font-family:'Noto Sans Devanagari';font-weight:normal;src:url('" . $f . "') format('truetype');}"
+                . "@font-face{font-family:'Noto Sans Devanagari';font-weight:bold;src:url('" . (self::devanagariFont('Bold') ?: $f) . "') format('truetype');}"
+            : '';
 
         return '<html><head><meta charset="utf-8"><style>' . $fontFace
             . '@page{margin:34px 36px 58px 36px;}'
@@ -635,7 +669,7 @@ final class PayslipPdf
             . '.two{width:100%;border-collapse:collapse;margin-top:9px;}.two td.half{vertical-align:top;width:50%;padding:0 6px 0 0;}'
             . '.note{border:1px solid #FDE68A;background:#FFFBEB;color:#92400E;border-radius:7px;padding:7px 9px;font-size:9px;}'
             . '.remarks{border-top:1px solid #CBD5E1;}.rl{padding:2.5px 0;border-bottom:1px solid #E2E8F0;}'
-            . '.terms{margin-top:9px;border:1px solid #E2E8F0;border-radius:8px;padding:7px 10px;background:#F8FAFC;font-size:7.6px;color:#334155;}'
+            . '.terms{page-break-inside:avoid;margin-top:9px;border:1px solid #E2E8F0;border-radius:8px;padding:7px 10px;background:#F8FAFC;font-size:7.6px;color:#334155;}'
             . '.terms .th{font-weight:bold;font-size:8px;text-transform:uppercase;letter-spacing:.6px;color:#64748B;margin-bottom:2px;}'
             . '.terms ol{margin:0 0 0 14px;padding:0;}.terms li{margin:0 0 1px;}'
             . '.nn{margin-top:5px;text-align:center;font-weight:bold;letter-spacing:1.2px;color:#991B1B;font-size:8.6px;}'
@@ -645,10 +679,24 @@ final class PayslipPdf
             . '<div class="card"><table class="cols"><tr><td class="c" style="width:36%;">' . $col1 . '</td><td class="c" style="width:34%;">' . $col2 . '</td>'
             . '<td class="c" style="width:30%;padding-right:0;">' . $col3 . '</td></tr></table></div>'
             . $earnings . $deductions . $side . $remarks . $termsHtml . $wm
+            // Devanagari: letter spacing pulls vowel signs off their letters.
+            . ($lang === 'hi' ? '<style>.wm,.nn,.ch,.th,.netbox .nk,table.grid th{letter-spacing:0 !important;}body{line-height:1.1;}table.grid td,table.kv td,.mini td{padding-top:1px;padding-bottom:1px;}.band{padding-top:16px;padding-bottom:50px;}</style>' : '')
             . '</body></html>';
     }
 
     /** PDF bytes (page x of y comes from the footer's CSS counters). */
+    /**
+     * Dompdf lays glyphs out in typing order and does no Indic shaping, so the short-i sign (U+093F), typed after its
+     * consonant cluster but written before it, would print after the letter. Moving it in front of the cluster gives the
+     * written order. Half forms still show as letter + virama; the text reads correctly.
+     */
+    public static function devanagariOrder(string $s): string
+    {
+        $c = '[\x{0915}-\x{0939}\x{0958}-\x{095F}]\x{093C}?';
+
+        return preg_replace('/((?:' . $c . '\x{094D})*' . $c . ')\x{093F}/u', "\u{093F}$1", $s) ?? $s;
+    }
+
     public static function render(array $v, ?string $loc = null): string
     {
         $loc = $loc ?? MessageTranslator::pdfLocale();
@@ -656,16 +704,18 @@ final class PayslipPdf
         if ($lang === 'hi' && ! self::devanagariFont()) {
             $lang = 'en';
         }
-        $pdf = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans', 'chroot' => [storage_path('fonts'), base_path('vendor/dompdf/dompdf')]]);
-        $pdf->loadHtml(self::html($v, $loc));
+        $pdf = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans', 'chroot' => [storage_path('fonts'), resource_path('fonts'), base_path('vendor/dompdf/dompdf')]]);
+        $html = self::html($v, $loc);
+        $pdf->loadHtml($lang === 'hi' ? self::devanagariOrder($html) : $html);
         $pdf->setPaper('letter');
         $pdf->render();
         // Page x of y on every page. Drawn last, so the watermark's transparency is reset first.
-        $label = self::WORDS[$lang]['page'];
-        $pdf->getCanvas()->page_script(function ($num, $count, $canvas, $fm) use ($label) {
+        $label = $lang === 'hi' ? self::devanagariOrder(self::WORDS[$lang]['page']) : self::WORDS[$lang]['page'];
+        $family = $lang === 'hi' ? 'Noto Sans Devanagari' : 'DejaVu Sans';
+        $pdf->getCanvas()->page_script(function ($num, $count, $canvas, $fm) use ($label, $family) {
             $canvas->set_opacity(1.0);
             $t = str_replace(['{PAGE_NUM}', '{PAGE_COUNT}'], [(string) $num, (string) $count], $label);
-            $font = $fm->getFont('DejaVu Sans');
+            $font = $fm->getFont($family) ?: $fm->getFont('DejaVu Sans');
             $canvas->text($canvas->get_width() - 36 - $fm->getTextWidth($t, $font, 7.2), $canvas->get_height() - 29, $t, $font, 7.2, [0.39, 0.45, 0.55]);
         });
 
