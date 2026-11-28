@@ -4,6 +4,14 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "📈",
+            "title": "NPS survey setting moved to Settings",
+            "body": "Turn the NPS survey on or off, and choose how often and who it asks, in Settings › Agency notifications › NPS survey. The NPS screen keeps the results and Send now, with a Survey settings link.",
+            "roles": ["agency_admin", "platform_admin"]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔒",
             "title": "Files stay with their own centre",
             "body": "A record can now only point to files that belong to your own agency. If you paste a link to a file from somewhere else, you will be asked to upload it again here. Walk Watch route maps in emails now use a private link that lasts 30 days.",

@@ -573,7 +573,10 @@
 
   // v22p1.1: inject for both centre_director AND agency_admin (same sidebar layout)
   function isStaffWithSidebar() {
-    var u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+    /* A stored kt_user that is not JSON (ticket #353, 2026-11-28) threw here at boot and filed a crash report.
+       Unreadable = no quick actions injected. */
+    var u = null;
+    try { u = JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return false; }
     return u && (u.primary_role === 'centre_director' || u.primary_role === 'agency_admin');
   }
 

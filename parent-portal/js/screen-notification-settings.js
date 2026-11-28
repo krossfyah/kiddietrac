@@ -78,8 +78,46 @@
       { key: 'certs', label: '🎓 Staff certifications', paint: section(paintCerts) },
       // 📻 The walkie's agency settings moved here from its screen (2026-11-27, Anthony: "move the settings ... to the settings section").
       { key: 'walkie', label: '📻 Walkie-talkie', paint: function (pane) { return KT.walkie && KT.walkie.agencyPane ? KT.walkie.agencyPane(pane) : (pane.innerHTML = '<div class="kt-card">Loading…</div>'); } },
+      // 📈 The NPS survey setting moved here from the NPS screen (2026-11-28, Anthony: "survey setting in NPS should be put into the settings section").
+      { key: 'nps', label: '📈 NPS survey', paint: section(paintNps) },
       // Sleep checks moved to Settings → Room Controls → Sleep checks (2026-10-15).
     ]);
+  }
+
+  /* ── NPS survey: automatic rounds on/off, how often, families/staff (2026-11-28). App\Support\NpsSurvey holds the
+     rules; agency admins and super admins only (the API refuses directors). Send now and the results stay on
+     Engagement › NPS. ── */
+  async function paintNps(body) {
+    var res;
+    try { res = await Api.get('/engagement/nps?settings_only=1'); }
+    catch (e) {
+      if (e && e.status === 400) {
+        body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Choose an agency in the agency switcher at the top to change its NPS survey.</div>';
+      }
+      return;
+    }
+    var s = res.settings || {};
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📈 NPS survey — ask families and staff how likely they are to recommend you</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Each person gets an email and an app notice with one question, '
+      + '0 to 10, and an optional comment. No sign-in is needed. A low score (0-6) tells the centre\'s managers. Results, and Send now for one '
+      + 'round straight away, are on Engagement › NPS.</div>'
+      + row('Send the survey automatically', s.enabled && s.next_due ? 'Next round: ' + esc(String(s.next_due).slice(0, 10)) + '.' : 'Off: no automatic rounds. You can still send one from the NPS screen.', toggle('nps-on', s.enabled))
+      + row('How often', 'Each round asks everyone who is ticked below.', sel('nps-every', [[3, 'Every 3 months'], [6, 'Every 6 months'], [12, 'Every 12 months']], s.every_months || 6))
+      + row('Families', 'Parents of active families.', toggle('nps-fam', s.families))
+      + row('Staff', 'Staff of this agency.', toggle('nps-staff', s.staff))
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap;"><button id="nps-save" class="kt-btn kt-btn-primary">Save</button>'
+      + '<a href="#nps" style="font-size:13px;font-weight:600;">📈 Open NPS results</a><span id="nps-msg" style="font-size:13px;"></span></div></div>';
+    body.querySelector('#nps-save').addEventListener('click', function () {
+      var msg = body.querySelector('#nps-msg');
+      var v = { enabled: body.querySelector('#nps-on').checked, every_months: +body.querySelector('#nps-every').value,
+        families: body.querySelector('#nps-fam').checked, staff: body.querySelector('#nps-staff').checked };
+      if (v.enabled && !v.families && !v.staff) { msg.style.color = '#B91C1C'; msg.textContent = 'Tick Families, Staff or both.'; return; }
+      msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      Api.put('/engagement/nps/settings', v)
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
   }
 
   /* ── Message Centre: who educators and home visitors may message (2026-10-09) ──

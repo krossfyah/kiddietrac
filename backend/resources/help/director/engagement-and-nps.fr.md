@@ -33,8 +33,10 @@ mois. Utilisez-les ensemble : une famille peu engagée qui donne une note faible
 
 Le sondage est **désactivé** pour chaque agence jusqu'à ce qu'un administrateur d'agence l'active.
 
-1. Dans **Survey setting**, cochez **Send the survey automatically**, choisissez **Every** 3, 6 ou 12 mois, puis cochez **Families**, **Staff** ou les deux. Sélectionnez **Save**.
-2. Pour envoyer une ronde maintenant, sélectionnez **📨 Send now…**. La fenêtre indique exactement combien de personnes la recevront. Tapez **SEND** et sélectionnez **Send to …**.
+[[open: #notification-settings?tab=nps | Ouvrir les réglages du sondage NPS]]
+
+1. Ouvrez **Paramètres › Notifications de l'agence › 📈 NPS survey** (sur l'écran NPS, **⚙️ Survey settings** l'ouvre). Activez **Send the survey automatically**, choisissez **How often** (tous les 3, 6 ou 12 mois), puis activez **Families**, **Staff** ou les deux. Sélectionnez **Save**.
+2. Pour envoyer une ronde maintenant, ouvrez **Engagement › NPS**. Dans **Send the survey**, cochez **Families**, **Staff** ou les deux, puis sélectionnez **📨 Send now…**. La fenêtre indique exactement combien de personnes la recevront. Tapez **SEND** et sélectionnez **Send to …**.
 3. Chaque personne reçoit un courriel et un avis dans l'application avec une seule question, de 0 à 10, et un commentaire facultatif. Le courriel a un bouton pour chaque chiffre. Aucune connexion n'est nécessaire. Les parents voient aussi la question dans le portail.
 4. La personne choisit un chiffre et sélectionne **Envoyer**. Elle peut modifier sa réponse avec le même lien pendant 30 jours.
 5. Un score de 0 à 6 avertit tout de suite les gestionnaires du centre, pour qu'ils puissent faire un suivi.
@@ -45,8 +47,8 @@ Le sondage est **désactivé** pour chaque agence jusqu'à ce qu'un administrate
 
 | Rôle | Voit |
 |---|---|
-| Administrateur d'agence | Les deux écrans pour l'agence active, le réglage du sondage et **Send now**. |
-| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. |
+| Administrateur d'agence | Les deux écrans pour l'agence active, le réglage du sondage (dans les Paramètres) et **Send now**. |
+| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. Dans **All agencies**, l'écran vous demande d'abord de choisir une agence. |
 | Directeur de centre | Le NPS de ses propres centres seulement. Il ne peut ni modifier le réglage ni envoyer. |
 | Éducatrice | Non disponible. |
 

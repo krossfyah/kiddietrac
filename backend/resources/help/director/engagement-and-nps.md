@@ -37,8 +37,10 @@ and a low NPS answer is one to call.
 
 The survey is **off** for every agency until an agency admin turns it on.
 
-1. In **Survey setting**, tick **Send the survey automatically**, choose **Every** 3, 6 or 12 months, and tick **Families**, **Staff** or both. Select **Save**.
-2. To send a round now, select **📨 Send now…**. The popup shows exactly how many people it goes to. Type **SEND** and select **Send to …**.
+[[open: #notification-settings?tab=nps | Open NPS survey settings]]
+
+1. Open **Settings › Agency notifications › 📈 NPS survey** (on the NPS screen, **⚙️ Survey settings** opens it). Switch on **Send the survey automatically**, choose **How often** (every 3, 6 or 12 months), and switch on **Families**, **Staff** or both. Select **Save**.
+2. To send a round now, open **Engagement › NPS**. In **Send the survey**, tick **Families**, **Staff** or both and select **📨 Send now…**. The popup shows exactly how many people it goes to. Type **SEND** and select **Send to …**.
 3. Each person gets an email and an app notice with one question, 0 to 10, and an optional comment. The email has a button for each number. No sign-in is needed. Parents also see the question in the portal.
 4. The person picks a number and selects **Send**. They can change their answer with the same link for 30 days.
 5. A score of 0 to 6 tells the centre's managers straight away, so they can follow up.
@@ -49,8 +51,8 @@ The survey is **off** for every agency until an agency admin turns it on.
 
 | Role | Sees |
 |---|---|
-| Agency admin | Both screens for the active agency, the survey setting and **Send now**. |
-| Platform admin | The agency chosen in the agency switcher. |
+| Agency admin | Both screens for the active agency, the survey setting (in Settings) and **Send now**. |
+| Platform admin | The agency chosen in the agency switcher. In **All agencies**, the screen asks you to choose an agency first. |
 | Centre director | NPS for their own centres only. They cannot change the setting or send. |
 | Educator | Not available. |
 

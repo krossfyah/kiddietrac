@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Support\AgencyRole;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use App\Support\CentreScope;
 use App\Support\NpsSurvey;
 use Illuminate\Http\JsonResponse;
@@ -16,10 +18,22 @@ use Illuminate\Support\Facades\DB;
  */
 final class NpsController extends Controller
 {
+    use ResolvesCentreContext;
+
+    /* The agency this screen works in. AgencyRole::activeAgency() is null for a platform admin by design (it only
+       answers "may this person's ROLES be narrowed"), so the super admin always got "Select an agency first" even
+       inside an agency. resolveAgencyId() is the shared resolver: a platform admin gets the agency he switched into
+       (header, must exist), never a default; everyone else the membership-checked active agency or their own.
+       No agency (a platform admin in "All agencies") answers needs_agency so the screen shows an agency picker. */
     private function agency(Request $request): int
     {
-        $a = AgencyRole::activeAgency($request);
-        abort_unless($a, 400, 'Select an agency first.');
+        $a = AgencyRole::activeAgency($request) ?: $this->resolveAgencyId($request);
+        if (! $a) {
+            throw new HttpResponseException(response()->json([
+                'needs_agency' => true,
+                'message' => 'Choose an agency to see its NPS results.',
+            ], 400));
+        }
 
         return (int) $a;
     }
@@ -33,6 +47,12 @@ final class NpsController extends Controller
     public function summary(Request $request): JsonResponse
     {
         $agencyId = $this->agency($request);
+        // ?settings_only=1: just the survey setting, for Settings › Agency notifications › NPS survey (agency admins).
+        if ($request->boolean('settings_only')) {
+            $this->assertAdmin($request);
+
+            return response()->json(['can_manage' => true, 'settings' => NpsSurvey::settings($agencyId)]);
+        }
         $scope = CentreScope::ids($request, $agencyId);
         $centreId = (int) $request->query('centre_id', 0) ?: null;
         if ($centreId && ! CentreScope::canRead($scope, $centreId)) abort(404);

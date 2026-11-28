@@ -12,6 +12,37 @@
   });
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /* NO AGENCY CHOSEN (2026-11-28): a platform admin in "All agencies" gets a 400 "Select an agency first" (or
+     needs_agency) from agency screens. That is a choice to make, not an error: show a short prompt with the same
+     agency list the top-bar switcher uses, switch the same way (server + session + reload). */
+  const isNoAgency = (e) => !!(e && e.status === 400 && ((e.data && e.data.needs_agency)
+    || /(select|choose) an agency/i.test(String((e.data && e.data.message) || e.message || ''))));
+  async function agencyPrompt(main, what) {
+    main.innerHTML = `<div style="padding:24px;"><div class="kt-card" style="max-width:520px;padding:18px 20px;">
+      <div style="font-size:15px;font-weight:800;color:#0F172A;margin-bottom:4px;">Choose an agency</div>
+      <div style="font-size:13.5px;color:#475569;margin-bottom:12px;">${esc(what)} belong to one agency. Pick the agency to open, or use the agency switcher at the top.</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="kt-np-agency" style="min-width:240px;height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13.5px;"><option value="">Loading agencies…</option></select>
+        <span id="kt-np-agency-msg" style="font-size:12.5px;color:#64748B;"></span>
+      </div></div></div>`;
+    const sel = main.querySelector('#kt-np-agency');
+    const msg = main.querySelector('#kt-np-agency-msg');
+    let list = [];
+    try { const d = await Api.get('/auth/agencies'); list = (d && d.agencies) || []; } catch (e) {}
+    if (!sel || !sel.isConnected) return;
+    sel.innerHTML = '<option value="">' + (list.length ? 'Choose an agency…' : 'No agencies to choose from') + '</option>'
+      + list.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+    sel.addEventListener('change', async () => {
+      const id = parseInt(sel.value, 10);
+      if (!id) return;
+      sel.disabled = true; msg.style.color = '#64748B'; msg.textContent = 'Opening…';
+      try { await Api.post('/auth/active-agency', { agency_id: id }); }
+      catch (e) { sel.disabled = false; msg.style.color = '#B91C1C'; msg.textContent = 'That agency could not be opened. Please try again.'; return; }
+      const a = list.find(x => +x.id === id);
+      try { sessionStorage.setItem('kt_active_agency_id', String(id)); if (a) sessionStorage.setItem('kt_active_agency_name', a.name); } catch (e) {}
+      window.location.reload();
+    });
+  }
   const MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   /* A date-only value is a calendar day, not an instant. `new Date('2026-07-27')` is
@@ -697,7 +728,9 @@
   async function renderVacationHolds(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/billing/vacation-holds').catch(() => ({ data: [] }));
+    let noAgency = false;
+    const r = await Api.get('/billing/vacation-holds').catch((e) => { noAgency = isNoAgency(e); return { data: [] }; });
+    if (noAgency) return agencyPrompt(main, 'Vacation holds');
     const rows = r.data || [];
     const rule = r.rule || { mode: 'none', value: 0, text: 'No credit' };
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -899,7 +932,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     let r;
     try { r = await Api.get('/billing/tuition-increases'); }
-    catch (e) { main.innerHTML = '<div style="padding:24px;color:#B91C1C;">' + esc((e && e.message) || 'Could not load tuition increases.') + '</div>'; return; }
+    catch (e) { if (isNoAgency(e)) return agencyPrompt(main, 'Tuition increases'); main.innerHTML = '<div style="padding:24px;color:#B91C1C;">' + esc((e && e.message) || 'Could not load tuition increases.') + '</div>'; return; }
     const rows = r.data || [];
     main.innerHTML = `<div style="padding:24px;">
       <div class="kt-page-hero">
@@ -1112,7 +1145,9 @@
   async function renderReenrollment(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/engagement/reenrollment').catch(() => ({ data: [] }));
+    let noAgency = false;
+    const r = await Api.get('/engagement/reenrollment').catch((e) => { noAgency = isNoAgency(e); return { data: [] }; });
+    if (noAgency) return agencyPrompt(main, 'Re-enrolment campaigns');
     const rows = r.data || [];
     const remind = r.reminder_days > 0 ? `Families who have not answered are reminded ${r.reminder_days} ${r.reminder_days === 1 ? 'day' : 'days'} before the deadline.` : 'Automatic reminders are off.';
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
@@ -1316,6 +1351,10 @@
      (a director sees their own centres), and for agency admins the survey setting + "Send now" (preview count, type
      SEND). Default OFF for every agency. */
   let npsCentre = 0, npsAudience = '';
+  /* The survey SETTING (automatic on/off, how often, families/staff) lives in Settings › Agency notifications ›
+     📈 NPS survey (2026-11-28, Anthony: "survey setting in NPS should be put into the settings section"). This
+     screen keeps the results and Send now (an action), with a ⚙️ link to the setting. */
+  const NPS_SETTINGS_LINK = '#notification-settings?tab=nps';
   async function renderNps(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
@@ -1324,7 +1363,7 @@
     if (npsAudience) qs.set('audience', npsAudience);
     let r;
     try { r = await Api.get('/engagement/nps' + (qs.toString() ? '?' + qs : '')); }
-    catch (e) { main.innerHTML = `<div class="kt-card" style="margin:24px;color:#B91C1C;">${esc((e && e.message) || 'NPS results could not be loaded. Please try again.')}</div>`; return; }
+    catch (e) { if (isNoAgency(e)) return agencyPrompt(main, 'NPS results'); main.innerHTML = `<div class="kt-card" style="margin:24px;color:#B91C1C;">${esc((e && e.message) || 'NPS results could not be loaded. Please try again.')}</div>`; return; }
     if (!main.isConnected) return;
     const s = r.summary || {};
     const has = s.count > 0;
@@ -1344,7 +1383,7 @@
     const st = r.settings;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero"><h2>📈 Net Promoter Score</h2>
-        <p>${st ? (st.enabled ? `The survey goes out every ${st.every_months} months to ${[st.families ? 'families' : '', st.staff ? 'staff' : ''].filter(Boolean).join(' and ')}. Next round: ${esc(fmtDate(st.next_due))}.` : 'The survey is off. Turn it on below, or send one round now.') : 'How families and staff rate your centre, from 0 to 10.'}</p></div>
+        <p>${st ? (st.enabled ? `The survey goes out every ${st.every_months} months to ${[st.families ? 'families' : '', st.staff ? 'staff' : ''].filter(Boolean).join(' and ')}. Next round: ${esc(fmtDate(st.next_due))}.` : 'The survey is off. Turn it on in Survey settings, or send one round now.') : 'How families and staff rate your centre, from 0 to 10.'}</p></div>
       <div class="kt-card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
         ${centres.length > 1 || (centres.length === 1 && npsCentre) ? `<label style="font-size:13px;font-weight:600;">Centre <select id="nps-centre"><option value="">All my centres</option>${centres.map(c => `<option value="${c.id}" ${+c.id === +npsCentre ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
         <label style="font-size:13px;font-weight:600;">Answers from <select id="nps-aud"><option value="">Everyone</option><option value="family" ${npsAudience === 'family' ? 'selected' : ''}>Families</option><option value="staff" ${npsAudience === 'staff' ? 'selected' : ''}>Staff</option></select></label>
@@ -1356,16 +1395,15 @@
       </div>
       ${trend.length > 1 ? `<div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Trend by survey round</h3></div><div style="display:flex;gap:8px;overflow-x:auto;padding:6px 2px;">${bars}</div></div>` : ''}
       ${st ? `<div class="kt-card" id="nps-set">
-        <div class="kt-card-header"><h3 class="kt-card-title">Survey setting</h3></div>
+        <div class="kt-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><h3 class="kt-card-title">Send the survey</h3>
+          <a href="${NPS_SETTINGS_LINK}" style="font-size:13px;font-weight:600;">⚙️ Survey settings</a></div>
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:13.5px;">
-          <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-on" ${st.enabled ? 'checked' : ''}> Send the survey automatically</label>
-          <label>Every <select id="nps-every">${[3, 6, 12].map(m => `<option value="${m}" ${+st.every_months === m ? 'selected' : ''}>${m} months</option>`).join('')}</select></label>
+          <span style="font-weight:600;color:#334155;">Send one round now to</span>
           <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-fam" ${st.families ? 'checked' : ''}> Families</label>
           <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-staff" ${st.staff ? 'checked' : ''}> Staff</label>
-          <button type="button" class="kt-btn kt-btn-primary" id="nps-save">Save</button>
-          <button type="button" class="kt-btn" id="nps-send">📨 Send now…</button>
+          <button type="button" class="kt-btn kt-btn-primary" id="nps-send">📨 Send now…</button>
         </div>
-        <div style="font-size:12.5px;color:#64748B;margin-top:8px;">Each person gets an email and an app notice with one question, 0 to 10, and an optional comment. No sign-in is needed. A low score (0-6) tells the centre's managers.</div>
+        <div style="font-size:12.5px;color:#64748B;margin-top:8px;">Each person gets an email and an app notice with one question, 0 to 10, and an optional comment. No sign-in is needed. A low score (0-6) tells the centre's managers. Automatic rounds (on or off, how often, who) are in Survey settings.</div>
         <div id="nps-set-msg" style="font-size:13px;margin-top:8px;"></div>
       </div>` : ''}
       <div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Comments</h3></div>
@@ -1381,13 +1419,8 @@
     if (cSel) cSel.onchange = () => { npsCentre = +cSel.value || 0; renderNps(main); };
     main.querySelector('#nps-aud').onchange = (e) => { npsAudience = e.target.value; renderNps(main); };
     if (!st) return;
-    const val = () => ({ enabled: main.querySelector('#nps-on').checked, every_months: +main.querySelector('#nps-every').value,
-      families: main.querySelector('#nps-fam').checked, staff: main.querySelector('#nps-staff').checked });
+    const val = () => ({ families: main.querySelector('#nps-fam').checked, staff: main.querySelector('#nps-staff').checked });
     const setMsg = (t, bad) => { const m = main.querySelector('#nps-set-msg'); m.style.color = bad ? '#B91C1C' : '#047857'; m.textContent = t; };
-    main.querySelector('#nps-save').onclick = async () => {
-      try { await Api.put('/engagement/nps/settings', val()); if (KT.toast) KT.toast('Survey setting saved.', 'success'); renderNps(main); }
-      catch (e) { setMsg((e && e.message) || 'The setting could not be saved.', true); }
-    };
     main.querySelector('#nps-send').onclick = async () => {
       const v = val();
       if (!v.families && !v.staff) { setMsg('Tick Families, Staff or both first.', true); return; }

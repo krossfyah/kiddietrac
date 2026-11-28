@@ -33,8 +33,10 @@ participación y una respuesta NPS baja es una familia a la que conviene llamar.
 
 La encuesta está **desactivada** en todas las agencias hasta que un administrador de agencia la active.
 
-1. En **Survey setting**, marque **Send the survey automatically**, elija **Every** 3, 6 o 12 meses, y marque **Families**, **Staff** o ambos. Seleccione **Save**.
-2. Para enviar una ronda ahora, seleccione **📨 Send now…**. La ventana muestra exactamente a cuántas personas llegará. Escriba **SEND** y seleccione **Send to …**.
+[[open: #notification-settings?tab=nps | Abrir los ajustes de la encuesta NPS]]
+
+1. Abra **Configuración › Notificaciones de la agencia › 📈 NPS survey** (en la pantalla NPS, **⚙️ Survey settings** la abre). Active **Send the survey automatically**, elija **How often** (cada 3, 6 o 12 meses) y active **Families**, **Staff** o ambos. Seleccione **Save**.
+2. Para enviar una ronda ahora, abra **Engagement › NPS**. En **Send the survey**, marque **Families**, **Staff** o ambos y seleccione **📨 Send now…**. La ventana muestra exactamente a cuántas personas llegará. Escriba **SEND** y seleccione **Send to …**.
 3. Cada persona recibe un correo y un aviso en la aplicación con una sola pregunta, de 0 a 10, y un comentario opcional. El correo tiene un botón para cada número. No hace falta iniciar sesión. Los padres también ven la pregunta en el portal.
 4. La persona elige un número y selecciona **Enviar**. Puede cambiar su respuesta con el mismo enlace durante 30 días.
 5. Una puntuación de 0 a 6 avisa de inmediato a los responsables del centro, para que hagan seguimiento.
@@ -45,8 +47,8 @@ La encuesta está **desactivada** en todas las agencias hasta que un administrad
 
 | Rol | Ve |
 |---|---|
-| Administrador de agencia | Ambas pantallas de la agencia activa, el ajuste de la encuesta y **Send now**. |
-| Administrador de plataforma | La agencia elegida en el selector de agencias. |
+| Administrador de agencia | Ambas pantallas de la agencia activa, el ajuste de la encuesta (en Configuración) y **Send now**. |
+| Administrador de plataforma | La agencia elegida en el selector de agencias. En **All agencies**, la pantalla le pide primero que elija una agencia. |
 | Director de centro | El NPS solo de sus propios centros. No puede cambiar el ajuste ni enviar. |
 | Educadora | No disponible. |
 
