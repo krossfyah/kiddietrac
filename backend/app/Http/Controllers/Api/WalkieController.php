@@ -34,10 +34,12 @@ final class WalkieController extends Controller
         $aid = (int) ($this->resolveAgencyId($request) ?: 0);
         abort_unless($aid > 0, 400, 'Select an agency first.');
         $me = (int) $request->user()->id;
-        abort_unless(Walkie::isStaff($aid, $me), 403, 'The walkie-talkie is for your agency\'s own staff.');
+        // A super admin joins the walkie of the agency he is active in, and only that one (Walkie::guests, 2026-11-27).
+        $guest = Walkie::enterAsGuest($aid, $me);
+        abort_unless($guest || Walkie::isStaff($aid, $me), 403, 'The walkie-talkie is for your agency\'s own staff.');
         $roles = AgencyRole::names($request);
 
-        return [$aid, $me, Walkie::who($aid, $me, $roles), in_array('agency_admin', $roles, true)];
+        return [$aid, $me, Walkie::who($aid, $me, $roles), in_array('agency_admin', $roles, true) || $guest];
     }
 
     private function needOn(int $aid): array
@@ -76,6 +78,7 @@ final class WalkieController extends Controller
             // Leak-guard canary people stay staff (kt:leak-probe walks these routes as them) but are not shown to real people.
             if (! \App\Support\LeakGuard::isCanaryUser($me)) $ids = array_values(array_filter($ids, fn ($i) => ! \App\Support\LeakGuard::isCanaryUser((int) $i)));
             $centres = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
+            $guests = Walkie::guests($aid);
             $roles = [];
             foreach (DB::table('role_assignments')->whereIn('user_id', $ids ?: [0])->where('active', 1)->whereIn('role', Walkie::STAFF)
                 ->where(fn ($w) => $w->where('agency_id', $aid)->orWhereIn('centre_id', $centres->keys()->all() ?: [0]))->get(['user_id', 'role', 'centre_id']) as $r) {
@@ -88,7 +91,7 @@ final class WalkieController extends Controller
                 $key = Walkie::dmKey($me, (int) $u->id);
                 $f = $floor[$key] ?? null;
                 $people[] = ['id' => (int) $u->id, 'key' => $key, 'name' => trim((($u->preferred_name ?: $u->first_name) ?? '') . ' ' . ($u->last_name ?? '')),
-                    'photo_url' => $u->photo_url, 'sex' => $u->sex, 'role' => self::ROLE_LABEL[$rs[0] ?? ''] ?? '',
+                    'photo_url' => $u->photo_url, 'sex' => $u->sex, 'role' => in_array((int) $u->id, $guests, true) ? 'Super admin' : (self::ROLE_LABEL[$rs[0] ?? ''] ?? ''),
                     'centres' => array_keys($roles[(int) $u->id]['c'] ?? []), 'talking' => $f && (int) $f->speaker_user_id !== $me ? Walkie::firstName((int) $f->speaker_user_id) : null];
             }
         }

@@ -436,9 +436,9 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
-          // Not for a platform admin (2026-11-27): the walkie is between an agency's own staff, and a super admin is not agency staff
-          // (AgencyOutsiders), so it opened and could not talk to anyone.
-          ...(isPlatformAdmin_v22p34 ? [] : [{ hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' }]),   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
+          // A platform admin has it too (2026-11-27, Anthony: "Give me full access"): he joins the walkie of the agency he has
+          // switched into, and only that one (App\Support\Walkie::guests - the one walkie-only exception to AgencyOutsiders).
+          { hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' },   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },

@@ -25,6 +25,8 @@ use Illuminate\Support\Facades\DB;
  * What still reaches an outsider (the allow-list):
  *   - platform work: support tickets, sales, bookings, proposals, meetings, the platform mailbox, campaigns;
  *   - person-to-person: chat, messages, team messages, nudges, calls;
+ *   - the walkie-talkie, for a super admin ONLY in the agency he is active in (Walkie::guests, 2026-11-27 Anthony
+ *     "Give me full access"): its wake-up pushes (WalkiePush) and the "can't talk right now" reply (WalkieController);
  *   - their own account: sign-in alerts, password reset / expiry, account notices, invites, payslip, statement;
  *   - privacy breach and privacy request alerts (legal duty; Anthony: KEEP);
  *   - anything they asked for themselves in this request ([TEST] / X-KT-Preview sends, a send they triggered);
@@ -55,6 +57,7 @@ final class AgencyOutsiders
         // person-to-person
         'ChatController', 'MessageController', 'TeamChatController', 'WebChatController', 'VoiceMessageController',
         'ChatNudge', 'ChatCall', 'CallAlerts', 'MissedMessagesCommand', 'EmailMissedMessagesCommand',
+        'WalkieController',   // walkie "can't talk" reply to a speaker; a super admin speaks only as a guest of his active agency (Walkie::guests)
         // their own account
         'PasswordResetEmail', 'AccountNotice', 'SignInAlert', 'SecurityAlerts', 'PasswordExpiryCommand', 'AccountController',
         'AuthController', 'SignupController', 'Mfa*', 'Passkey*', 'TwoFactor*', 'OnboardingReminderCommand', 'SmsConsentInviteController',

@@ -30,6 +30,14 @@ use Illuminate\Support\Facades\DB;
  * integration or reseller accounts, no deactivated accounts; HR leavers dropped). Admins reach the whole agency;
  * directors and educators the staff of their own centres (Visibility) plus their leaders (CentreScope::managers).
  *
+ * THE ONE EXCEPTION - A SUPER ADMIN AS A GUEST (2026-11-27, Anthony: "Give me full access"). A platform admin is not
+ * agency staff (AgencyOutsiders) and is left out of every other agency notice. For the walkie ONLY, a platform admin
+ * joins the agency he has SWITCHED INTO (X-Active-Agency-Id): opening the walkie there (any walkie call, ctx())
+ * records walkie_prefs.guest_agency_id, and from then on he is one of that agency's walkie people - he reaches the
+ * whole agency like an agency admin, appears in its people list ("Super admin"), is in its All staff / Emergency /
+ * leaders channels, and its staff can call him. ONE agency at a time: switching agency moves him; he is never in
+ * the walkie of an agency he is not active in. guests() is the only door; integration and reseller accounts never.
+ *
  * Content is never in logs, emails, pushes or the audit log: those say who talked to whom, when and for how long.
  */
 final class Walkie
@@ -80,13 +88,60 @@ final class Walkie
         return $new;
     }
 
-    /** The agency's own staff, leavers dropped. @return int[] */
+    /**
+     * The agency's own staff, leavers dropped - plus, agency-wide only, a super admin who is a guest here (guests()).
+     * A centre-scoped list leaves the guest out, the same as an agency admin (an agency-level role, no centre).
+     * @return int[]
+     */
     public static function staff(int $aid, ?array $centres = null): array
     {
         $ids = HrLeave::staffIds($aid, $centres);
         $gone = rescue(fn () => HrLeaving::leaverIds($aid), [], false);
+        $ids = array_values(array_diff($ids, $gone));
+        if ($centres === null) $ids = array_values(array_unique(array_merge($ids, self::guests($aid))));
 
-        return array_values(array_diff($ids, $gone));
+        return $ids;
+    }
+
+    /**
+     * SUPER ADMIN GUESTS (2026-11-27, see the class note): platform admins whose ACTIVE agency for the walkie is this
+     * one. The walkie-only exception to AgencyOutsiders - nothing else reads this. @return int[]
+     */
+    public static function guests(int $aid): array
+    {
+        if ($aid <= 0) return [];
+
+        return rescue(fn () => DB::table('walkie_prefs as p')->join('users as u', 'u.id', '=', 'p.user_id')
+            ->where('p.guest_agency_id', $aid)->whereNull('u.deleted_at')->whereNotIn('u.status', ['deactivated'])
+            ->whereExists(fn ($x) => $x->from('role_assignments as ra')->whereColumn('ra.user_id', 'p.user_id')
+                ->where('ra.role', 'platform_admin')->where('ra.active', 1))
+            ->pluck('p.user_id')->map(fn ($v) => (int) $v)->all(), [], false);
+    }
+
+    public static function isGuest(int $aid, int $uid): bool
+    {
+        return $uid > 0 && in_array($uid, self::guests($aid), true);
+    }
+
+    /** An active platform admin (role row active)? Integration and reseller accounts are not. */
+    public static function isPlatformAdmin(int $uid): bool
+    {
+        return $uid > 0 && DB::table('role_assignments')->where('user_id', $uid)->where('role', 'platform_admin')->where('active', 1)->exists();
+    }
+
+    /**
+     * A platform admin using the walkie in this agency: make this his one guest agency (moves him out of the last
+     * one). Returns false for anyone else, who must be real staff.
+     */
+    public static function enterAsGuest(int $aid, int $uid): bool
+    {
+        if ($aid <= 0 || ! self::isPlatformAdmin($uid)) return false;
+        $cur = DB::table('walkie_prefs')->where('user_id', $uid)->value('guest_agency_id');
+        if ((int) $cur !== $aid) {
+            DB::table('walkie_prefs')->updateOrInsert(['user_id' => $uid], ['guest_agency_id' => $aid, 'guest_at' => now(), 'updated_at' => now()]);
+        }
+
+        return true;
     }
 
     /** Is this person one of this agency's staff (the only people who may use it here)? */
@@ -103,7 +158,8 @@ final class Walkie
     public static function who(int $aid, int $uid, array $roles): array
     {
         $open = Live::centreIds($aid);
-        if (in_array('agency_admin', $roles, true)) {
+        // A super admin guest (guests()) reaches the agency the way an agency admin does.
+        if (in_array('agency_admin', $roles, true) || (in_array('platform_admin', $roles, true) && self::isGuest($aid, $uid))) {
             return ['kind' => 'admin', 'centres' => $open];
         }
         $user = DB::table('users')->where('id', $uid)->first();
@@ -128,10 +184,15 @@ final class Walkie
         return array_values(array_diff(array_unique(array_map('intval', $ids)), [$uid]));
     }
 
-    /** Agency admins + the directors of these centres (CentreScope::managers: never an outsider or a leaver). @return int[] */
+    /**
+     * Agency admins + the directors of these centres (CentreScope::managers: never an outsider or a leaver), plus a
+     * super admin guest here (guests(): he stands with the agency admins). @return int[]
+     */
     public static function leaders(int $aid, array $centres): array
     {
-        return CentreScope::managers($aid, $centres ?: null)->pluck('u.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $ids = CentreScope::managers($aid, $centres ?: null)->pluck('u.id')->map(fn ($v) => (int) $v)->all();
+
+        return array_values(array_unique(array_merge($ids, self::guests($aid))));
     }
 
     /**

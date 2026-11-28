@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
  *  - Every other phone of the person gets an ordinary notification: "📻 Walkie-talkie from Amna" / "Tap to listen."
  *  - Sent in parallel (curl_multi) after the response, so a talk to the whole agency starts at once.
  *
- * Gates, before anything leaves: agency outsiders (super admins, integration, resellers) never; test agencies send
+ * Gates, before anything leaves: agency outsiders (super admins, integration, resellers) never - except a super admin
+ * who is a walkie guest of THIS agency (Walkie::guests, 2026-11-27 "Give me full access"); test agencies send
  * nothing (TestAgency::blocks); do-not-contact (Suppression); sign-in locks. Tests set WalkiePush::$capture = [] and
  * get the messages there instead of sending.
  */
@@ -33,7 +34,7 @@ final class WalkiePush
         $body = $emergency ? 'Urgent. Tap to listen now.' : 'Tap to listen.';
         $ok = [];
         foreach (array_unique(array_map('intval', $uids)) as $u) {
-            if ($u <= 0 || AgencyOutsiders::isOutsider($u)) continue;
+            if ($u <= 0 || (AgencyOutsiders::isOutsider($u) && ! Walkie::isGuest($aid, $u))) continue;
             if (TestAgency::blocks($aid, $u) || TestAgency::isAgency($aid)) { TestAgency::note('walkie push', ['user' => $u]); continue; }
             if (Suppression::isUser($u)) continue;
             if (rescue(fn () => SignInLocks::pushPaused($u), false, false)) continue;
