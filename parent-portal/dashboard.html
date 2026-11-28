@@ -488,7 +488,17 @@ document.documentElement.appendChild(d);}}catch(e){}})();</script>
 })();
 </script>
 <!-- The blocks scene on a first boot (see the head) - before the splash, so it is the first frame. -->
-<script src="/js/kt-launch-scene.js?v=20261127spl"></script>
+<script>/* ONE /branding READ PER BOOT (2026-11-28, portal speed). Three places wanted this agency's brand on a cold boot - the
+   splash hold below, kt-launch-scene.js (phone first boot) and branding-loader.js - and each fetched it, so a boot
+   with no cached brand read /branding twice or three times. They now share one request per agency, sent with the
+   session's token (the server only names the agency to a member of it, which branding-loader needs). The loader
+   TAKES the shared answer once (take); its later reloads (agency switch, KT.reloadBranding) always fetch fresh. */
+(function(w){var P={};function tk(){try{return sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token');}catch(e){return null;}}
+  function get(a){a=String(a);if(P[a])return P[a];var t=tk(),o=t?{headers:{Authorization:'Bearer '+t}}:undefined;
+    P[a]=fetch('https://api.kiddietrac.com/api/v1/branding?agency_id='+encodeURIComponent(a),o).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});return P[a];}
+  get.take=function(a){a=String(a);var p=P[a];if(p&&!get.taken){get.taken=1;return p;}return null;};
+  w.__ktBrandRead=get;})(window);</script>
+<script src="/js/kt-launch-scene.js?v=20261128spd1"></script>
 <!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
 <style>
@@ -702,7 +712,7 @@ if(fr||bio)n.textContent='Signing you in…';})();}catch(e){}</script>
   if(root.classList.contains('kt-brand-pending')){try{
     var u0=JSON.parse(sessionStorage.getItem('kt_user')||'null');var aa=sessionStorage.getItem('kt_active_agency_id');
     if(!aa||aa==='all')aa=u0&&(u0.landing_agency_id||u0.agency_id);
-    if(aa){fetch('https://api.kiddietrac.com/api/v1/branding?agency_id='+encodeURIComponent(aa)).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    if(aa){(window.__ktBrandRead?window.__ktBrandRead(aa):fetch('https://api.kiddietrac.com/api/v1/branding?agency_id='+encodeURIComponent(aa)).then(function(r){return r.ok?r.json():null;})).then(function(d){
       if(!d)return;var th=d.theme||null;
       try{if(!localStorage.getItem('kt_brand_a'+aa))localStorage.setItem('kt_brand_a'+aa,JSON.stringify({theme:th,at:Date.now()}));}catch(e4){}
       if(!(th&&th.white_label))root.classList.remove('kt-brand-pending');
@@ -945,7 +955,7 @@ function showReloadGate(){
     <script src="js/kt-onboarding-tour.js?v=20261020onetap" defer></script>
   <script src="/js/tooltips-v6.js?v=20261105tap" defer></script>
   <script src="/js/app-v2-init.js?v=20261023-shellstub2" defer></script>
-  <script src="/js/branding-loader.js?v=20261127rpu" defer></script>
+  <script src="/js/branding-loader.js?v=20261128spd1" defer></script>
   <script src="/js/api-helpers-v10.js?v=20261126cap" defer></script>
   <script src="/js/kt-avatar-cropper.js?v=20261009n2" defer></script>
   <script src="/js/kt-face-check.js?v=20261030fg" defer></script>
@@ -1070,8 +1080,8 @@ function showReloadGate(){
   <script src="/js/kt-calculator.js?v=20261031hc" defer></script>
   <script src="/js/kt-quick-notes.js?v=20261126subfeed" defer></script>
   <script src="/js/kt-topbar.js?v=20261128prime" defer></script>
-  <script src="/js/kt-pin.js?v=20261023-082945-idlelock" defer></script>
-  <script src="/js/kt-biometric.js?v=20261103ios" defer></script>
+  <script src="/js/kt-pin.js?v=20261128spd1" defer></script>
+  <script src="/js/kt-biometric.js?v=20261128spd1" defer></script>
   <script src="/js/kt-passkeys.js?v=20261104cm" defer></script>
   <script src="/js/kt-devices.js?v=20261109dv2" defer></script>
   <script src="/js/kt-impersonate.js?v=20261104toprow" defer></script>

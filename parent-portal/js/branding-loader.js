@@ -800,10 +800,17 @@
          signed-in session's token goes with it; a slug lookup is public and needs none. */
       let tk = null;
       try { tk = hint.agency_id ? (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')) : null; } catch (e) {}
-      const res = await fetch(apiBase() + '/branding' + (qs ? '?' + qs : ''),
-        tk ? { headers: { Authorization: 'Bearer ' + tk } } : undefined);
-      if (!res.ok) return;
-      const data = await res.json();
+      /* The boot's first read of this agency's brand already went out from the page head (window.__ktBrandRead,
+         same agency, same token): take that answer once instead of asking again (2026-11-28). */
+      const shared = (tk && hint.agency_id && Object.keys(hint).length === 1 && window.__ktBrandRead && window.__ktBrandRead.take)
+        ? window.__ktBrandRead.take(hint.agency_id) : null;
+      let data = shared ? await shared : null;
+      if (!data) {
+        const res = await fetch(apiBase() + '/branding' + (qs ? '?' + qs : ''),
+          tk ? { headers: { Authorization: 'Bearer ' + tk } } : undefined);
+        if (!res.ok) return;
+        data = await res.json();
+      }
       applyTheme(themeOf(data, hint));
       applyLegacy(data.branding);
       applySigninCopy(data, hint);

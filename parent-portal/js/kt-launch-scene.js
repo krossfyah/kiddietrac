@@ -617,8 +617,9 @@
     var a = dashAgency();
     if (!a) { cb(null); return; }
     try {
-      fetch('https://api.kiddietrac.com/api/v1/branding?agency_id=' + encodeURIComponent(a))
-        .then(function (r) { return r.ok ? r.json() : null; })
+      // One shared read per boot (window.__ktBrandRead, dashboard.src.html head).
+      (window.__ktBrandRead ? window.__ktBrandRead(a) : fetch('https://api.kiddietrac.com/api/v1/branding?agency_id=' + encodeURIComponent(a))
+        .then(function (r) { return r.ok ? r.json() : null; }))
         .then(function (x) {
           if (!x) return;
           var th = x.theme || null;

@@ -62,6 +62,42 @@
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
   function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
 
+  /* ONE /diag/bio POST PER BOOT (2026-11-28, portal speed). kt-pin.js and kt-biometric.js both report their 'boot'
+     step to this sink, which made every portal load POST /diag/bio twice. Both files now hand their payloads to one
+     shared queue (KT.diagBio - whichever file loads first defines it; the code is the same in both) that sends what
+     arrived within 1.5 s as ONE request (data = a JSON array when there is more than one). A page that is leaving
+     (pagehide / hidden) flushes at once by sendBeacon, so a step logged just before a redirect is still delivered. */
+  function diagSink() {
+    var K = (window.KT = window.KT || {});
+    if (K.diagBio) { return K.diagBio; }
+    var q = [], timer = null;
+    function post(url, data) {
+      var body = JSON.stringify({ data: data });
+      if (navigator.sendBeacon) { try { if (navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) { return; } } catch (e) {} }
+      try { fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }).catch(function () {}); } catch (e) {}
+    }
+    function flush() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (!q.length) { return; }
+      var items = q; q = [];
+      var url = items[0].url, group = [], len = 0;
+      var send = function () { if (group.length) { post(url, group.length === 1 ? JSON.stringify(group[0]) : JSON.stringify(group)); } group = []; len = 0; };
+      items.forEach(function (it) {
+        var n = JSON.stringify(it.p).length;
+        if (it.url !== url || (group.length && len + n > 1900)) { send(); url = it.url; }   // the server keeps 2000 chars per line
+        group.push(it.p); len += n + 1;
+      });
+      send();
+    }
+    try {
+      window.addEventListener('pagehide', flush);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') { flush(); } });
+    } catch (e) {}
+    K.diagBio = function (url, payload) { q.push({ url: url, p: payload }); if (!timer) { timer = setTimeout(flush, 1500); } };
+    K.diagBio.flush = flush;
+    return K.diagBio;
+  }
+
   // Device diagnostics → /diag/bio. Now carries WHY biometric is/isn't working.
   function bioDiag(step, extra) {
     try {
@@ -73,11 +109,9 @@
         err: lastError || null, declined: get('kt_biometric_declined') || null,
         unlockedAt: (get('kt_bio_unlocked_at') || '0'), extra: extra || null, ts: Date.now()
       };
-      var durl = apiBase() + '/diag/bio', dbody = JSON.stringify({ data: JSON.stringify(payload) });
-      // sendBeacon survives the location.replace() that commitUnlock() fires on a
-      // 401, so the 'validated'/'disable' events aren't lost to the navigation.
-      if (navigator.sendBeacon) { try { navigator.sendBeacon(durl, new Blob([dbody], { type: 'application/json' })); return; } catch (e) {} }
-      fetch(durl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: dbody, keepalive: true }).catch(function () {});
+      // Shared, batched sink (diagSink): the pagehide flush uses sendBeacon, so the 'validated'/'disable'
+      // events that come just before commitUnlock()'s location.replace() still arrive.
+      diagSink()(apiBase() + '/diag/bio', payload);
     } catch (e) {}
   }
   function rpId() { var h = location.hostname; return h || 'app.kiddietrac.com'; }
