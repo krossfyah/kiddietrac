@@ -2,7 +2,7 @@
 title: Sales customers
 category: Sales
 order: 6
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-customers
 ---
 # Sales customers

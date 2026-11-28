@@ -2,7 +2,7 @@
 title: MRR dashboard
 category: Administration
 order: 63
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: admin-mrr
 ---
 # MRR dashboard

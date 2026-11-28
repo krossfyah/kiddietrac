@@ -251,6 +251,7 @@ PROMPT;
                 'home_visitor' => 'home_visitor',
                 'sales_rep' => 'sales_rep',
                 'reseller_admin' => 'reseller_admin', 'reseller' => 'reseller_admin',
+                'platform_admin' => 'platform_admin',
             ];
             $va = strtolower(trim((string) $request->header('X-View-As-Role')));
             if (isset($map[$va])) {
@@ -262,12 +263,14 @@ PROMPT;
             // A reseller (2026-10-22) had no arm and fell to the guardian default, so it was
             // served the PARENT library. It works as agency admin in its own agencies.
             in_array('reseller_admin', $roles, true) && ! in_array('platform_admin', $roles, true) => 'reseller_admin',
+            /* A PLATFORM ADMIN IS ITS OWN HELP ROLE (2026-11-27, Anthony). It used to be served as 'agency_admin', so
+               an article could not be platform-only: tagging it for platform_admin also showed it to every agency
+               admin. Now platform_admin reads the director library as a SUPERSET of agency_admin (HelpService::
+               filterForRole) plus what is tagged platform_admin alone (server health, MRR, licences, resellers ...).
+               It comes before agency_admin because a platform admin usually holds agency roles too. View-as an
+               agency admin still shows exactly the agency admin's library. */
+            in_array('platform_admin', $roles, true) => 'platform_admin',
             in_array('agency_admin', $roles, true) => 'agency_admin',
-            // A platform admin holding no agency role fell through every arm to the
-            // guardian default, and was served the PARENT library. They have the
-            // superset of an agency admin, so that is the library they get -- which
-            // also makes the `roles: agency_admin, platform_admin` tags meaningful.
-            in_array('platform_admin', $roles, true) => 'agency_admin',
             in_array('centre_director', $roles, true) => 'centre_director',
             in_array('educator', $roles, true) => 'educator',
             in_array('home_visitor', $roles, true) => 'home_visitor',
@@ -532,7 +535,9 @@ PROMPT;
            every agency's help activity. It has never been reachable from the UI, so
            nothing leaked — but it is about to be, which is why it is fixed first. */
         $agencyId = $this->helpAgencyId($request);
-        $isPlatform = $role === 'platform_admin';
+        /* A platform admin with an agency on screen sees THAT agency's help activity, like everything else
+           (memory: data-leakage rule 2); only with no agency selected does it read across the platform. */
+        $isPlatform = $role === 'platform_admin' && ! $agencyId;
 
         // Top viewed (30d)
         $topViews = \Illuminate\Support\Facades\DB::table('help_article_views')

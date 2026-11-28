@@ -1,5 +1,5 @@
 ---
-roles: agency_admin, platform_admin
+roles: platform_admin
 title: Platform overview
 category: Administration
 order: 90

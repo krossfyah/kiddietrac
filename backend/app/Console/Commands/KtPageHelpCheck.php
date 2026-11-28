@@ -37,7 +37,8 @@ class KtPageHelpCheck extends Command
         'sales_rep' => 'sales_rep',
         'reseller_admin' => 'reseller_admin',
         'auditor' => 'auditor',
-        'platform_admin' => 'agency_admin',
+        // Its own help role since 2026-11-27 (superset of agency_admin plus the platform-only guides).
+        'platform_admin' => 'platform_admin',
     ];
 
     /** Screens that are not in a menu but are opened often enough to need their own "?" check. */
@@ -69,7 +70,10 @@ class KtPageHelpCheck extends Command
         $used = [];
         $named = [];
         foreach (self::ROLES as $navRole => $libRole) {
-            $keys = $nav[$navRole === 'platform_admin' ? 'agency_admin' : $navRole] ?? [];
+            // A platform admin's menu = the agency admin's + the blocks drawn only for them + the Platform section.
+            $keys = $navRole === 'platform_admin'
+                ? array_merge($nav['agency_admin'] ?? [], $nav['platform_admin'] ?? [])
+                : ($nav[$navRole] ?? []);
             if ($navRole === 'platform_admin') {
                 $keys = array_merge($keys, $platform);
             }
@@ -197,11 +201,48 @@ class KtPageHelpCheck extends Command
             $role = ($x[1][0] ?? '') !== '' && ($x[1][1] ?? -1) >= 0 ? $x[1][0] : 'guardian';
             $start = $x[0][1] + strlen($x[0][0]);
             $end = isset($m[$i + 1]) ? $m[$i + 1][0][1] : strlen($body);
-            preg_match_all("/\\b(?:hash|alt):\\s*'([^']+)'/", substr($body, $start, $end - $start), $h);
+            $branch = substr($body, $start, $end - $start);
+            if ($role === 'agency_admin') {
+                /* The agency admin branch also draws blocks for OTHER people (2026-11-27): `...(isPlatformAdmin_v22p34 ?
+                   [..] : [..])` only for a platform admin and `...(isReseller_v ? [..] : [])` only for a reseller. Their
+                   screens belong to those roles, so a platform-only guide (`roles: platform_admin`) is not reported
+                   missing for agency admins. The ": [..]" side stays the agency admin's. */
+                foreach (['isPlatformAdmin_v22p34' => 'platform_admin', 'isReseller_v' => 'reseller_admin'] as $flag => $who) {
+                    while (($p = strpos($branch, '...(' . $flag . ' ? [')) !== false) {
+                        $open = $p + strlen('...(' . $flag . ' ? ');
+                        $close = self::matchBracket($branch, $open);
+                        if ($close === null) {
+                            break;
+                        }
+                        preg_match_all("/\\b(?:hash|alt):\\s*'([^']+)'/", substr($branch, $open, $close - $open + 1), $h);
+                        $out[$who] = array_values(array_unique(array_merge($out[$who] ?? [], $h[1])));
+                        $branch = substr($branch, 0, $p) . substr($branch, $close + 1);
+                    }
+                }
+            }
+            preg_match_all("/\\b(?:hash|alt):\\s*'([^']+)'/", $branch, $h);
             $out[$role] = array_values(array_unique(array_merge($out[$role] ?? [], $h[1])));
         }
 
         return $out;
+    }
+
+    /** Offset of the "]" that closes the "[" at $open (strings and comments are not special here: menus have none). */
+    private static function matchBracket(string $s, int $open): ?int
+    {
+        $depth = 0;
+        for ($i = $open, $n = strlen($s); $i < $n; $i++) {
+            if ($s[$i] === '[') {
+                $depth++;
+            } elseif ($s[$i] === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    return $i;
+                }
+            }
+        }
+
+        return null;
     }
 
     public static function platformHashes(string $src): array

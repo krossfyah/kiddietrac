@@ -2,7 +2,7 @@
 title: KiddieTrac sales reports
 category: Reporting
 order: 93
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: platform-sales
 ---
 

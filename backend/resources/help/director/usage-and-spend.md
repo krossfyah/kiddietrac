@@ -2,7 +2,7 @@
 title: Usage and spend (texts, calls and AI per agency)
 category: Administration
 order: 65
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: usage-spend
 ---
 # Usage and spend (texts, calls and AI per agency)

@@ -2,7 +2,7 @@
 title: Feature flags and plans
 category: Administration
 order: 62
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: admin-features
 ---
 # Feature flags and plans

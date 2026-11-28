@@ -2,7 +2,7 @@
 title: Compliance evidence (SOC 2 readiness)
 category: Compliance
 order: 67
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: compliance-evidence
 ---
 # Compliance evidence (SOC 2 readiness)

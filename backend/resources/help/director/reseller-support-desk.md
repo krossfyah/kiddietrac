@@ -2,7 +2,7 @@
 title: Support desk (reseller)
 category: Administration
 order: 9
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller-support
 ---
 # Support desk (reseller)

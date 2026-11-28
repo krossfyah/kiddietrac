@@ -2,7 +2,7 @@
 title: Sales pipeline
 category: Sales
 order: 2
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales
 ---
 # Sales pipeline

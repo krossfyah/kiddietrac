@@ -2,7 +2,7 @@
 title: AI usage, credits and the Claude connection
 category: Administration
 order: 64
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: ai-usage
 ---
 # AI usage, credits and the Claude connection

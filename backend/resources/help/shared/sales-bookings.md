@@ -2,7 +2,7 @@
 title: Sales meeting bookings
 category: Sales
 order: 4
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-bookings
 ---
 # Sales meeting bookings

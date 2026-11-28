@@ -2,7 +2,7 @@
 title: Scheduled maintenance and app updates
 category: Administration
 order: 66
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: maintenance
 ---
 # Scheduled maintenance and app updates

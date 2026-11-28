@@ -2,7 +2,7 @@
 title: Branding (reseller)
 category: Administration
 order: 10
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller-brand
 ---
 # Branding (reseller)

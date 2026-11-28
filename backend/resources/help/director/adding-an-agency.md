@@ -1,5 +1,5 @@
 ---
-roles: agency_admin, platform_admin
+roles: platform_admin
 title: All agencies: adding and managing agencies
 category: Administration
 order: 5

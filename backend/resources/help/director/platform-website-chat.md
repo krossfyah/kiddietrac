@@ -2,7 +2,7 @@
 title: Website chat
 category: Sales
 order: 60
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: sales-webchat
 ---
 # Website chat

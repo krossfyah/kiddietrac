@@ -2,7 +2,7 @@
 title: Sign-in methods (Google, Microsoft and Facebook)
 category: Settings
 order: 40
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: social-settings
 ---
 

@@ -72,4 +72,4 @@ Deje un campo vacío para usar el valor predeterminado del sitio. reCAPTCHA se a
 
 [[open: #sales-webchat | Chat del sitio web]] · [[open: #sales-leads | Prospectos]] · [[open: #platform-careers | Empleos]]
 
-Vea también: [[website-subscribers]] · [[website-translations]] · [[website-chat]]
+Vea también: [[website-subscribers]] · [[website-translations]] · [[platform-website-chat]]

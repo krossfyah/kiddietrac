@@ -2,7 +2,7 @@
 title: Billing & commissions (reseller)
 category: Administration
 order: 8
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller-billing
 ---
 # Billing & commissions (reseller)

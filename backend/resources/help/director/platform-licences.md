@@ -2,7 +2,7 @@
 title: Licences (agency plans and add-ons)
 category: Billing
 order: 89
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: licences
 ---
 

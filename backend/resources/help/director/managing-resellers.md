@@ -2,7 +2,7 @@
 title: Managing resellers
 category: Administration
 order: 12
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: resellers
 ---
 # Managing resellers

@@ -2,7 +2,7 @@
 title: Website control center
 category: Marketing
 order: 29
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: marketing-site
 ---
 
@@ -76,4 +76,4 @@ Leave a field blank to use the site's built-in default. reCAPTCHA needs both key
 
 [[open: #sales-webchat | Website chat]] · [[open: #sales-leads | Leads]] · [[open: #platform-careers | Careers]]
 
-See also: [[website-subscribers]] · [[website-translations]] · [[website-chat]]
+See also: [[website-subscribers]] · [[website-translations]] · [[platform-website-chat]]

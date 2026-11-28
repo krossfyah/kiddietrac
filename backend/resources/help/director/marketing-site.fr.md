@@ -72,4 +72,4 @@ Laissez un champ vide pour utiliser la valeur par défaut du site. reCAPTCHA ne 
 
 [[open: #sales-webchat | Clavardage du site]] · [[open: #sales-leads | Pistes]] · [[open: #platform-careers | Carrières]]
 
-Voir aussi : [[website-subscribers]] · [[website-translations]] · [[website-chat]]
+Voir aussi : [[website-subscribers]] · [[website-translations]] · [[platform-website-chat]]

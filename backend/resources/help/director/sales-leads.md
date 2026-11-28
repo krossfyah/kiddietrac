@@ -1,7 +1,7 @@
 ---
 title: Adding and managing leads
 category: Sales
-roles: agency_admin, platform_admin
+roles: platform_admin
 order: 1
 screens: sales-leads
 ---

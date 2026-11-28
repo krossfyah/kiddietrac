@@ -2,7 +2,7 @@
 title: Onboard an agency (reseller)
 category: Administration
 order: 7
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller-onboard
 ---
 # Onboard an agency (reseller)

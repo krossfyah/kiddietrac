@@ -2,7 +2,7 @@
 title: Agencies (reseller)
 category: Administration
 order: 11
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller-agencies
 ---
 # Agencies (reseller)

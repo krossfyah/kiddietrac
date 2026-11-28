@@ -2,7 +2,7 @@
 title: Sales expenses and suppliers
 category: Sales
 order: 7
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-expenses
 ---
 # Sales expenses and suppliers

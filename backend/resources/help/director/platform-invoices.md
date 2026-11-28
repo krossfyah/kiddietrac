@@ -2,7 +2,7 @@
 title: Accounting AR/AP (billing agencies for KiddieTrac)
 category: Billing
 order: 90
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: sales-invoices
 ---
 # Accounting AR/AP (billing agencies for KiddieTrac)

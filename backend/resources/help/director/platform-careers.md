@@ -2,7 +2,7 @@
 title: Careers (job applications to KiddieTrac)
 category: Administration
 order: 92
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: platform-careers
 ---
 

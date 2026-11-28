@@ -2,7 +2,7 @@
 title: All my agencies (reseller overview)
 category: Administration
 order: 6
-roles: agency_admin, platform_admin, reseller_admin
+roles: platform_admin, reseller_admin
 screens: reseller
 ---
 # All my agencies (reseller overview)

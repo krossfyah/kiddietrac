@@ -2,7 +2,7 @@
 title: Plans & pricing (sales price list)
 category: Sales
 order: 5
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-plans
 ---
 # Plans & pricing (sales price list)

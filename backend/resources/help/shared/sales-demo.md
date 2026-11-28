@@ -2,7 +2,7 @@
 title: Launch demo
 category: Sales
 order: 10
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-demo
 ---
 # Launch demo

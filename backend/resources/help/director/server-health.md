@@ -2,7 +2,7 @@
 title: Server health and the leak guard
 category: Administration
 order: 61
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: server-health
 ---
 # Server health and the leak guard

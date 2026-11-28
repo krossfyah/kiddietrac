@@ -2,7 +2,7 @@
 title: Proposals (every proposal at a glance)
 category: Sales
 order: 4
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-quotes
 ---
 # Proposals (every proposal at a glance)

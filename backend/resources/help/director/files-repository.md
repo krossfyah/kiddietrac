@@ -2,7 +2,7 @@
 title: Files repository
 category: Administration
 order: 37
-roles: agency_admin, platform_admin
+roles: platform_admin
 screens: sales-library
 ---
 # Files repository

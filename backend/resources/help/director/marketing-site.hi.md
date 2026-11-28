@@ -72,4 +72,4 @@ title: वेबसाइट कंट्रोल सेंटर
 
 [[open: #sales-webchat | वेबसाइट चैट]] · [[open: #sales-leads | लीड]] · [[open: #platform-careers | करियर]]
 
-यह भी देखें: [[website-subscribers]] · [[website-translations]] · [[website-chat]]
+यह भी देखें: [[website-subscribers]] · [[website-translations]] · [[platform-website-chat]]

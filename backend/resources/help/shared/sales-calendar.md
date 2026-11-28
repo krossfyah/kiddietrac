@@ -2,7 +2,7 @@
 title: Sales calendar
 category: Sales
 order: 5
-roles: sales_rep, agency_admin, platform_admin
+roles: sales_rep, platform_admin
 screens: sales-calendar
 ---
 # Sales calendar

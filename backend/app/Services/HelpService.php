@@ -47,7 +47,7 @@ final class HelpService
         // content lives there) — NOT to 'parent' as the old default did, which
         // showed auditors irrelevant family articles.
         $roleFolder = match ($role) {
-            'agency_admin', 'centre_director', 'auditor', 'reseller_admin' => 'director',
+            'agency_admin', 'platform_admin', 'centre_director', 'auditor', 'reseller_admin' => 'director',
             'educator' => 'educator',
             'home_visitor' => 'home_visitor',
             'sales_rep' => 'sales',
@@ -278,9 +278,10 @@ final class HelpService
     {
         $articles = array_filter($articles, function ($a) use ($role) {
             // A reseller works as agency admin inside its own agencies (2026-10-22), so it
-            // also reads the guides tagged for agency admins.
+            // also reads the guides tagged for agency admins. A platform admin (its own help role since 2026-11-27,
+            // HelpController::resolveRole) reads them too - a superset - plus the guides tagged platform_admin alone.
             return empty($a['roles']) || in_array($role, $a['roles'], true)
-                || ($role === 'reseller_admin' && in_array('agency_admin', $a['roles'], true));
+                || (in_array($role, ['reseller_admin', 'platform_admin'], true) && in_array('agency_admin', $a['roles'], true));
         });
 
         if ($role === 'auditor') {
