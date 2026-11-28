@@ -2,7 +2,6 @@
 title: Getting started — your first login
 category: Getting Started
 order: 0
-screens: ~pending, ~play-spark, ~running-late, ~medications
 ---
 
 # Getting started — your first login
