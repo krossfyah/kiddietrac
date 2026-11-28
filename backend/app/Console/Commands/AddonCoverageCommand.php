@@ -267,7 +267,7 @@ final class AddonCoverageCommand extends Command
                 foreach ($e['h'] ?? [] as $h) $out[$h] = true;
             }
         }
-        foreach (glob($root . '/js/*.js') ?: [] as $f) {
+        foreach (\App\Support\PortalScripts::sources($root) as $f) {
             $src = @file_get_contents($f) ?: '';
             if (! str_contains($src, 'registerScreen(')) continue;
             if (preg_match_all('/registerScreen\(([^;]{0,160})/', $src, $m)) {

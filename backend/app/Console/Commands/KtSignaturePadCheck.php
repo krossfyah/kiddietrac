@@ -33,7 +33,7 @@ class KtSignaturePadCheck extends Command
     public function handle(): int
     {
         $root = rtrim($this->option('root') ?: base_path('../parent-portal'), '/');
-        $files = array_merge(glob($root . '/js/*.js') ?: [], glob($root . '/*.html') ?: []);
+        $files = array_merge(\App\Support\PortalScripts::sources($root), glob($root . '/*.html') ?: []);
         $bad = [];
         foreach ($files as $f) {
             $rel = ltrim(substr($f, strlen($root)), '/');

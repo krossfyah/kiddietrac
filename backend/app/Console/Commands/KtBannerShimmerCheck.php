@@ -45,7 +45,7 @@ class KtBannerShimmerCheck extends Command
         $found = [];
 
         // 1 + 2: gradients on banners in JS.
-        foreach (glob($root . '/js/*.js') as $file) {
+        foreach (\App\Support\PortalScripts::sources($root) as $file) {
             $name = basename($file);
             $src = (string) @file_get_contents($file);
             if ($name === 'kt-hero-emoji.js') {

@@ -124,7 +124,7 @@ class KtScreenGuardCheck extends Command
 
         // 2 + 3. the front end
         $root = rtrim($this->option('root') ?: base_path('../parent-portal'), '/');
-        foreach (glob($root . '/js/*.js') ?: [] as $f) {
+        foreach (\App\Support\PortalScripts::sources($root) as $f) {
             $rel = 'js/' . basename($f);
             if (preg_match('/\.(bak|orig)|\.min\.js$/', $rel)) {
                 continue;

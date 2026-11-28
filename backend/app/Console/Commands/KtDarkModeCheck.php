@@ -38,7 +38,7 @@ class KtDarkModeCheck extends Command
     public function handle(): int
     {
         $root = rtrim($this->option('root') ?: base_path('../parent-portal'), '/');
-        $files = array_merge(glob($root . '/js/*.js') ?: [], glob($root . '/css/*.css') ?: [],
+        $files = array_merge(\App\Support\PortalScripts::sources($root), glob($root . '/css/*.css') ?: [],
             array_filter([$root . '/dashboard.src.html', $root . '/index.html'], 'is_file'));
         $found = [];
         foreach ($files as $file) {
