@@ -9628,7 +9628,11 @@
     // Provider selector (segmented).
     var provider = c.provider || 'default';
     var seg = Dom.el('div', { style: 'display:inline-flex;background:var(--ink-50);border:1px solid var(--ink-200);border-radius:10px;padding:3px;gap:3px;margin-bottom:16px;flex-wrap:wrap;' });
-    var opts = [['default', 'KiddieTrac default'], ['graph', 'Our Microsoft 365'], ['google', 'Our Google / Gmail']];
+    /* Google / Gmail here sends over SMTP, and our host blocks outbound SMTP (2026-11-27), so it can never deliver.
+       It is offered only to an agency that already has it saved, marked as not working, and cannot be saved again. */
+    var googleSaved = provider === 'google';
+    var opts = [['default', 'KiddieTrac default'], ['graph', 'Our Microsoft 365']];
+    if (googleSaved) opts.push(['google', 'Our Google / Gmail (not available)']);
     var segBtns = {};
     opts.forEach(function (o) {
       var b = Dom.el('button', { type: 'button', style: 'border:none;background:transparent;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink-600);transition:all .12s;' }, o[1]);
@@ -9663,6 +9667,8 @@
     var goHost = field('SMTP host', { value: (c.google || {}).host || 'smtp.gmail.com', placeholder: 'smtp.gmail.com' });
     var goPort = field('Port', { type: 'number', value: (c.google || {}).port || 587, placeholder: '587' });
     goHostRow.appendChild(goHost); goHostRow.appendChild(goPort);
+    goWrap.appendChild(Dom.el('div', { style: 'background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:12px;' },
+      'Sending through Google over SMTP does not work: our servers are not allowed to open SMTP connections, so this mail never leaves. Switch to KiddieTrac default or Our Microsoft 365.'));
     goWrap.appendChild(goUser); goWrap.appendChild(goPass); goWrap.appendChild(goHostRow);
 
     card.appendChild(fromRow);
@@ -9713,6 +9719,11 @@
         google_host: goHost._input.value.trim(),
         google_port: goPort._input.value
       };
+      if (provider === 'google') {
+        status.style.color = '#B91C1C';
+        status.textContent = 'Google over SMTP cannot send from our servers. Choose KiddieTrac default or Our Microsoft 365.';
+        return;
+      }
       // Only send a secret/password when the operator actually typed one.
       if (gSecret._input.value) payload.graph_client_secret = gSecret._input.value;
       if (goPass._input.value) payload.google_password = goPass._input.value;

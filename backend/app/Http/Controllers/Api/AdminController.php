@@ -282,7 +282,8 @@ final class AdminController extends Controller
 
         $data = $request->validate([
             'agency_id'           => 'nullable|integer',
-            'provider'            => 'required|in:default,graph,google',
+            // 'google' sends over SMTP, which the host blocks (2026-11-27): it can never deliver, so it cannot be chosen.
+            'provider'            => ['required', 'in:default,graph'],
             'from'                => 'nullable|email|max:160',
             'from_name'           => 'nullable|string|max:120',
             'graph_tenant'        => 'nullable|string|max:120',

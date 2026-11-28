@@ -154,9 +154,16 @@ final class CacfpController extends Controller
         $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
+        /* Per centre, inside the caller's own centres (2026-11-27): the month tiles were agency-wide, so a director
+           saw every centre's meal counts next to their own roster. centre_id narrows to the centre on screen. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $centreId = (int) $request->query('centre_id', 0);
+        if ($centreId && $scope !== null && ! in_array($centreId, $scope, true)) abort(404);
         $rows = DB::table('cacfp_meals as cm')
             ->join('centres as c', 'c.id', '=', 'cm.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
+            ->when($centreId > 0, fn ($q) => $q->where('c.id', $centreId))
             ->whereBetween('cm.meal_date', [$start, $end])
             ->where('cm.served', 1)
             ->select('cm.meal_type', 'cm.eligibility_tier', 'c.name as centre_name',

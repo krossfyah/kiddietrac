@@ -73,6 +73,7 @@ final class AgencyBillingConfigController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $row = DB::table('agencies')->where('id', $agencyId)->first([
             'late_fee_percent', 'late_fee_cap', 'late_fee_grace_days', 'settings', 'currency',
+            'late_pickup_per_minute', 'late_pickup_grace_minutes',
         ]);
         $settings = [];
         if ($row && $row->settings) { $d = json_decode($row->settings, true); if (is_array($d)) $settings = $d; }
@@ -83,6 +84,11 @@ final class AgencyBillingConfigController extends Controller
             'late_fee_percent'          => $row->late_fee_percent ?? 1.5,
             'late_fee_cap'              => $row->late_fee_cap ?? 25,
             'late_fee_grace_days'       => $row->late_fee_grace_days ?? 0,
+            /* LATE PICKUP FEE (2026-11-27). App\Support\LatePickups::policy() suggests a late-pickup fee from these two
+               agency columns, but nothing let anyone set them, so every agency ran on the built-in $1.00/min after
+               5 minutes. Same defaults as policy(). */
+            'late_pickup_per_minute'    => (float) ($row->late_pickup_per_minute ?? 1.00),
+            'late_pickup_grace_minutes' => (int) ($row->late_pickup_grace_minutes ?? 5),
             'default_billing_frequency' => $bs['default_billing_frequency'] ?? 'monthly',
             'deposit_amount'            => $bs['deposit_amount'] ?? 0,
             'registration_fee'          => $bs['registration_fee'] ?? 0,
@@ -134,6 +140,8 @@ final class AgencyBillingConfigController extends Controller
             'late_fee_percent'           => 'nullable|numeric|min:0|max:25',
             'late_fee_cap'               => 'nullable|numeric|min:0|max:500',
             'late_fee_grace_days'        => 'nullable|integer|min:0|max:60',
+            'late_pickup_per_minute'     => 'nullable|numeric|min:0|max:50',
+            'late_pickup_grace_minutes'  => 'nullable|integer|min:0|max:120',
             'default_billing_frequency'  => 'nullable|in:weekly,biweekly,monthly',
             'deposit_amount'             => 'nullable|numeric|min:0|max:100000',
             'registration_fee'           => 'nullable|numeric|min:0|max:100000',
@@ -157,8 +165,8 @@ final class AgencyBillingConfigController extends Controller
         ]);
 
         $cols = [];
-        foreach (['late_fee_percent', 'late_fee_cap', 'late_fee_grace_days'] as $k) {
-            if (array_key_exists($k, $d)) $cols[$k] = $d[$k];
+        foreach (['late_fee_percent', 'late_fee_cap', 'late_fee_grace_days', 'late_pickup_per_minute', 'late_pickup_grace_minutes'] as $k) {
+            if (array_key_exists($k, $d) && $d[$k] !== null) $cols[$k] = $d[$k];
         }
         $row = DB::table('agencies')->where('id', $agencyId)->first(['settings']);
         $settings = [];

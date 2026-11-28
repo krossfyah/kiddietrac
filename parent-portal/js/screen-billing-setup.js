@@ -152,6 +152,16 @@
       var lfgW = Dom.el('div', {}); lfgW.appendChild(label('Grace (days)')); lfgW.appendChild(lfg); g2.appendChild(lfgW); inputs.late_fee_grace_days = lfg;
       c2.appendChild(g2); wrap.appendChild(c2);
 
+      /* LATE PICKUP FEE (2026-11-27): the per-minute rate and grace minutes the Late pickups screen suggests a fee
+         from. They could not be set anywhere, so every agency ran on $1.00 a minute after 5 minutes. */
+      var c2b = card('Late pickup fee', 'Suggested when staff log a late pickup. A director or admin still approves, waives or declines it.');
+      var g2b = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;' });
+      var lpr = Dom.el('input', { type: 'number', step: '0.05', min: '0', max: '50', value: (d.late_pickup_per_minute == null ? 1 : d.late_pickup_per_minute), style: inputStyle() });
+      var lprW = Dom.el('div', {}); lprW.appendChild(label('Fee per minute (' + cur + ')')); lprW.appendChild(lpr); g2b.appendChild(lprW); inputs.late_pickup_per_minute = lpr;
+      var lpg = Dom.el('input', { type: 'number', step: '1', min: '0', max: '120', value: (d.late_pickup_grace_minutes == null ? 5 : d.late_pickup_grace_minutes), style: inputStyle() });
+      var lpgW = Dom.el('div', {}); lpgW.appendChild(label('Grace (minutes before the fee starts)')); lpgW.appendChild(lpg); g2b.appendChild(lpgW); inputs.late_pickup_grace_minutes = lpg;
+      c2b.appendChild(g2b); wrap.appendChild(c2b);
+
       var c3 = card('Accepted payment methods', 'Which ways families may pay.');
       var methodWrap = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;' });
       var methodChecks = {};
@@ -270,6 +280,8 @@
           late_fee_percent: parseFloat(inputs.late_fee_percent.value) || 0,
           late_fee_cap: parseFloat(inputs.late_fee_cap.value) || 0,
           late_fee_grace_days: parseInt(inputs.late_fee_grace_days.value, 10) || 0,
+          late_pickup_per_minute: (function (v) { var n = parseFloat(v); return isNaN(n) ? 1 : Math.max(0, Math.min(50, n)); })(inputs.late_pickup_per_minute.value),
+          late_pickup_grace_minutes: (function (v) { var n = parseInt(v, 10); return isNaN(n) ? 5 : Math.max(0, Math.min(120, n)); })(inputs.late_pickup_grace_minutes.value),
           autopay_default: inputs.autopay_default.checked,
           autopay_required: inputs.autopay_required.checked,
           card_surcharge_percent: parseFloat(inputs.card_surcharge_percent.value) || 0,

@@ -1221,7 +1221,7 @@
     const month = date.slice(0, 7);
     const [roster, report] = await Promise.all([
       Api.get(`/cacfp/roster?centre_id=${centreId}&date=${date}`),
-      Api.get(`/cacfp/monthly?month=${month}`),
+      Api.get(`/cacfp/monthly?month=${month}&centre_id=${centreId}`),
     ]);
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
@@ -1251,13 +1251,19 @@
     </div>`;
     if (window.KT && KT.centreBar) KT.centreBar(main, { items: centres, current: centreId, onChange: function (id) { cacfpCentreId = id; renderCacfp(main); } });
     main.querySelectorAll('input[type="checkbox"][data-meal]').forEach(cb => cb.onchange = async () => {
-      await Api.post('/cacfp/meal', {
-        centre_id: centreId,
-        child_id: +cb.dataset.child,
-        meal_date: date,
-        meal_type: cb.dataset.meal,
-        served: cb.checked,
-      });
+      // A refused save puts the tick back (2026-11-27): it used to stay ticked although nothing was recorded.
+      try {
+        await Api.post('/cacfp/meal', {
+          centre_id: centreId,
+          child_id: +cb.dataset.child,
+          meal_date: date,
+          meal_type: cb.dataset.meal,
+          served: cb.checked,
+        });
+      } catch (e) {
+        cb.checked = !cb.checked;
+        if (window.KT && KT.toast) KT.toast((e && e.message) || 'That meal could not be saved. Please try again.', 'error', 7000);
+      }
     });
   }
 

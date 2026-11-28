@@ -1050,7 +1050,11 @@
                 ${centres.map(c => `<option value="centre:${c.id}"${(!canSendAgencyWide && centres.length === 1) ? ' selected' : ''}>📍 Centre: ${esc(c.name)}</option>`).join('')}
               </select>
               ${noCentres
-                ? `<div style="font-size:12px;color:#B91C1C;margin-top:4px;">⚠ No centres available for this account. Announcements can only be sent by a centre director or agency admin — check you're signed in with that role.</div>`
+                ? `<div style="font-size:12px;color:#B91C1C;margin-top:4px;">${_annRole === 'educator'
+                    /* An educator CAN send to their own centre (2026-11-27): the old text said only directors and
+                       admins could, which was wrong for an educator who simply is not placed at a centre yet. */
+                    ? '⚠ You are not placed at a centre yet, so there is no one to send to. Ask your director to add you to your centre.'
+                    : '⚠ No centres available for this account. Check that a centre is set up and that you are signed in to the right agency.'}</div>`
                 : ''}
             </div>
 
