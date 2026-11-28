@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Support\Audience;
 use App\Support\CentreScope;
+use App\Support\PrivateFiles;
 use App\Support\RefCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,10 @@ final class BackgroundCheckController extends Controller
         $now = \App\Support\AgencyTime::todayDate();
         $rows->transform(function ($r) use ($now, $ref) {
             $r->staff_ref = $ref[(int) $r->user_id] ?? null;
+            /* The scan itself never travels in the list (2026-11-28, App\Support\PrivateFiles): only whether there
+               is one. The screen asks GET /admin/background-checks/{id}/document for a short-lived link on the click. */
+            $r->has_document = PrivateFiles::path($r->document_url, 'bgc', (int) $r->agency_id) !== null;
+            unset($r->document_url);
             if (! $r->expires_at) {   // a clearance that never expires (California)
                 $r->status_bucket = 'valid';
                 $r->days_until_expiry = null;
@@ -93,7 +98,6 @@ final class BackgroundCheckController extends Controller
             'reference'    => 'nullable|string|max:120',
             'issued_at'    => 'nullable|date',
             'expires_at'   => 'nullable|date',
-            'document_url' => 'nullable|string|max:500',
             'notes'        => 'nullable|string|max:2000',
         ]);
         $agencyId = $this->resolveAgencyId($request);
@@ -119,8 +123,9 @@ final class BackgroundCheckController extends Controller
             'notes'        => isset($data['notes']) && trim((string) $data['notes']) !== '' ? trim((string) $data['notes']) : null,
             'updated_at'   => now(),
         ];
-        // The form never sends the document (it is uploaded on its own), so an edit must not wipe it.
-        if (array_key_exists('document_url', $data) && $data['document_url'] !== null) $payload['document_url'] = $data['document_url'];
+        /* The document is NEVER taken from the client (2026-11-28). It is uploaded on its own (uploadDocument), and a
+           `document_url` sent here used to be stored as-is: a path to another agency's protected file, saved on a
+           check, was then signed and handed out by the list. */
 
         if (!empty($data['id'])) {
             $row = $this->ownedRow($agencyId, (int) $data['id'], $staffIds);
@@ -132,19 +137,62 @@ final class BackgroundCheckController extends Controller
         return response()->json(['id' => $id, 'status' => 'created'], 201);
     }
 
-    /** Attach a file (scan/PDF) to a background-check record -> background_checks.document_url. */
+    /**
+     * Attach a file (scan/PDF) to a background-check record. A police or vulnerable-sector check is filed on the
+     * PRIVATE disk (App\Support\PrivateFiles, background-checks/<agency>/<check id>/), never under the web root,
+     * and a replaced scan is removed rather than left behind.
+     */
     public function uploadDocument(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAccess($request, $agencyId);
-        $this->ownedRow($agencyId, $id, $this->staffIds($request, $agencyId));
+        $row = $this->ownedRow($agencyId, $id, $this->staffIds($request, $agencyId));
         $request->validate(['file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx', 'max:10240']]);
-        $f = $request->file('file');
-        $name = (string) \Illuminate\Support\Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: $f->extension());
-        $f->storeAs('background-checks/' . $id, $name, 'public');
-        $url = '/storage/background-checks/' . $id . '/' . $name;
-        DB::table('background_checks')->where('id', $id)->update(['document_url' => $url, 'updated_at' => now()]);
-        return response()->json(['document_url' => $url]);
+        $ref = PrivateFiles::put($request->file('file'), 'bgc', $agencyId, (string) $id);
+        DB::table('background_checks')->where('id', $id)->update(['document_url' => $ref, 'updated_at' => now()]);
+        if ($row->document_url && $row->document_url !== $ref) PrivateFiles::delete($row->document_url, 'bgc', $agencyId);
+
+        return response()->json(['has_document' => true]);
+    }
+
+    /**
+     * GET /admin/background-checks/{id}/document - a link to the scan, valid PrivateFiles::TTL_MINUTES, for a
+     * caller who may see this check (active agency; a director, their own centres' staff). Every open is audited.
+     */
+    public function document(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAccess($request, $agencyId);
+        $row = $this->ownedRow($agencyId, $id, $this->staffIds($request, $agencyId));
+        $path = PrivateFiles::path($row->document_url, 'bgc', $agencyId);
+        abort_unless($path !== null && PrivateFiles::disk()->exists($path), 404, 'No document is attached to this check.');
+        try {
+            \App\Support\Audit::write([
+                'agency_id' => $agencyId, 'user_id' => $request->user()->id, 'action' => 'background_check.document_opened',
+                'entity_type' => 'user', 'entity_id' => (int) $row->user_id,
+                'payload' => json_encode(['background_check_id' => (int) $row->id, 'check_type' => $row->check_type]),
+            ]);
+        } catch (\Throwable $e) { report($e); }
+
+        return response()->json(PrivateFiles::openAnswer('bgc', (int) $row->id, $agencyId, (int) $request->user()->id, $path,
+            'background-check-' . $row->check_type . '-' . $row->id));
+    }
+
+    /**
+     * For PrivateFileController: the scan's private path when this person, acting in this agency NOW, may still see
+     * the check - the same scope as the list. Null (the door answers 404) otherwise.
+     */
+    public function documentPathFor(Request $as, int $id, int $agencyId): ?string
+    {
+        try {
+            if ($this->resolveAgencyId($as) !== $agencyId) return null;
+            $this->assertAgencyAccess($as, $agencyId);
+            $row = $this->ownedRow($agencyId, $id, $this->staffIds($as, $agencyId));
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            return null;
+        }
+
+        return PrivateFiles::path($row->document_url, 'bgc', $agencyId);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -153,6 +201,7 @@ final class BackgroundCheckController extends Controller
         $this->assertAgencyAccess($request, $agencyId);
         $row = $this->ownedRow($agencyId, $id, $this->staffIds($request, $agencyId));
         DB::table('background_checks')->where('id', $row->id)->delete();
+        PrivateFiles::delete($row->document_url, 'bgc', $agencyId);   // a deleted check leaves no police record behind
         return response()->json(['status' => 'deleted']);
     }
 

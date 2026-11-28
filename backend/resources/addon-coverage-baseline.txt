@@ -301,6 +301,7 @@ route me/voice-opt-out
 route media/download
 route media/e
 route media/f
+route media/p
 route meetings
 route meetings/people
 route meetings/rsvp
@@ -758,6 +759,7 @@ job kt:leak-sweep
 job kt:licences
 job kt:mail-gate-watch
 job kt:notify-audience-check
+job kt:page-help-check
 job kt:personal-announcements
 job kt:photo-consent-check
 job kt:proposal-followups

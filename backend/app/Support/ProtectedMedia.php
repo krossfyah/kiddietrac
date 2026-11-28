@@ -67,14 +67,15 @@ class ProtectedMedia
            folder also carries the same `Require all denied` .htaccess as the rest. */
         'sms-consent',
         'file-requests',
-        'background-checks',
+        /* background-checks LEFT this list (2026-11-28): police checks are filed on the private disk now and served
+           only by App\Support\PrivateFiles (bound to the person and agency, re-checked on open), never by /media/f. */
         'ai-extractions',
         /* A centre's floor plan (2026-11-09, Drill log centre map): the layout of a childcare home, exits and all. */
         'drill-maps',
         /* TWO MORE (2026-11-10, PIPEDA review). contact-cards: a scanned business card - a person's name, phone
            and email - answered 200 to a bare GET. user-documents: files an admin attaches to a staff member's
            record (empty so far, open the moment one was added). Both only go out in API JSON. */
-        'contact-cards',
+        /* contact-cards LEFT this list (2026-11-28): private disk + App\Support\PrivateFiles, like background checks. */
         'user-documents',
         /* KiddieTrac HR document vault (2026-11-27, App\Support\HrDocs): IDs, contracts, sick notes. Only ever handed out
            signed, from HrFileController::open to someone allowed to see that document. */
@@ -82,6 +83,13 @@ class ProtectedMedia
         /* Health & safety files (2026-11-27, App\Support\HrSafety): hazard photos, safety data sheets, H&S task evidence.
            Only ever handed out signed by an endpoint that checked the caller may see the record. */
         'safety-files',
+        /* TWO THAT WERE STILL WRITTEN INTO THE WEB ROOT (2026-11-28 upload sweep). media: POST /photos
+           (MediaController::upload) - photographs of children, tagged to them. voice-messages: POST /chat/voice - a
+           parent's or educator's recorded voice. Both were stored on the public disk in folders no list named, so
+           the first upload would have been readable by anyone with the URL. Both only go out as `/storage/...` in API
+           JSON, which SignProtectedMedia signs. */
+        'media',
+        'voice-messages',
     ];
 
     /** Long enough for a working day, short enough that a leaked link dies. */

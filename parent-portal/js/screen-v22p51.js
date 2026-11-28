@@ -751,9 +751,22 @@
     if (r.status_bucket === 'expired') return `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'} ago`;
     return n === 0 ? 'today' : `in ${n} day${n === 1 ? '' : 's'}`;
   }
-  function bgcDocUrl(u) {
-    const host = ((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
-    return u ? (/^https?:\/\//.test(u) ? u : host + u) : '';
+  /* THE SCAN IS OPENED, NEVER LISTED (2026-11-28, App\Support\PrivateFiles). The list says only has_document; a
+     click asks /admin/background-checks/{id}/document for a link that lives ten minutes and is bound to this person
+     and agency, then shows it in the house document viewer (or saves it, for a Word file). Shared with the staff
+     record's Checks tab (screen-admin.js) as KT.openBgcDocument. */
+  async function bgcOpenDoc(id) {
+    let r;
+    try { r = await Api.get('/admin/background-checks/' + encodeURIComponent(id) + '/document'); }
+    catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not open the document', (e && e.message) || 'Please try again.', '#DC2626'); return; }
+    if (r.previewable && KT.viewDocument) { KT.viewDocument(r.url, { title: 'Background check', filename: r.name, mime: r.mime, label: 'Background check' }); return; }
+    const a = document.createElement('a'); a.href = r.url; a.setAttribute('download', r.name || 'background-check'); a.setAttribute('data-kt-download', '1');
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  window.KT = window.KT || {};
+  KT.openBgcDocument = bgcOpenDoc;
+  function bgcWireDocs(root) {
+    root.querySelectorAll('[data-bgc-doc]').forEach(a => a.onclick = (ev) => { ev.preventDefault(); bgcOpenDoc(a.getAttribute('data-bgc-doc')); });
   }
 
   async function renderBackgroundChecks(main) {
@@ -811,7 +824,7 @@
           <td>${escapeHtml(r.reference || '—')}</td>
           <td style="white-space:nowrap;">${r.issued_at ? bgcDay(r.issued_at) : '—'}</td>
           <td style="white-space:nowrap;">${r.expires_at ? bgcDay(r.expires_at) : 'No expiry'}<div style="font-size:12px;color:#64748B;">${bgcWhen(r)}</div></td>
-          <td>${bgcChip(r.status_bucket)}${r.document_url ? `<div style="margin-top:4px;"><a href="${escapeHtml(bgcDocUrl(r.document_url))}" target="_blank" rel="noopener" style="font-size:12px;color:#1D4ED8;font-weight:600;">📄 Document</a></div>` : ''}</td>
+          <td>${bgcChip(r.status_bucket)}${r.has_document ? `<div style="margin-top:4px;"><a href="#" data-bgc-doc="${r.id}" style="font-size:12px;color:#1D4ED8;font-weight:600;">📄 Document</a></div>` : ''}</td>
           <td style="max-width:260px;font-size:13px;color:#334155;">${r.notes ? `<div style="white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${escapeHtml(r.notes)}</div>` : '<span style="color:#94A3B8;">—</span>'}</td>
           <td style="text-align:right;white-space:nowrap;">
             <button type="button" class="btn btn-secondary btn-sm" data-view="${r.id}">View</button>
@@ -820,6 +833,7 @@
           </td></tr>`).join('')
       + '</tbody></table></div>';
     const byId = id => all.find(r => String(r.id) === String(id));
+    bgcWireDocs(host);
     host.querySelectorAll('[data-view]').forEach(b => b.onclick = () => openBgcDetail(byId(b.dataset.view)));
     host.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openBgcModal(byId(b.dataset.edit)));
     host.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
@@ -848,7 +862,7 @@
       </table>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#94A3B8;margin-bottom:8px;">Attached document</div>
-        <div id="bgc-doc-cur">${row.document_url ? `<a href="${escapeHtml(bgcDocUrl(row.document_url))}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>` : '<span style="color:#64748B;">No document attached yet.</span>'}</div>
+        <div id="bgc-doc-cur">${row.has_document ? `<a href="#" data-bgc-doc="${row.id}" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>` : '<span style="color:#64748B;">No document attached yet.</span>'}</div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
           <input id="bgc-file" type="file" accept=".pdf,image/*,.doc,.docx" style="font-size:13px;max-width:100%;">
           <button id="bgc-upload" type="button" class="btn btn-primary btn-sm">Upload</button>
@@ -863,6 +877,7 @@
         { label: 'Close', primary: true },
       ],
     });
+    bgcWireDocs(body);
     body.querySelector('#bgc-upload').onclick = async () => {
       const fileEl = body.querySelector('#bgc-file');
       const st = body.querySelector('#bgc-up-status');
@@ -874,8 +889,9 @@
         const fd = new FormData();
         fd.append('file', fileEl.files[0]);
         const res = await Api.postForm('/admin/background-checks/' + row.id + '/document', fd);
-        row.document_url = res.document_url;
-        body.querySelector('#bgc-doc-cur').innerHTML = `<a href="${escapeHtml(bgcDocUrl(res.document_url))}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>`;
+        row.has_document = !!(res && res.has_document);
+        body.querySelector('#bgc-doc-cur').innerHTML = `<a href="#" data-bgc-doc="${row.id}" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>`;
+        bgcWireDocs(body.querySelector('#bgc-doc-cur'));
         st.style.color = '#047857'; st.textContent = '✓ Uploaded.';
         if (BGC.main) { const h = BGC.main.querySelector('#bgc-list'); if (h) renderBgcList(h, BGC.rows); }
       } catch (e) {

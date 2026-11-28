@@ -43,7 +43,8 @@ final class EnforcePlanFeatures
                standard feature, and /resolve only closes a check that already exists. */
             'safe-arrival/today', 'safe-arrival/history', 'safe-arrival/departure', 'safe-arrival/settings',
             'safe-arrival/test-call', 'safe-arrival/phone-messages', 'parent/phone-line'], []],   // + voice announcements: the feature is "SMS & voice announcements" (2026-11-26)
-        'staff_scheduling' => [['director/schedule', 'operations/substitutes', 'operations/sub-requests', 'operations/room-rotations', 'provider/educator-rooms'], []],
+        'staff_scheduling' => [['director/schedule', 'operations/substitutes', 'operations/sub-requests', 'operations/room-rotations', 'provider/educator-rooms',
+            'me/cover-requests'], []],   // + the substitute's own side of cover requests, #cover-requests (2026-11-28)
         'timesheets'       => [['director/timesheets', 'time-off', 'admin/time-off', 'admin/timeoff-reminders'], []],
         'hr'               => [['hr/', 'exports/hr-absence'], []],   // KiddieTrac HR add-on: leave balances, employee files, absence report (2026-11-27)
         'payroll'          => [['admin/payroll', 'admin/payroll-settings', 'exports/payroll', 'provider/payroll-documents', 'payroll-documents/', 'me/payslips', 'agency/payslip-settings', 'me/payroll-documents', 'auth/me/payroll-documents'], []],

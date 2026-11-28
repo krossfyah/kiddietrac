@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Support\Audit;
+use App\Support\PrivateFiles;
 use App\Support\ProtectedMedia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -69,8 +70,17 @@ final class ContactController extends Controller
             'is_emergency' => 'nullable|boolean',
             'is_favourite' => 'nullable|boolean',
             'last_contacted_on' => 'nullable|date_format:Y-m-d',
-            'card_image_url' => 'nullable|string|max:500',
-            'photo_url' => 'nullable|string|max:500',
+            /* The scanned card is never a URL from the client (2026-11-28): scanCard files it on the private disk and
+               answers an opaque `card_ref`, which is only accepted back for a file of THIS agency's that exists. */
+            'card_ref' => 'nullable|string|max:300',
+            /* A picture link the client may set - but never one of our own private or protected files: the response
+               signs any /storage/<protected> path it carries, so a stored path to another agency's file was a read. */
+            'photo_url' => ['nullable', 'string', 'max:500', function ($attr, $v, $fail) {
+                $v = (string) $v;
+                if (PrivateFiles::isRef($v) || ProtectedMedia::isProtected($v) || str_contains($v, '/media/')) {
+                    $fail('That picture link cannot be used.');
+                }
+            }],
         ];
     }
 
@@ -119,6 +129,9 @@ final class ContactController extends Controller
             if ($r->display_name === '') { $r->display_name = $r->company ?: '(unnamed contact)'; }
             $r->source = 'book';
             $r->editable = true;
+            /* Whether there is a scanned card, never the file: GET /contacts/{id}/card mints a short-lived link. */
+            $r->has_card = PrivateFiles::path($r->card_image_url, 'card', (int) $r->agency_id) !== null;
+            unset($r->card_image_url);
 
             return $r;
         });
@@ -285,7 +298,7 @@ final class ContactController extends Controller
         }
 
         $row = array_intersect_key($data, array_flip(self::FIELDS));
-        $row = self::storedUrls($row);
+        $row = $this->withCard($row, $data, $agencyId);
         $row['agency_id'] = $agencyId;
         $row['tags'] = isset($data['tags']) ? json_encode(array_values($data['tags'])) : null;
         $row['created_by_id'] = $request->user()->id;
@@ -308,7 +321,7 @@ final class ContactController extends Controller
         $this->assertCentreBelongs($agencyId, $data['centre_id'] ?? null);
 
         $row = array_intersect_key($data, array_flip(self::FIELDS));
-        $row = self::storedUrls($row);
+        $row = $this->withCard($row, $data, $agencyId);
         if (array_key_exists('tags', $data)) {
             $row['tags'] = $data['tags'] === null ? null : json_encode(array_values($data['tags']));
         }
@@ -359,12 +372,9 @@ final class ContactController extends Controller
         ]);
 
         $file = $request->file('card');
-        $path = $file->storeAs(
-            'contact-cards/' . $agencyId . '/' . now()->format('Y/m'),
-            uniqid('card-', true) . '.' . ($file->getClientOriginalExtension() ?: 'jpg'),
-            'public'
-        );
-        $url = Storage::disk('public')->url($path);
+        /* The private disk (2026-11-28, App\Support\PrivateFiles): a card is a person's name, phone and email.
+           contact-cards/<agency>/<Y/m>/ - never under the web root, never a link in the answer. */
+        $cardRef = PrivateFiles::put($file, 'card', $agencyId, now()->format('Y/m'));
 
         $parsed = null;
         $reason = null;
@@ -372,6 +382,9 @@ final class ContactController extends Controller
         $key = (string) config('services.anthropic.key', '');
         if ($key === '') {
             $reason = 'Card reading is not configured on this server.';
+        } elseif (\App\Support\AiConfig::offFor($agencyId)) {
+            // Test agencies and agencies with AI switched off send nothing to the AI (2026-11-28; it never asked).
+            $reason = 'Card reading is switched off for this agency.';
         } else {
             try {
                 $mime = $file->getMimeType() ?: 'image/jpeg';
@@ -423,7 +436,7 @@ final class ContactController extends Controller
         }
 
         return response()->json([
-            'card_image_url' => $url,
+            'card_ref' => $cardRef,
             'parsed' => $parsed,
             'reason' => $reason,
         ]);
@@ -448,19 +461,49 @@ final class ContactController extends Controller
         abort_unless($ok, 422, 'That centre is not in this agency.');
     }
 
-    /* The scanned card is a protected file (contact-cards, 2026-11-10), so the screen holds - and sends back - the
-       signed /media/f link it was given. Store the /storage path that link stands for, never the link: it dies in
-       12 hours. */
-    private static function storedUrls(array $row): array
+    /**
+     * The card a save names: `card_ref` from scanCard, accepted only for a file of this agency's that exists on the
+     * private disk. Absent = leave the card as it is; null = take it off the contact.
+     */
+    private function withCard(array $row, array $data, int $agencyId): array
     {
-        foreach (['card_image_url', 'photo_url'] as $k) {
-            $u = (string) ($row[$k] ?? '');
-            if (str_contains($u, '/media/f') && preg_match('/[?&]p=([A-Za-z0-9_-]+)/', $u, $m)) {
-                $rel = ProtectedMedia::decode($m[1]);
-                $row[$k] = $rel === null ? null : '/storage/' . $rel;
-            }
+        if (! array_key_exists('card_ref', $data)) {
+            return $row;
         }
+        $ref = $data['card_ref'];
+        if ($ref === null || $ref === '') {
+            $row['card_image_url'] = null;
+            return $row;
+        }
+        $path = PrivateFiles::path((string) $ref, 'card', $agencyId);
+        abort_unless($path !== null && PrivateFiles::disk()->exists($path), 422, 'That business card could not be found. Scan it again.');
+        $row['card_image_url'] = (string) $ref;
+
         return $row;
+    }
+
+    /** GET /contacts/{id}/card - a link to the scanned card, valid PrivateFiles::TTL_MINUTES. */
+    public function card(Request $request, int $id): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $row = $this->findScoped($agencyId, $id);
+        $path = PrivateFiles::path($row->card_image_url, 'card', $agencyId);
+        abort_unless($path !== null && PrivateFiles::disk()->exists($path), 404, 'This contact has no business card.');
+
+        return response()->json(PrivateFiles::openAnswer('card', (int) $row->id, $agencyId, (int) $request->user()->id, $path, 'business-card-' . $row->id));
+    }
+
+    /**
+     * For PrivateFileController: the card's private path when this person, acting in this agency NOW, may still open
+     * the contact book (the route's roles, in the ACTIVE agency) and the contact is this agency's. Null otherwise.
+     */
+    public function cardPathFor(Request $as, int $id, int $agencyId): ?string
+    {
+        if ((int) $this->resolveAgencyId($as) !== $agencyId) return null;
+        if (! array_intersect(\App\Support\AgencyRole::names($as), ['agency_admin', 'centre_director', 'platform_admin'])) return null;
+        $row = DB::table('contacts')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+
+        return $row ? PrivateFiles::path($row->card_image_url, 'card', $agencyId) : null;
     }
 
     private function audit(int $agencyId, Request $request, string $action, int $id, array $row, string $verb, ?object $was = null): void

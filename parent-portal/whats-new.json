@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🔒",
+            "title": "Background checks and business cards kept private",
+            "body": "Scanned police checks and business cards are now stored privately. They open in the document viewer when you click them, and the link only works for you for a few minutes.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "↩️",
             "title": "Reply to one message, everywhere",
             "body": "Parents can now reply to one particular message too: press the ↩ beside it, or swipe it right on a phone, and your reply shows the message it answers. Every chat now has the same quiet + to react and ↩ to reply, and the same row of reactions when you press +.",

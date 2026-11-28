@@ -85,7 +85,7 @@ final class FeatureFlagController extends Controller
 
         // ── Staff ─────────────────────────────────────────────────────────────────
         'staff_scheduling'  => ['label' => 'Staff scheduling',             'plan_min' => 'starter',    'group' => 'Staff',
-            'hashes' => ['schedule', 'staff-calendar', 'substitutes', 'room-rotations', 'educator-rooms']],
+            'hashes' => ['schedule', 'staff-calendar', 'substitutes', 'cover-requests', 'room-rotations', 'educator-rooms']],   // + cover-requests: a substitute taking open cover (2026-11-28)
         'timesheets'        => ['label' => 'Time clock & timesheets',      'plan_min' => 'starter',    'group' => 'Staff',
             'hashes' => ['timesheets', 'time-clock', 'time-off']],
         'payroll'           => ['label' => 'Payroll documents & payslips', 'plan_min' => 'growth',     'group' => 'Staff',

@@ -195,7 +195,7 @@
         + '<td style="' + td + 'text-align:right;white-space:nowrap;">'
         + (r.editable
           ? '<button type="button" class="ct-edit" data-id="' + r.id + '">✏️ Edit contact</button>'
-            + (r.card_image_url ? '<button type="button" class="ct-card" data-url="' + esc(r.card_image_url) + '">🪪 Business card</button>' : '')
+            + (r.has_card ? '<button type="button" class="ct-card" data-id="' + r.id + '">🪪 Business card</button>' : '')
             + '<button type="button" class="ct-del" data-id="' + r.id + '" data-name="' + who + '">🗑 Delete contact</button>'
           /* Staff and parent rows are edited where they live (2026-10-01: "how does one
              edit a record — there is no kebab?"). The kebab opens the real record, so
@@ -273,9 +273,15 @@
     });
     body.querySelectorAll('.ct-card').forEach(function (b) {
       b.addEventListener('click', function () {
-        // In the app's viewer — a new tab opens nothing in the Android app.
-        if (KT.mediaViewer) { KT.mediaViewer.open([{ url: b.getAttribute('data-url'), caption: 'Business card' }], 0); return; }
-        window.open(b.getAttribute('data-url'), '_blank', 'noopener');
+        /* The card is a private file (2026-11-28, App\Support\PrivateFiles): the list only says has_card, and the
+           click asks for a link that lives ten minutes and is bound to this person and agency. */
+        Api.get('/contacts/' + b.getAttribute('data-id') + '/card').then(function (o) {
+          // In the app's viewer — a new tab opens nothing in the Android app.
+          if (KT.mediaViewer) { KT.mediaViewer.open([{ url: o.url, caption: 'Business card' }], 0); return; }
+          window.open(o.url, '_blank', 'noopener');
+        }).catch(function (err) {
+          if (Dom.toast) Dom.toast((err && err.data && err.data.message) || (err && err.message) || 'The card could not be opened.', 'error');
+        });
       });
     });
     body.querySelectorAll('.ct-del').forEach(function (b) {
@@ -352,7 +358,9 @@
       + 'Ring first in an emergency <span style="color:' + C.muted + ';">— pinned to the top of the list</span></label>'
       + '<div id="ct-msg" style="margin-top:12px;font-size:13px;color:' + C.bad + ';"></div>';
 
-    var cardUrl = e.card_image_url || null;
+    /* A NEW scan's private reference (scanCard answers card_ref). An existing card stays as it is unless a new one is
+       scanned: the save only sends card_ref when there is one. */
+    var cardRef = null;
 
     /* EMAILS, ITS OWN TAB (2026-11-11, Anthony: "full sweep across all user records to have a subtab for linked emails").
        A directory contact can have emails linked to it (App\Support\PersonMail, type=contact) and its record never
@@ -423,7 +431,7 @@
             var cid = wrap.querySelector('#ct-centre_id').value;
             body.centre_id = cid ? +cid : null;
             body.is_emergency = wrap.querySelector('#ct-is_emergency').checked;
-            if (cardUrl) body.card_image_url = cardUrl;
+            if (cardRef) body.card_ref = cardRef;
 
             if (!body.first_name && !body.last_name && !body.company) {
               msg.textContent = 'Give the contact a name or a company.';
@@ -469,7 +477,7 @@
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
             if (!res.ok) throw new Error((res.j && res.j.message) || 'The upload was refused.');
-            cardUrl = res.j.card_image_url || cardUrl;
+            cardRef = res.j.card_ref || cardRef;
 
             var got = res.j.parsed && Object.keys(res.j.parsed).length ? res.j.parsed : null;
             if (got) {

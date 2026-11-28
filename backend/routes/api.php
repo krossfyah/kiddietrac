@@ -380,6 +380,15 @@ Route::get('/media/e/{token}', [\App\Http\Controllers\Api\MediaFileController::c
     ->where('token', '[A-Za-z0-9\-_\.]+')
     ->name('media.email');
 
+/* A PRIVATE-disk file (2026-11-28, App\Support\PrivateFiles): background-check scans and scanned business cards.
+   No bearer token for the same reason as /media/f, but the link lives ten minutes, names the person and agency it was
+   minted for, and PrivateFileController re-checks both against the record before streaming. Minted only by
+   GET /admin/background-checks/{id}/document and GET /contacts/{id}/card. */
+Route::get('/media/p/{kind}/{id}', [\App\Http\Controllers\Api\PrivateFileController::class, 'show'])
+    ->where('kind', 'bgc|card')->whereNumber('id')
+    ->name('media.private')
+    ->middleware(['signed', 'throttle:120,1,r-media-private']);
+
 Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1,r-zumrails-webhook');
 
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
@@ -1359,6 +1368,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                 Route::patch ('/contacts/{id}',      [\App\Http\Controllers\Api\ContactController::class, 'update'])->where('id', '[0-9]+');
                 Route::delete('/contacts/{id}',      [\App\Http\Controllers\Api\ContactController::class, 'destroy'])->where('id', '[0-9]+');
                 Route::post  ('/contacts/scan-card', [\App\Http\Controllers\Api\ContactController::class, 'scanCard']);
+                // The scanned card, as a ten-minute link for this person (2026-11-28, App\Support\PrivateFiles).
+                Route::get   ('/contacts/{id}/card', [\App\Http\Controllers\Api\ContactController::class, 'card'])->where('id', '[0-9]+')->middleware('throttle:60,1,r-contact-card');
             });
 
             /* One ledger per ACCOUNT, both directions — what a person owes the agency
@@ -3041,6 +3052,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'listAgency']);
         Route::post  ('/admin/background-checks',          [\App\Http\Controllers\Api\BackgroundCheckController::class, 'upsert']);
         Route::post  ('/admin/background-checks/{id}/document', [\App\Http\Controllers\Api\BackgroundCheckController::class, 'uploadDocument']);
+        // The scan, as a ten-minute link for this person (2026-11-28, App\Support\PrivateFiles). Audited.
+        Route::get   ('/admin/background-checks/{id}/document', [\App\Http\Controllers\Api\BackgroundCheckController::class, 'document'])->whereNumber('id')->middleware('throttle:60,1,r-bgc-document');
         Route::delete('/admin/background-checks/{id}',     [\App\Http\Controllers\Api\BackgroundCheckController::class, 'destroy']);
     });
 

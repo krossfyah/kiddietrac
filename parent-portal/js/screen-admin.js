@@ -3499,8 +3499,20 @@
             line.appendChild(left);
             var right = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
             right.appendChild(Dom.el('span', { style: 'color:' + col + ';font-weight:700;' }, r.status_bucket || ''));
-            if (r.document_url) {
-              right.appendChild(Dom.el('a', { href: (/^https?:/.test(r.document_url) ? r.document_url : apiHost + r.document_url), target: '_blank', rel: 'noopener', title: 'Open document', style: 'color:#1D4ED8;font-weight:600;text-decoration:none;font-size:15px;' }, '📄'));
+            /* The scan is opened on the click, never listed (2026-11-28, App\Support\PrivateFiles): a ten-minute
+               link from /admin/background-checks/{id}/document, shown in the house document viewer. */
+            if (r.has_document) {
+              var docA = Dom.el('a', { href: '#', title: 'Open document', style: 'color:#1D4ED8;font-weight:600;text-decoration:none;font-size:15px;' }, '📄');
+              docA.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                if (KT.openBgcDocument) { KT.openBgcDocument(r.id); return; }
+                Api.get('/admin/background-checks/' + r.id + '/document').then(function (o) {
+                  if (o.previewable && KT.viewDocument) { KT.viewDocument(o.url, { title: 'Background check', filename: o.name, mime: o.mime, label: 'Background check' }); return; }
+                  var a = document.createElement('a'); a.href = o.url; a.setAttribute('download', o.name || 'background-check'); a.setAttribute('data-kt-download', '1');
+                  document.body.appendChild(a); a.click(); a.remove();
+                }).catch(function (e) { if (KT.toast) KT.toast('⚠️', 'Could not open the document', (e && e.message) || 'Please try again.', '#DC2626'); });
+              });
+              right.appendChild(docA);
             }
             line.appendChild(right); bcBody.appendChild(line);
           });
