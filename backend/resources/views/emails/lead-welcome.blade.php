@@ -182,7 +182,7 @@
       . $feat('Attendance &amp; One-Tap check-in', 'sign-in and sign-out in a tap, with ratios kept for you')
       . $feat('Billing &amp; payments', 'invoices, CWELCC, autopay, card payments and QuickBooks sync')
       . $feat('Parent app', 'daily reports, photos, messages and invoices in one place')
-      . $feat('Staff &amp; payroll', 'schedules, time clock, payroll-ready hours and certifications')
+      . $feat('Staff &amp; payroll', 'schedules, time clock, substitutes, payslips and certifications, with KiddieTrac HR as an add-on')
       . $feat('Forms &amp; e-signatures', 'enrolment and consent forms, signed online')
       . $feat('Your brand', 'white-label apps carrying your own name and logo')
       . '</table>',
