@@ -3,66 +3,76 @@ title: Créditos por reservas de vacaciones
 category: Billing
 order: 84
 ---
-# Reservas por vacaciones
+# Reservas de vacaciones
 
-**Reservas por vacaciones** pausa la cuota de una familia mientras está fuera. Una familia pide una pausa (o usted la agrega por ella), usted la aprueba o la rechaza, y una pausa aprobada lleva un crédito para la familia. Los directores y administradores de agencia abren esta pantalla cuando una familia avisa que estará fuera, y para atender las solicitudes pendientes.
+**Reservas de vacaciones** pausa la matrícula de una familia mientras está fuera. Una familia pide una reserva (o usted la agrega por ella), usted la aprueba o la rechaza, y el crédito de una reserva aprobada se descuenta de la **próxima factura** de la familia cuando termina la reserva.
 
-[[open: #vacation-holds | Abrir Reservas por vacaciones]]
+[[open: #vacation-holds | Abrir Reservas de vacaciones]]
 
-## Aprobar o denegar una solicitud
+## La regla de crédito
 
-Las solicitudes nuevas tienen el estado **solicitado**, con **Aprobar** y **Denegar** en la fila. Los directores y administradores de agencia reciben una notificación cuando una familia la pide: «Vacation hold requested by» y la familia, con las fechas.
+Su agencia elige cómo se acredita una reserva. Los administradores de la agencia pulsan **⚙ Credit rule** en el encabezado:
 
-1. Abra **Administración › Reservas por vacaciones**.
-2. Busque la fila con el estado **solicitado**. Revise **Familia**, **Centro**, **Fechas** y **Motivo**.
-3. Presione **Aprobar**. Se abre el cuadro **Aprobar pausa por vacaciones**.
-4. Escriba un monto de crédito para la familia, o deje el cuadro vacío para calcularlo automáticamente.
-5. Presione **Aprobar**. La fila cambia a **approved** y la columna **Crédito** muestra el monto.
-6. Para rechazarla, presione **Denegar** en la fila. Cambia a **denied** de inmediato; no hay nada que llenar.
+- **No credit** (la regla inicial): las reservas se registran, pero no se descuenta nada.
+- **Un porcentaje de la tarifa diaria, por cada día programado**: por ejemplo 50 %.
+- **Un monto fijo ($) por cada día programado**: por ejemplo $20.
 
-Presionar **Cancelar** en el cuadro de aprobación deja la solicitud como estaba: no se aprueba nada.
+Solo cuentan los días en que cada niño debe asistir (un niño sin días registrados cuenta de lunes a viernes). Los días en que el centro está cerrado no cuentan. La tarifa diaria de un niño = su matrícula mensual × 12 ÷ 52 ÷ sus días por semana. El encabezado siempre muestra la regla vigente. Cambiarla no cambia las reservas ya aprobadas.
 
-> ⚠️ Un monto vacío es un cálculo aproximado de **30 $ por día** por cada día de la pausa, incluidos el primero y el último (una pausa de 10 días = 300 $). Si su tarifa diaria es otra, escriba el monto real.
+## Aprobar o rechazar una solicitud
 
-## Agregar una pausa para una familia
+Las solicitudes nuevas muestran **Requested**. La columna **Credit** muestra lo que daría su regla («≈ $…, N días programados») o **No credit**. Los directores del centro de la familia y los administradores de la agencia reciben un aviso cuando una familia lo pide.
 
-Use esto cuando una familia le avise por teléfono, por correo o en persona.
+1. Abra **Administration › Vacation holds** y busque la solicitud.
+2. En el menú **⋮** de la fila, elija **Approve**. La ventana **Approve vacation hold** muestra los días programados, la tarifa diaria y el crédito de cada niño.
+3. Deje el crédito calculado o escriba otro monto (0 = sin crédito).
+4. Pulse **Approve**. La fila muestra **Approved** y el crédito, con «On the first invoice after» el último día.
+5. Para rechazar, elija **Deny** en el menú **⋮**, agregue una nota para la familia si quiere y pulse **Deny**.
 
-1. Presione **+ Añadir pausa** en el encabezado.
-2. En **🏖 Agregar pausa por vacaciones**, elija la familia en **Familia** (**Seleccione una familia…**).
-3. Indique **De** y **Para**. La fecha final no puede ser anterior a la inicial.
-4. Agregue un **Reason (optional)**, como «Vacaciones familiares».
-5. Presione **Añadir pausa**. La pausa se suma a la lista como **solicitado**, y a los tutores de la familia se les avisa: «A vacation hold was added to your account».
-6. Apruébela con los pasos de arriba para fijar el crédito.
+## Cómo llega el crédito a la factura
+
+- Cuando pasa el último día, la próxima factura de la familia (el lote mensual o su calendario de facturación) lleva una línea **Vacation hold credit** con las fechas.
+- Un crédito nunca va en dos facturas. Si es mayor que la factura, esta queda en $0 y el resto se descuenta de la siguiente.
+- Si anula (void) la factura que llevaba el crédito, el crédito pasa a la siguiente factura.
+- La columna **Credit** muestra dónde quedó, por ejemplo «On INV-1042».
+
+## Cancelar una reserva
+
+Elija **Cancel hold** en el menú **⋮** mientras la reserva esté solicitada o aprobada y su crédito aún no esté en una factura. El crédito se revierte y se avisa a la familia. Cuando el crédito ya está facturado, anule o ajuste esa factura en **Billing**.
+
+## Agregar una reserva para una familia
+
+1. Pulse **+ Add hold** en el encabezado.
+2. Elija la familia, ponga **From** y **To**, y un motivo (opcional).
+3. Pulse **Add hold**. La reserva aparece como **Requested** y se avisa a los tutores.
+4. Apruébela con los pasos de arriba para fijar el crédito.
 
 ## Lo que ve la familia
 
-- Cuando aprueba, cada tutor recibe una notificación: «Vacation hold approved — Credit of $… will be applied.»
-- Cuando deniega, recibe «Vacation hold denied — Unable to approve at this time.»
-- La notificación abre su pantalla de **Facturación**.
-
-> ℹ️ El crédito queda registrado en la pausa. Asegúrese de que llegue a la cuenta de la familia: revise su próxima factura en **Facturación** y agregue el crédito si no aparece. Vea [[family-ledger]].
+- Aprobada: «Your hold for … is approved. A credit of $… will come off your next invoice after the hold ends.» Sin crédito: «No credit applies to this hold.»
+- Rechazada: su nota, o «Unable to approve at this time.»
+- Cancelada: la reserva se canceló y su crédito no se aplicará.
+- La línea de crédito en su factura. Los avisos abren su pantalla **Billing**.
 
 ## Quién puede hacer qué
 
 | Rol | Puede |
 |---|---|
-| Administrador de agencia | Ver todas las pausas de la agencia, agregarlas, aprobarlas o denegarlas |
-| Director de centro | Ver, agregar, aprobar y denegar pausas solo de las familias de sus centros; las de otros centros no aparecen |
-| Administrador de plataforma | Lo mismo que un administrador de agencia, en la agencia que esté viendo |
-| Padre o madre | Pide una pausa para su propia familia y recibe la decisión |
+| Administrador de la agencia | Ver todas las reservas, fijar la regla de crédito, agregar, aprobar, rechazar y cancelar |
+| Director del centro | Lo mismo solo para las familias de sus propios centros |
+| Administrador de la plataforma | Lo mismo que un administrador de la agencia, en la agencia que está viendo |
+| Padre o madre | Recibe aviso de cada decisión y ve el crédito en su factura |
 
 Los educadores no ven esta pantalla.
 
 ## Preguntas frecuentes y problemas
 
-??? No hay botón Aprobar ni Denegar en una fila. | Los botones solo aparecen mientras la pausa está **solicitado**. Una pausa aprobada o denegada es definitiva; agregue una nueva si cambian las fechas.
-??? «Family and both dates are required.» | Elija una familia y llene **De** y **Para**, luego presione **Añadir pausa** otra vez.
-??? «No families loaded — select an agency first.» | La lista de familias está vacía porque no hay agencia elegida. Elija su agencia en el selector de agencias y vuelva a abrir la pantalla.
-??? Presioné Cancelar por error. | No cambió nada: la pausa sigue **solicitado**. Presione **Aprobar** otra vez.
-??? El crédito quedó mal. | Una pausa ya decidida no se puede editar aquí. Ajuste la próxima factura de la familia en **Facturación**, o pregunte a su administrador de agencia.
-??? La lista dice «No vacation holds.» | Ninguna familia ha pedido una pausa y no se ha agregado ninguna. Use **+ Añadir pausa** para agregar una.
-??? ¿Hay un límite de duración? | No en KiddieTrac. Muchos centros permiten hasta dos semanas al año: aplique su propia política al aprobar.
+??? Approve o Deny no aparecen en el menú ⋮. | Solo aparecen mientras la reserva está **Requested**. Una reserva decidida no se decide otra vez; cancélela (si su crédito no está facturado) y agregue una nueva si cambian las fechas.
+??? «This hold is already approved.» | Otra persona la decidió primero. Actualice la pantalla.
+??? No aparece Cancel hold. | El crédito ya está en una factura, o la reserva fue rechazada o cancelada. Anule o ajuste la factura en **Billing**.
+??? El crédito dice «Recorded only». | La reserva se decidió antes de que los créditos llegaran a las facturas. Agregue ese crédito a mano si aún se debe. Vea [[family-ledger]].
+??? El crédito es $0 pero sí damos créditos. | La regla es **No credit**, o los niños no tienen días programados ni matrícula en esas fechas. Un administrador de la agencia la fija con **⚙ Credit rule**.
+??? «Family and both dates are required.» | Elija una familia y complete **From** y **To**, luego pulse **Add hold** otra vez.
 
 ## Pantallas relacionadas
 

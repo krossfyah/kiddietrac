@@ -49,6 +49,8 @@ Il n’y a pas d’écran pour réserver vous-même une suspension pour vacances
 
 Si le centre inscrit une suspension pour vacances pour vous, tout avis à ce sujet mène à **Facturation**.
 
+Quand le centre approuve une suspension pour vacances, l’avis indique le vrai crédit (par exemple « A credit of $120.00 will come off your next invoice after the hold ends »), ou « No credit applies to this hold » si votre centre n’en donne pas. Le crédit apparaît sur votre prochaine facture après la suspension, sous forme de ligne **Vacation hold credit** avec les dates. Si la suspension est annulée avant, vous êtes averti et le crédit n’est pas appliqué.
+
 ## Les messages et appels « Votre enfant est-il arrivé? »
 
 Si votre centre utilise **Safe Arrival** et que votre enfant était attendu mais n’est pas inscrit un peu après son heure habituelle, on vous demande s’il s’en vient :

@@ -49,6 +49,8 @@ No hay una pantalla para que usted reserve una pausa por vacaciones. Para días 
 
 Si el centro registra una pausa por vacaciones para usted, cualquier aviso al respecto lleva a **Facturación**.
 
+Cuando el centro aprueba una reserva de vacaciones, el aviso indica el crédito real (por ejemplo «A credit of $120.00 will come off your next invoice after the hold ends»), o «No credit applies to this hold» si su centro no da crédito. El crédito aparece en su próxima factura después de la reserva, como una línea **Vacation hold credit** con las fechas. Si la reserva se cancela antes, se le avisa y el crédito no se aplica.
+
 ## Mensajes y llamadas de "¿Llegó su hijo?"
 
 Si su centro usa **Safe Arrival** y se esperaba a su hijo pero no tiene registrada la entrada un poco después de su hora habitual, le preguntarán si viene:

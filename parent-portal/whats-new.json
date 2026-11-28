@@ -4,6 +4,28 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🏖",
+            "title": "Vacation hold credits now reach the invoice",
+            "body": "Approving a vacation hold works its credit out from your agency's rule (no credit, a percent of the daily fee, or a flat amount for each scheduled day; set it with ⚙ Credit rule), and the family's next invoice after the hold ends carries it as a Vacation hold credit line, never twice. You can cancel a hold until its credit is invoiced. Directors and agency admins are now both told when a family asks for a hold.",
+            "roles": [
+                "agency_admin",
+                "centre_director",
+                "platform_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🏖",
+            "title": "Vacation hold credits on your invoice",
+            "body": "When your centre approves a vacation hold, the notice now tells you the exact credit (or that no credit applies), and the credit comes off your next invoice after the hold ends.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🧩",
             "title": "Edit and remove activity zones",
             "body": "Each activity zone now has a ⋮ menu to rename it, move it to another room, change its icon or colour, or remove it. Visits already logged stay in past days' reports.",

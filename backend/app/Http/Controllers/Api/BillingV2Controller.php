@@ -39,7 +39,59 @@ final class BillingV2Controller extends Controller
             ->select('vh.*', 'f.family_name', 'c.name as centre_name')
             ->limit(200)
             ->get();
-        return response()->json(['data' => $rows]);
+        /* Credits that reach the invoice (2026-11-28, VacationCredits): what is already on live invoices, which ones, and
+           for a request still open what the agency's rule would give. */
+        $applied = \App\Support\VacationCredits::appliedFor($rows->pluck('id')->all());
+        $today = \App\Support\AgencyTime::today($agencyId);
+        $rows = $rows->map(function ($h) use ($applied, $today) {
+            $a = $applied[(int) $h->id] ?? ['amount' => 0.0, 'invoices' => []];
+            $h->credit_applied = $a['amount'];
+            $h->credit_invoices = $a['invoices'];
+            $h->ended = (string) $h->end_date < $today;
+            $h->estimate = $h->status === 'requested'
+                ? \App\Support\VacationCredits::compute((int) $h->family_id, (string) $h->start_date, (string) $h->end_date) : null;
+            $h->can_cancel = in_array($h->status, ['requested', 'approved'], true) && $a['amount'] < 0.01;
+
+            return $h;
+        });
+        $rule = \App\Support\BillingRules::vacationCredit($agencyId);
+
+        return response()->json(['data' => $rows, 'rule' => $rule + ['text' => \App\Support\VacationCredits::ruleText($rule['mode'], (float) $rule['value'])]]);
+    }
+
+    /* Families and the office are told about a hold in the same words (2026-11-28): the real credit, or "no credit". */
+    private static function holdCreditLine(float $credit): string
+    {
+        return $credit >= 0.01
+            ? 'A credit of ' . \App\Support\BillingRules::money($credit) . ' will come off your next invoice after the hold ends.'
+            : 'No credit applies to this hold.';
+    }
+
+    /** POST /billing/vacation-holds/{id}/cancel - the office cancels a hold; a credit not yet invoiced is reversed. */
+    public function cancelHold(Request $request, int $id): JsonResponse
+    {
+        $hold = DB::table('vacation_holds')->where('id', $id)->first();
+        abort_unless($hold, 404);
+        abort_unless($this->mayDecideForFamily($request, (int) $hold->family_id), 403);
+        [$ok, $msg] = \App\Support\VacationCredits::cancel($id, (int) $request->user()->id);
+        if (! $ok) return response()->json(['message' => $msg], 422);
+        $span = \App\Support\VacationCredits::span((string) $hold->start_date, (string) $hold->end_date);
+        $hadCredit = $hold->status === 'approved' && (float) $hold->credit_amount >= 0.01 && in_array($hold->credit_state, ['pending', 'applied'], true);
+        foreach (DB::table('guardians')->where('family_id', $hold->family_id)->pluck('user_id')->unique() as $gid) {
+            \App\Support\Notify::write([
+                'user_id' => $gid, 'type' => 'vacation_hold',
+                'title' => 'Vacation hold cancelled',
+                'body' => 'Your vacation hold for ' . $span . ' was cancelled.' . ($hadCredit ? ' Its credit of ' . \App\Support\BillingRules::money((float) $hold->credit_amount) . ' will not be applied.' : ''),
+                'data' => json_encode(['link' => '#billing', 'hold_id' => $id]),
+                'created_at' => now(),
+            ]);
+        }
+        \App\Support\Audit::write(['user_id' => $request->user()->id, 'agency_id' => $this->resolveAgencyId($request), 'action' => 'vacation_hold.cancelled',
+            'entity_type' => 'vacation_hold', 'entity_id' => $id,
+            'payload' => json_encode(['summary' => 'Vacation hold ' . $span . ' cancelled' . ($hadCredit ? ' (credit ' . \App\Support\BillingRules::money((float) $hold->credit_amount) . ' reversed)' : '')], JSON_UNESCAPED_UNICODE),
+            'created_at' => now()]);
+
+        return response()->json(['status' => 'cancelled', 'message' => $msg]);
     }
 
     public function requestHold(Request $request): JsonResponse
@@ -61,13 +113,14 @@ final class BillingV2Controller extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        // Notify directors
+        /* Who hears (2026-11-28): the agency's admins and the directors of the family's centre (CentreScope::managers).
+           This read role rows placed AT the centre only, so an agency admin with no centre - the usual one - was never
+           told; managers() also leaves out the super admin and other outsiders (AgencyOutsiders). */
         $family = DB::table('families')->where('id', $familyId)->first();
-        $directorIds = DB::table('role_assignments')
-            ->where('centre_id', $family->centre_id)
-            ->whereIn('role', ['centre_director', 'agency_admin'])
-            ->where('active', 1)
-            ->pluck('user_id')->unique();
+        $holdAgency = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
+        $directorIds = $holdAgency
+            ? \App\Support\CentreScope::managers($holdAgency, [(int) $family->centre_id])->distinct()->pluck('ra.user_id')->map(fn ($v) => (int) $v)->unique()
+            : collect();
         foreach ($directorIds as $did) {
             \App\Support\Notify::write([
                 'user_id' => $did, 'type' => 'vacation_hold',
@@ -126,7 +179,7 @@ final class BillingV2Controller extends Controller
     {
         $data = $request->validate([
             'status' => 'required|in:approved,denied',
-            'credit_amount' => 'nullable|numeric|min:0',
+            'credit_amount' => 'nullable|numeric|min:0|max:100000',
             'notes' => 'nullable|string|max:500',
         ]);
         $hold = DB::table('vacation_holds')->where('id', $id)->first();
@@ -135,33 +188,49 @@ final class BillingV2Controller extends Controller
            changed by id with no scope, so any director or admin could approve (and set the credit on) another
            centre's or another agency's vacation hold. */
         abort_unless($this->mayDecideForFamily($request, (int) $hold->family_id), 403);
-        // Auto-compute credit if approved + no override given
-        $credit = $data['credit_amount'] ?? null;
-        if ($data['status'] === 'approved' && $credit === null) {
-            $days = Carbon::parse($hold->end_date)->diffInDays(Carbon::parse($hold->start_date)) + 1;
-            // estimate $30/day daily rate as fallback
-            $credit = $days * 30;
+        /* Only an open request is decided (2026-11-28): approving twice would re-work the credit out, and a decided hold's
+           credit may already be on an invoice. */
+        if ($hold->status !== 'requested') {
+            return response()->json(['message' => 'This hold is already ' . $hold->status . '.'], 422);
         }
+        /* THE AGENCY'S RULE, NOT A GUESS (2026-11-28, VacationCredits): no amount typed = the Billing setup rule (none /
+           % of the daily fee / flat per scheduled day). This used to be $30 for every calendar day of the hold, weekends
+           included, whatever the family paid - and the credit then reached no invoice at all. */
+        $calc = \App\Support\VacationCredits::compute((int) $hold->family_id, (string) $hold->start_date, (string) $hold->end_date);
+        $override = isset($data['credit_amount']) && $data['credit_amount'] !== null;
+        $credit = $data['status'] === 'approved' ? round($override ? (float) $data['credit_amount'] : (float) $calc['amount'], 2) : null;
         DB::table('vacation_holds')->where('id', $id)->update([
             'status' => $data['status'],
             'decided_by_id' => $request->user()->id,
             'decided_at' => now(),
             'credit_amount' => $credit,
+            'credit_state' => $data['status'] === 'approved' ? ($credit >= 0.01 ? 'pending' : 'none') : null,
+            'credit_mode' => $data['status'] === 'approved' ? ($override ? 'custom' : $calc['mode']) : null,
+            'credit_rate' => $data['status'] === 'approved' && ! $override ? $calc['rate'] : null,
+            'credit_days' => $data['status'] === 'approved' ? $calc['days'] : null,
+            'credit_override' => $override && $data['status'] === 'approved',
             'notes' => $data['notes'] ?? null,
             'updated_at' => now(),
         ]);
-        // Notify requester
-        $gids = DB::table('guardians')->where('family_id', $hold->family_id)->pluck('user_id');
+        $span = \App\Support\VacationCredits::span((string) $hold->start_date, (string) $hold->end_date);
+        \App\Support\Audit::write(['user_id' => $request->user()->id, 'agency_id' => $this->resolveAgencyId($request), 'action' => 'vacation_hold.' . $data['status'],
+            'entity_type' => 'vacation_hold', 'entity_id' => $id,
+            'payload' => json_encode(['summary' => 'Vacation hold ' . $span . ' ' . $data['status'] . ($data['status'] === 'approved' ? ', credit ' . \App\Support\BillingRules::money((float) $credit) . ($override ? ' (typed)' : ' (' . $calc['mode'] . ' rule, ' . $calc['days'] . ' days)') : '')], JSON_UNESCAPED_UNICODE),
+            'created_at' => now()]);
+        // Tell the family, with the real credit (or that there is none).
+        $gids = DB::table('guardians')->where('family_id', $hold->family_id)->pluck('user_id')->unique();
         foreach ($gids as $gid) {
             \App\Support\Notify::write([
                 'user_id' => $gid, 'type' => 'vacation_hold',
-                'title' => "Vacation hold " . $data['status'],
-                'body' => $data['status'] === 'approved' ? "Credit of $" . number_format((float) $credit, 2) . " will be applied." : ($data['notes'] ?? 'Unable to approve at this time.'),
+                'title' => 'Vacation hold ' . $data['status'],
+                'body' => $data['status'] === 'approved'
+                    ? 'Your hold for ' . $span . ' is approved. ' . self::holdCreditLine((float) $credit)
+                    : ($data['notes'] ?? 'Unable to approve at this time.'),
                 'data' => json_encode(['link' => '#billing', 'hold_id' => $id]),
                 'created_at' => now(),
             ]);
         }
-        return response()->json(['status' => $data['status'], 'credit_amount' => $credit]);
+        return response()->json(['status' => $data['status'], 'credit_amount' => $credit, 'credit_days' => $calc['days']]);
     }
 
     // ===================================

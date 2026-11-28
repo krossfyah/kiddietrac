@@ -669,44 +669,167 @@
   }
 
   // ============================ Vacation holds =================================
+  /* Credits that reach the invoice (2026-11-28, App\Support\VacationCredits). Approving works the credit out from the
+     agency's rule (Billing setup: none / % of the daily fee / flat per scheduled day) or takes the office's own amount;
+     once the hold has ended, the family's next invoice carries it as a "Vacation hold credit" line. A hold can be
+     cancelled until its credit is on an invoice. Row actions fold into the ⋮ (kt-row-actions). */
+  const VH_STATUS = {
+    requested: ['Requested', 'kt-pill-warning'], approved: ['Approved', 'kt-pill-success'],
+    denied: ['Denied', 'kt-pill-danger'], cancelled: ['Cancelled', ''],
+  };
+  function vhCredit(h) {
+    const sub = (t) => `<div style="font-size:11.5px;color:#64748B;margin-top:2px;">${t}</div>`;
+    const inv = (h.credit_invoices || []).map(i => esc(i.number || ('#' + i.id))).join(', ');
+    if (h.status === 'requested') {
+      const e = h.estimate || {};
+      return e.amount > 0 ? `≈ ${fmtMoney(e.amount)}${sub(`${e.days} scheduled ${e.days === 1 ? 'day' : 'days'}, by your rule`)}` : '<span style="color:#64748B;">No credit</span>';
+    }
+    if (h.status === 'denied') return '—';
+    const amt = +h.credit_amount || 0;
+    if (h.status === 'cancelled') return amt > 0 && h.credit_state === 'reversed' ? `<s style="color:#64748B;">${fmtMoney(amt)}</s>${sub('Reversed')}` : '—';
+    if (h.credit_state === 'none' || amt < 0.01) return '<span style="color:#64748B;">No credit</span>';
+    if (!h.credit_state) return `${fmtMoney(amt)}${sub('Recorded only (decided before credits reached invoices)')}`;
+    if (h.credit_state === 'applied' && h.credit_applied >= amt - 0.005) return `<strong>${fmtMoney(amt)}</strong>${sub('On ' + inv)}`;
+    if (h.credit_applied > 0) return `<strong>${fmtMoney(amt)}</strong>${sub(`${fmtMoney(h.credit_applied)} on ${inv}; the rest on the next invoice`)}`;
+    return `<strong>${fmtMoney(amt)}</strong>${sub(h.ended ? 'On the next invoice' : 'On the first invoice after ' + fmtDate(h.end_date))}`;
+  }
+
   async function renderVacationHolds(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const r = await Api.get('/billing/vacation-holds').catch(() => ({ data: [] }));
+    const rows = r.data || [];
+    const rule = r.rule || { mode: 'none', value: 0, text: 'No credit' };
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🏖 Vacation holds</h2>
-        <p>Pause tuition while a family is away. Approve or deny requests with an optional credit amount.</p>
-        <div class="kt-hero-actions"><button class="kt-btn kt-btn-primary" id="vh-add">+ Add hold</button></div>
+        <p>Pause tuition while a family is away. Credit rule: <strong>${esc(rule.text)}</strong>. An approved hold's credit comes off the family's next invoice after the hold ends.</p>
+        <div class="kt-hero-actions">
+          ${isAgencyAdminUi() ? '<button class="kt-btn kt-btn-ghost" id="vh-rule" type="button">⚙ Credit rule</button>' : ''}
+          <button class="kt-btn kt-btn-primary" id="vh-add" type="button">+ Add hold</button>
+        </div>
       </div>
       <div class="kt-card">
         <table>
           <thead><tr><th>Family</th><th>Centre</th><th>Dates</th><th>Reason</th><th>Status</th><th>Credit</th><th></th></tr></thead>
-          <tbody>${(r.data || []).map(h => `<tr>
+          <tbody>${rows.map(h => {
+            const st = VH_STATUS[h.status] || [h.status, ''];
+            return `<tr>
             <td><strong>${esc(h.family_name)}</strong></td>
             <td>${esc(h.centre_name || '')}</td>
             <td>${fmtDate(h.start_date)} – ${fmtDate(h.end_date)}</td>
             <td>${esc(h.reason || '')}</td>
-            <td><span class="kt-pill ${h.status === 'approved' ? 'kt-pill-success' : h.status === 'denied' ? 'kt-pill-danger' : 'kt-pill-warning'}">${esc(h.status)}</span></td>
-            <td>${h.credit_amount ? fmtMoney(h.credit_amount) : '—'}</td>
-            <td>${h.status === 'requested' ? `<button class="kt-btn kt-btn-success" data-decide="${h.id}" data-action="approved">Approve</button> <button class="kt-btn kt-btn-danger" data-decide="${h.id}" data-action="denied" style="margin-left:6px;">Deny</button>` : ''}</td>
-          </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No vacation holds.</td></tr>'}</tbody>
+            <td><span class="kt-pill ${st[1]}">${esc(st[0])}</span></td>
+            <td>${vhCredit(h)}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button type="button" data-vh-view="${h.id}" title="View">View</button>
+              ${h.status === 'requested' ? `<button type="button" data-vh-approve="${h.id}" title="Approve">Approve</button><button type="button" data-vh-deny="${h.id}" title="Deny">Deny</button>` : ''}
+              ${h.can_cancel ? `<button type="button" data-vh-cancel="${h.id}" title="Cancel hold">Cancel hold</button>` : ''}
+            </td>
+          </tr>`; }).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No vacation holds.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    main.querySelectorAll('button[data-decide]').forEach(b => b.onclick = async () => {
-      /* Cancel means "don't approve" (2026-10-05). It used to approve anyway, with an
-         automatic credit — a family's bill changed by a click meant to back out.
-         OK with the field blank still approves with the automatic credit. */
-      const credit = b.dataset.action === 'approved'
-        ? await KT.prompt({ title: 'Approve vacation hold', description: 'Enter a credit amount for the family, or leave it blank to calculate it automatically.', placeholder: 'Credit amount (blank = automatic)', okLabel: 'Approve' })
-        : null;
-      if (b.dataset.action === 'approved' && credit === null) return;
-      await Api.patch(`/billing/vacation-holds/${b.dataset.decide}`, { status: b.dataset.action, credit_amount: credit ? parseFloat(credit) : null });
-      renderVacationHolds(main);
+    const again = () => renderVacationHolds(main.isConnected ? main : (document.getElementById('appMain') || main));
+    const byId = (id) => rows.find(x => String(x.id) === String(id));
+    main.querySelectorAll('[data-vh-view]').forEach(b => b.onclick = () => openHoldView(byId(b.dataset.vhView), rule));
+    main.querySelectorAll('[data-vh-approve]').forEach(b => b.onclick = () => openHoldApprove(byId(b.dataset.vhApprove), rule, again));
+    main.querySelectorAll('[data-vh-deny]').forEach(b => b.onclick = async () => {
+      const h = byId(b.dataset.vhDeny);
+      const v = await KT.prompt({ title: 'Deny vacation hold', description: `${h.family_name}, ${fmtDate(h.start_date)} – ${fmtDate(h.end_date)}. The family is told.`,
+        fields: [{ key: 'note', label: 'Note for the family (optional)', placeholder: 'e.g. Those dates are already full.' }], okLabel: 'Deny' });
+      if (!v) return;
+      try { await Api.patch('/billing/vacation-holds/' + h.id, { status: 'denied', notes: (v.note || '').trim() || null }); KT.Dom.toast('Hold denied', 'success'); again(); }
+      catch (e) { KT.Dom.toast((e && e.message) || 'Could not deny the hold.', 'error'); }
     });
-    const vhAdd = document.getElementById('vh-add');
+    main.querySelectorAll('[data-vh-cancel]').forEach(b => b.onclick = async () => {
+      const h = byId(b.dataset.vhCancel);
+      const amt = +h.credit_amount || 0;
+      const ok = await KT.confirm({ title: 'Cancel this vacation hold?', description: `${h.family_name}, ${fmtDate(h.start_date)} – ${fmtDate(h.end_date)}.${h.status === 'approved' && amt > 0 ? ` Its credit of ${fmtMoney(amt)} will not be applied.` : ''} The family is told.`, okLabel: 'Cancel hold', cancelLabel: 'Keep it' });
+      if (!ok) return;
+      try { await Api.post('/billing/vacation-holds/' + h.id + '/cancel', {}); KT.Dom.toast('Hold cancelled', 'success'); again(); }
+      catch (e) { KT.Dom.toast((e && e.message) || 'Could not cancel the hold.', 'error'); }
+    });
+    const vr = main.querySelector('#vh-rule');
+    if (vr) vr.onclick = () => openHoldRule(rule, again);
+    const vhAdd = main.querySelector('#vh-add');
     if (vhAdd) vhAdd.onclick = () => openAddHoldModal(main);
+  }
+
+  function holdChildrenHtml(e) {
+    const kids = (e && e.children) || [];
+    if (!kids.length) return '<div style="font-size:12.5px;color:#64748B;">No enrolled child with tuition in this family, so the rule gives no credit.</div>';
+    return `<table style="width:100%;font-size:13px;"><thead><tr><th>Child</th><th style="text-align:right;">Scheduled days</th><th style="text-align:right;">Daily fee</th><th style="text-align:right;">Credit</th></tr></thead><tbody>
+      ${kids.map(c => `<tr><td>${esc(c.name)}</td><td style="text-align:right;">${c.days}</td><td style="text-align:right;">${fmtMoney(c.daily)}</td><td style="text-align:right;"><strong>${fmtMoney(c.amount)}</strong></td></tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  function openHoldApprove(h, rule, after) {
+    const Shell = window.KT && KT.Shell;
+    const e = h.estimate || { amount: 0, days: 0, children: [] };
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(620px,100%);';
+    wrap.innerHTML = `<div style="font-size:14px;margin-bottom:10px;"><strong>${esc(h.family_name)}</strong> · ${fmtDate(h.start_date)} – ${fmtDate(h.end_date)}${h.reason ? ' · ' + esc(h.reason) : ''}</div>
+      <div style="font-size:12.5px;color:#334155;margin-bottom:6px;">Your rule: <strong>${esc(rule.text)}</strong>. Closed days are not counted.</div>
+      ${rule.mode === 'none' ? '' : holdChildrenHtml(e)}
+      <label style="${labelCss};margin-top:12px;" for="vh-credit">Credit for the family ($)</label>
+      <input id="vh-credit" type="number" min="0" step="0.01" inputmode="decimal" value="${esc((+e.amount || 0).toFixed(2))}" style="${fieldCss}">
+      <div style="font-size:12px;color:#64748B;margin-top:6px;">Worked out from your rule. Type a different amount to override it, or 0 for no credit. It comes off the family's first invoice after ${fmtDate(h.end_date)}.</div>
+      <div id="vh-err" role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:8px;"></div>`;
+    Shell.Modal.open({ title: '🏖 Approve vacation hold', body: wrap, actions: [{ label: 'Cancel' }, { label: 'Approve', primary: true, busyLabel: 'Saving…', handler: async () => {
+      const raw = wrap.querySelector('#vh-credit').value;
+      const v = raw === '' ? NaN : parseFloat(raw);
+      if (isNaN(v) || v < 0) { wrap.querySelector('#vh-err').textContent = 'Enter a credit of $0 or more.'; return false; }
+      if (v > 100000) { wrap.querySelector('#vh-err').textContent = 'That credit is too large. Check the amount.'; return false; }
+      const typed = Math.abs(v - (+e.amount || 0)) >= 0.005;
+      try { await Api.patch('/billing/vacation-holds/' + h.id, { status: 'approved', credit_amount: typed ? v : null }); }
+      catch (x) { wrap.querySelector('#vh-err').textContent = (x && x.message) || 'Could not approve the hold.'; return false; }
+      KT.Dom.toast(v > 0 ? `Hold approved: ${fmtMoney(v)} credit` : 'Hold approved, no credit', 'success'); after(); return true;
+    } }] });
+  }
+
+  function openHoldView(h, rule) {
+    const Shell = window.KT && KT.Shell;
+    const st = VH_STATUS[h.status] || [h.status, ''];
+    const fact = (k, v) => `<div><div style="font-size:11.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">${k}</div><div style="font-size:14px;margin-top:2px;">${v}</div></div>`;
+    const how = h.credit_mode === 'custom' ? 'Typed by the office' : h.credit_mode ? `${esc(h.credit_mode === 'none' ? 'No credit rule' : h.credit_mode === 'percent' ? (+h.credit_rate) + '% of the daily fee' : fmtMoney(h.credit_rate) + ' a day')}${h.credit_days != null ? `, ${h.credit_days} scheduled days` : ''}` : '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(620px,100%);';
+    wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px;">
+        ${fact('Family', esc(h.family_name))}${fact('Centre', esc(h.centre_name || ''))}
+        ${fact('Dates', fmtDate(h.start_date) + ' – ' + fmtDate(h.end_date))}${fact('Status', `<span class="kt-pill ${st[1]}">${esc(st[0])}</span>`)}
+        ${fact('Credit', vhCredit(h))}${how ? fact('Worked out', how) : ''}
+      </div>
+      ${h.reason ? `<div style="font-size:13px;color:#334155;margin-bottom:8px;"><strong>Reason:</strong> ${esc(h.reason)}</div>` : ''}
+      ${h.notes ? `<div style="font-size:13px;color:#334155;background:#F8FAFC;border-radius:8px;padding:8px 10px;margin-bottom:8px;">${esc(h.notes)}</div>` : ''}
+      ${h.status === 'requested' && rule.mode !== 'none' ? '<div style="font-size:12px;color:#64748B;margin:6px 0;">What your rule would give if approved:</div>' + holdChildrenHtml(h.estimate) : ''}`;
+    Shell.Modal.open({ title: '🏖 Vacation hold', body: wrap, actions: [{ label: 'Close' }] });
+  }
+
+  function openHoldRule(rule, after) {
+    const Shell = window.KT && KT.Shell;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(480px,90vw);';
+    const opt = (v, l) => `<label style="display:flex;gap:8px;align-items:center;border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;margin-bottom:6px;"><input type="radio" name="vh-mode" value="${v}"${rule.mode === v ? ' checked' : ''}> ${l}</label>`;
+    wrap.innerHTML = `<span style="${labelCss}">How an approved vacation hold is credited</span>
+      ${opt('none', 'No credit')}${opt('percent', 'A percent of the daily fee, for each scheduled day')}${opt('flat', 'A flat amount ($) for each scheduled day')}
+      <div id="vh-val-w" style="margin-top:8px;"><label style="${labelCss}" for="vh-val" id="vh-val-l">Amount</label>
+        <input id="vh-val" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(rule.mode === 'none' ? '' : rule.value)}" style="${fieldCss}"></div>
+      <div style="font-size:12px;color:#64748B;margin-top:6px;">A child's daily fee is their monthly tuition × 12 ÷ 52 ÷ their days a week. Days the centre is closed are not counted. Holds already approved keep their credit.</div>
+      <div id="vh-rule-err" role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:8px;"></div>`;
+    const mode = () => (wrap.querySelector('input[name="vh-mode"]:checked') || {}).value || 'none';
+    const sync = () => { const m = mode(); wrap.querySelector('#vh-val-w').style.display = m === 'none' ? 'none' : ''; wrap.querySelector('#vh-val-l').textContent = m === 'percent' ? 'Percent of the daily fee (%)' : 'Dollars per scheduled day ($)'; };
+    wrap.addEventListener('change', sync); sync();
+    Shell.Modal.open({ title: '⚙ Vacation hold credit', body: wrap, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async () => {
+      const m = mode(); const v = parseFloat(wrap.querySelector('#vh-val').value);
+      const err = wrap.querySelector('#vh-rule-err');
+      if (m !== 'none' && (isNaN(v) || v <= 0)) { err.textContent = 'Enter an amount more than zero, or choose No credit.'; return false; }
+      if (m === 'percent' && v > 100) { err.textContent = 'A percent can be at most 100%.'; return false; }
+      if (m === 'flat' && v > 1000) { err.textContent = 'A flat credit can be at most $1,000 a day. Check the amount.'; return false; }
+      try { await Api.patch('/admin/billing-setup', { vacation_credit_mode: m, vacation_credit_value: m === 'none' ? 0 : v }); }
+      catch (e) { err.textContent = (e && e.message) || 'Could not save the rule.'; return false; }
+      KT.Dom.toast('Credit rule saved', 'success'); after(); return true;
+    } }] });
   }
 
   // Staff adds a vacation hold for a family (family picker + dates + reason, dimmed modal).

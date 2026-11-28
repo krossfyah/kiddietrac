@@ -3810,6 +3810,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/billing/vacation-holds',       [\App\Http\Controllers\Api\BillingV2Controller::class, 'listHolds']);
         Route::post  ('/billing/vacation-holds/for-family', [\App\Http\Controllers\Api\BillingV2Controller::class, 'createForFamily']);
         Route::patch ('/billing/vacation-holds/{id}',  [\App\Http\Controllers\Api\BillingV2Controller::class, 'decideHold']);
+        // Cancel a hold; a credit not yet on an invoice is reversed (2026-11-28, App\Support\VacationCredits).
+        Route::post  ('/billing/vacation-holds/{id}/cancel', [\App\Http\Controllers\Api\BillingV2Controller::class, 'cancelHold'])->whereNumber('id');
         Route::get   ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'listIncreases']);
         Route::post  ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'scheduleIncrease']);
         // Tuition increases that notify and apply themselves (2026-11-28, App\Support\TuitionIncreases).

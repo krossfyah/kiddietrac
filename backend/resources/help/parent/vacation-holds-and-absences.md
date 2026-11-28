@@ -52,6 +52,8 @@ There is no screen for booking a vacation hold yourself. For planned days away:
 
 If the centre records a vacation hold for you, any notice you get about it links to **Billing**.
 
+When the centre approves a vacation hold, the notice tells you the real credit (for example "A credit of $120.00 will come off your next invoice after the hold ends"), or "No credit applies to this hold" if your centre does not give one. The credit shows on your next invoice after the hold ends, as a **Vacation hold credit** line with the dates. If the hold is cancelled before then, you are told and the credit is not applied.
+
 ## "Has your child arrived?" messages and calls
 
 If your centre uses **Safe Arrival** and your child was expected but is not signed in a little after their usual time, you are asked whether they are coming:

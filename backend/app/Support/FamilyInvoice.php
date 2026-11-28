@@ -137,6 +137,13 @@ final class FamilyInvoice
         $extraTotal = 0.0;
         foreach ($extraLines as $x) $extraTotal += (float) $x['amount'];
 
+        /* VACATION HOLD CREDITS (2026-11-28, VacationCredits): approved holds that have ended go on this invoice, never
+           taking it below zero (the rest waits for the next one). The hold rows are locked in this transaction. */
+        foreach (VacationCredits::linesFor($familyId, $centreId, round($subtotal - $subsidyTotal - $discountTotal + $extraTotal, 2)) as $x) {
+            $extraLines[] = $x;
+            $extraTotal += (float) $x['amount'];
+        }
+
         $total = $subtotal - $subsidyTotal - $discountTotal + $extraTotal;
         $invoiceNumber = \App\Services\InvoiceNumber::next($numberingAgencyId, ['date' => now(), 'family_id' => $familyId]);
 

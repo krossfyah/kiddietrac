@@ -307,6 +307,7 @@ post billing/tuition-increases/{id}/apply | Applied an overdue tuition increase
 post billing/vacation-holds | Asked for a vacation hold
 post billing/vacation-holds/for-family | Added a vacation hold for a family
 patch billing/vacation-holds/{id} | Decided a vacation hold
+post billing/vacation-holds/{id}/cancel | Cancelled a vacation hold
 patch cacfp/family/{familyId} | Changed a family's meal program tier
 patch cacfp/child/{childId} | Changed a child's meal program tier
 get cacfp/claim | Opened the monthly meal program claim
