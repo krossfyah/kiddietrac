@@ -55,7 +55,7 @@
 
   /* ---- audio out ---- */
   function ctx() {
-    if (!S.ctx) { var C = w.AudioContext || w.webkitAudioContext; if (!C) return null; S.ctx = new C(); }
+    if (!S.ctx) { var C = w.AudioContext || w.webkitAudioContext; if (!C) return null; S.ctx = new C(); preload(S.ctx); }
     if (S.ctx.state === 'suspended') { try { S.ctx.resume(); } catch (e) {} }
     return S.ctx;
   }
@@ -99,9 +99,28 @@
   }
   /* Walkie sounds on? My settings › Notifications › 📻 Walkie-talkie (walkie_prefs.sounds). Emergency always beeps. */
   function soundsOn() { return !(S.me && S.me.prefs && S.me.prefs.sounds === false); }
+  /* REAL RADIO SOUNDS (2026-11-27, Anthony chose them; licences allow commercial use, credited in My settings › About,
+     KT.walkie.creditsCard). Recorded walkie sounds, trimmed / mono / made quieter (ffmpeg), served from /sounds/:
+       press    "Function Beep.wav" by JustinBW (Freesound 70106, CC BY 4.0)
+       release  "Walkie Talkie - Roger Beep" by bruce965 (Freesound 321906, CC0)
+       rx       "Walkie Talkie Static Beep" by BudgetPixel AI (CC BY 4.0), first 0.6 s
+       rxEnd    "walkietalkie_eot.wav" by IneQuation (Freesound 27878, CC BY 3.0)
+     The synthesised KIT above stays as the stand-in until a file has loaded (and for emergency). The Android app
+     plays the same rx / rxEnd recordings (res/raw walkie_incoming / walkie_eot). */
+  var FILES = { press: 'walkie_press', release: 'walkie_roger', rx: 'walkie_incoming', rxEnd: 'walkie_eot' }, BUF = {}, LOADING = {};
+  function preload(c) {
+    Object.keys(FILES).forEach(function (n) {
+      if (BUF[n] || LOADING[n]) return; LOADING[n] = 1;
+      fetch('/sounds/' + FILES[n] + '.mp3?v=1127').then(function (r) { if (!r.ok) throw r.status; return r.arrayBuffer(); }).then(function (ab) {
+        return new Promise(function (res, rej) { c.decodeAudioData(ab, res, rej); });   // callback form: older Safari
+      }).then(function (b) { BUF[n] = b; }, function () { LOADING[n] = 0; });
+    });
+  }
   /** Play one radio sound at `at` (AudioContext time); returns when it ends (= at when it does not play). */
   function sound(c, name, at) {
     if (!c || (name !== 'emergency' && !soundsOn())) return at;
+    if (BUF[name]) { var fs = c.createBufferSource(); fs.buffer = BUF[name]; fs.connect(c.destination); fs.start(at); return at + BUF[name].duration; }
+    if (FILES[name]) preload(c);
     var pcm = PCM[name] || (PCM[name] = soundPcm(name));
     if (!pcm.length) return at;
     var buf = c.createBuffer(1, pcm.length, RATE); buf.getChannelData(0).set(pcm);
@@ -720,8 +739,24 @@
       var c = ctx(); if (!c) return;
       if (snd.value !== '1') { toast('🔇', 'Walkie sounds are off', '', '#475569'); return; }
       var t = c.currentTime + 0.05;
-      ['press', 'release', 'rx', 'rxEnd'].forEach(function (n) { var pcm = PCM[n] || (PCM[n] = soundPcm(n)); var b = c.createBuffer(1, pcm.length, RATE); b.getChannelData(0).set(pcm); var s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(t); t += b.duration + 0.35; });
+      ['press', 'release', 'rx', 'rxEnd'].forEach(function (n) { t = sound(c, n, t) + 0.35; });
     });
+  }
+  /* SOUND CREDITS (CC BY needs them; CC0 credited too). Shown in My settings › About for everyone. */
+  var CREDITS = [
+    ['Function Beep.wav', 'JustinBW', 'https://freesound.org/s/70106/', 'CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/', 'Walkie-talkie: press to talk'],
+    ['Walkie Talkie - Roger Beep', 'bruce965', 'https://freesound.org/s/321906/', 'CC0 1.0', 'https://creativecommons.org/publicdomain/zero/1.0/', 'Walkie-talkie: let go'],
+    ['Walkie Talkie Static Beep', 'BudgetPixel AI', 'https://budgetpixel.com/sfx/walkie-talkie-static-beep-2d99529f', 'CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/', 'Walkie-talkie: someone starts talking'],
+    ['walkietalkie_eot.wav', 'IneQuation', 'https://freesound.org/s/27878/', 'CC BY 3.0', 'https://creativecommons.org/licenses/by/3.0/', 'Walkie-talkie: they finished']
+  ];
+  function creditsCard() {
+    var box = d.createElement('div'); box.className = 'kt-card'; box.setAttribute('data-wt-credits', '1');
+    box.style.cssText = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:16px;margin-bottom:14px;';
+    box.innerHTML = '<div style="font-weight:800;font-size:15px;margin-bottom:6px;">🔊 ' + esc(T('Sound credits')) + '</div>'
+      + '<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.55;color:#334155;">' + CREDITS.map(function (c) {
+        return '<li><span data-no-i18n>“<a href="' + c[2] + '" target="_blank" rel="noopener">' + esc(c[0]) + '</a>” ' + esc(T('by')) + ' ' + esc(c[1]) + ' — <a href="' + c[4] + '" target="_blank" rel="noopener">' + esc(c[3]) + '</a></span> <span style="color:#64748B;">(' + esc(T(c[5])) + ')</span></li>';
+      }).join('') + '</ul><div style="font-size:12px;color:#64748B;margin-top:6px;">' + esc(T('Changes: shortened, made mono and quieter.')) + '</div>';
+    return box;
   }
   function agencyPane(pane) {
     css();
@@ -742,5 +777,5 @@
     ['agency_admin', 'centre_director', 'educator', 'home_visitor'].forEach(function (role) { KT.Shell.registerScreen(role + ':walkie', render); });
   }
   reg();
-  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, myCard: myCard, agencyPane: agencyPane, sound: function (n) { var c = ctx(); return c ? sound(c, n, c.currentTime + 0.02) : 0; }, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
+  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, myCard: myCard, agencyPane: agencyPane, creditsCard: creditsCard, sound: function (n) { var c = ctx(); return c ? sound(c, n, c.currentTime + 0.02) : 0; }, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
 })(window, document);

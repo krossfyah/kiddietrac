@@ -75,14 +75,14 @@ Quand une prise de parole arrive, une carte montre qui parle :
 
 ## Sons radio
 
-Comme une vraie radio bidirectionnelle, le walkie émet des sons courts et discrets :
+Comme une vraie radio bidirectionnelle, le walkie émet des sons radio courts et discrets (de vrais enregistrements; crédits dans **Mes paramètres › À propos**) :
 
 | Son | Quand |
 |---|---|
-| Deux bips rapides montants | Vous avez appuyé et le canal est à vous : parlez |
-| Un bip « roger » et un court souffle | Vous avez relâché |
-| Un clic et un gazouillis montant | Quelqu’un commence à vous parler |
-| Un bip court et un léger souffle | La personne a terminé |
+| Un court bip radio | Vous avez appuyé et le canal est à vous : parlez |
+| Un bip « roger » et le clic de la radio qui relâche | Vous avez relâché |
+| Un grésillement et un bip | Quelqu’un commence à vous parler |
+| Un court grésillement | La personne a terminé |
 | Trois bips urgents | Une prise de parole sur le canal d’urgence |
 
 Les sons ne jouent jamais par-dessus une voix. Désactivez-les avec **Sons du walkie** dans vos paramètres du walkie

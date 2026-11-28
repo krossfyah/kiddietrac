@@ -73,14 +73,14 @@ When a talk arrives, a card shows who is talking:
 
 ## Radio sounds
 
-Like a real two-way radio, the walkie makes short, quiet sounds:
+Like a real two-way radio, the walkie makes short, quiet radio sounds (real recordings; credits in **My settings › About**):
 
 | Sound | When |
 |---|---|
-| Two quick rising beeps | You pressed and the channel is yours: start talking |
-| A "roger" beep and a short hiss | You let go |
-| A click and a rising chirp | Someone starts talking to you |
-| A short beep and a soft hiss | They finished |
+| A short radio beep | You pressed and the channel is yours: start talking |
+| A "roger" beep and the click of the radio letting go | You let go |
+| A burst of static and a beep | Someone starts talking to you |
+| A short squelch of static | They finished |
 | Three urgent beeps | A talk on the emergency channel |
 
 The sounds never play over a voice. Turn them off with **Walkie sounds** in your walkie settings (below). The emergency

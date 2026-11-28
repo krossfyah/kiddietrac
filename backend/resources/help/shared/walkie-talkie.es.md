@@ -73,14 +73,14 @@ Cuando llega una intervención, una tarjeta muestra quién habla:
 
 ## Sonidos de radio
 
-Como una radio de dos vías de verdad, el walkie hace sonidos cortos y suaves:
+Como una radio de dos vías de verdad, el walkie hace sonidos de radio cortos y suaves (grabaciones reales; créditos en **Mis ajustes › Acerca de**):
 
 | Sonido | Cuándo |
 |---|---|
-| Dos pitidos rápidos ascendentes | Pulsó y el canal es suyo: empiece a hablar |
-| Un pitido de «recibido» y un breve siseo | Soltó el botón |
-| Un clic y un trino ascendente | Alguien empieza a hablarle |
-| Un pitido corto y un siseo suave | Terminó de hablar |
+| Un pitido corto de radio | Pulsó y el canal es suyo: empiece a hablar |
+| Un pitido de «recibido» y el clic de la radio al soltar | Soltó el botón |
+| Un chasquido de estática y un pitido | Alguien empieza a hablarle |
+| Un breve chasquido de estática | Terminó de hablar |
 | Tres pitidos urgentes | Una charla en el canal de emergencia |
 
 Los sonidos nunca suenan encima de una voz. Desactívelos con **Sonidos del walkie** en sus ajustes del walkie (abajo).

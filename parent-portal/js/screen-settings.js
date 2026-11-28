@@ -1700,6 +1700,8 @@
        is the fallback for a load-order surprise. */
     if (KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
     else { paneAbout.appendChild(aboutCard); }
+    // 🔊 Credits for the walkie-talkie's recorded radio sounds (CC BY needs them; kt-walkie.js, 2026-11-27).
+    try { if (KT.walkie && KT.walkie.creditsCard) paneAbout.appendChild(KT.walkie.creditsCard()); } catch (e) {}
   }
 
   function field(parent, label, type, val) {
