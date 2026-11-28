@@ -4,6 +4,23 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "💬",
+            "title": "Clearer chat on phones",
+            "body": "Your own messages in team chats are now a soft, easy-to-read teal. Every message has a clear + to react and an arrow to reply (or swipe the message right on a phone). The help ? sits in the same spot on every page banner, and the quick-request + no longer floats over open chats.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔒",
             "title": "AI doc extract keeps files private",
             "body": "AI doc extract now reads PDFs as well as photos and scans, and the file is sent straight to the AI to be read. It is never put at a public link, and Auto-link attaches a staff certificate's file to the person's record privately.",
