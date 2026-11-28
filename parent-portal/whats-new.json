@@ -4,6 +4,64 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🧩",
+            "title": "Edit and remove activity zones",
+            "body": "Each activity zone now has a ⋮ menu to rename it, move it to another room, change its icon or colour, or remove it. Visits already logged stay in past days' reports.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Modifier et retirer les zones d’activité",
+            "body_fr": "Chaque zone d’activité a maintenant un menu ⋮ pour la renommer, la déplacer dans un autre local, changer son icône ou sa couleur, ou la retirer. Les visites déjà consignées restent dans les rapports des jours passés.",
+            "title_es": "Editar y quitar zonas de actividad",
+            "body_es": "Cada zona de actividad tiene ahora un menú ⋮ para cambiarle el nombre, moverla a otra sala, cambiar su icono o color, o quitarla. Las visitas ya registradas se quedan en los informes de días anteriores.",
+            "title_hi": "गतिविधि क्षेत्र संपादित करें और हटाएँ",
+            "body_hi": "हर गतिविधि क्षेत्र में अब ⋮ मेनू है: नाम बदलें, दूसरे कमरे में ले जाएँ, आइकन या रंग बदलें, या हटाएँ। पहले से दर्ज विज़िट पिछले दिनों की रिपोर्ट में रहती हैं।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🎯",
+            "title": "Framework gaps for every child",
+            "body": "Framework gaps now checks every child, not only the first 30, and shows them 25 to a page with the most gaps first.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Lacunes du cadre pour chaque enfant",
+            "body_fr": "Les lacunes du cadre vérifient maintenant chaque enfant, pas seulement les 30 premiers, et les affichent 25 par page, les plus grandes lacunes en premier.",
+            "title_es": "Brechas del marco para cada niño",
+            "body_es": "Brechas del marco ahora revisa a todos los niños, no solo a los primeros 30, y los muestra de 25 en 25, con más brechas primero.",
+            "title_hi": "हर बच्चे के लिए फ़्रेमवर्क गैप",
+            "body_hi": "फ़्रेमवर्क गैप अब केवल पहले 30 नहीं, हर बच्चे की जाँच करता है, और सबसे ज़्यादा गैप वाले पहले, एक पेज पर 25 दिखाता है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🚐",
+            "title": "Clearer new field trip form",
+            "body": "When you plan a field trip, pick the centre first and you see only that centre's children. The form tells you what is missing before it sends the permission slips.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Formulaire de sortie plus clair",
+            "body_fr": "Quand vous planifiez une sortie, choisissez d’abord le centre : seuls ses enfants s’affichent. Le formulaire vous dit ce qui manque avant d’envoyer les autorisations.",
+            "title_es": "Formulario de excursión más claro",
+            "body_es": "Al planificar una excursión, elija primero el centro y verá solo sus niños. El formulario le indica lo que falta antes de enviar los permisos.",
+            "title_hi": "नई फ़ील्ड ट्रिप का साफ़ फ़ॉर्म",
+            "body_hi": "फ़ील्ड ट्रिप बनाते समय पहले केंद्र चुनें, तब केवल उसी केंद्र के बच्चे दिखते हैं। अनुमति पर्चियाँ भेजने से पहले फ़ॉर्म बताता है कि क्या छूटा है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔒",
             "title": "Password-protected payslips",
             "body": "Every payslip PDF you download or are emailed, and your T4, T4A and RL-1, is now password-protected. The password is the first 3 letters of your last name in CAPITALS, then your date of birth as MMDDYYYY. The app shows your own format next to your payslips, payslip emails no longer show amounts, and nobody ever sends the password itself. Admins: Payroll settings lists anyone with no date of birth or last name on file.",
