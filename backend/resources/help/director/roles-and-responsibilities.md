@@ -85,4 +85,4 @@ Sees **only their own family**:
 Read-only reviewer for the agency: compliance, audit logs, children, forms and Forms Manager, and help.
 
 ## Custom roles
-Agency admins can create roles for their own job titles (for example *Assistant director* or *Bookkeeper*) under **Settings → Roles & permissions** — see [[custom-roles-and-permissions]].
+Agency admins can create roles for their own job titles (for example *Assistant director* or *Bookkeeper*) under **Settings → Roles & permissions** — see [[custom-roles-and-permissions]]. Each custom role is based on a built-in role and can only turn things off: the person keeps the same centres and children as the base role, and the screens it turns off leave their menu and are refused. Give it to someone in **User management**.

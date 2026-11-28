@@ -87,6 +87,17 @@ a test from there.
 ??? Does the staff welcome go to parents? | No. Parents get the separate Provider welcome email that introduces their provider. The staff welcome only goes to the new staff member, with directors and admins copied.
 ??? Can I resend it? | It is sent once, automatically. Send a test from the template editor to preview it.
 
+## Giving someone a custom role
+
+If your agency has made its own roles in [[custom-roles-and-permissions]], give one to a staff member from their record:
+
+1. Open **User management** and open the person.
+2. Beside **Add / set role**, pick the custom role (marked **★**, under **Your custom roles**) and, for a centre role, the **Centre**.
+3. Press **Apply**. A **★** pill with the role's name appears beside their built-in role.
+4. To take it away, pick the built-in role again and press **Apply**.
+
+> ℹ️ A custom role only narrows its base role: the person still sees the same centres and children, with the screens the role turns off removed from their menu.
+
 ## Three lists, not one
 
 **Administration → User management** separates them, with a count on each:

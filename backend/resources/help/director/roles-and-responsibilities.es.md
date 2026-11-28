@@ -84,4 +84,4 @@ Ve **solo a su propia familia**:
 Revisor de solo lectura de la agencia: cumplimiento, registros de auditoría, niños, formularios y Gestor de formularios, y ayuda.
 
 ## Roles personalizados
-Los administradores de la agencia pueden crear roles para sus propios puestos (por ejemplo, *Subdirector* o *Contador*) en **Ajustes → Roles y permisos**; consulte [[custom-roles-and-permissions]].
+Los administradores de la agencia pueden crear roles para sus propios puestos (por ejemplo, *Subdirector* o *Contador*) en **Ajustes → Roles y permisos**; consulte [[custom-roles-and-permissions]]. Cada rol personalizado se basa en un rol integrado y solo puede desactivar cosas: la persona conserva los mismos centros y niños que el rol base, y las pantallas desactivadas salen de su menú y se le niegan. Déselo a alguien en **Gestión de usuarios**.

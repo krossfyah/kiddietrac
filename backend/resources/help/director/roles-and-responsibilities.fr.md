@@ -84,4 +84,4 @@ Voit **uniquement sa propre famille** :
 Réviseur en lecture seule de l’agence : conformité, journaux d’audit, enfants, formulaires et Gestionnaire de formulaires, et aide.
 
 ## Rôles personnalisés
-Les administrateurs de l’agence peuvent créer des rôles pour leurs propres titres d’emploi (par exemple *Directeur adjoint* ou *Teneur de livres*) sous **Paramètres → Rôles et permissions** — voir [[custom-roles-and-permissions]].
+Les administrateurs de l’agence peuvent créer des rôles pour leurs propres titres d’emploi (par exemple *Directeur adjoint* ou *Teneur de livres*) sous **Paramètres → Rôles et permissions** — voir [[custom-roles-and-permissions]]. Chaque rôle personnalisé est basé sur un rôle intégré et peut seulement désactiver des choses : la personne garde les mêmes centres et enfants que le rôle de base, et les écrans désactivés quittent son menu et lui sont refusés. Donnez-le à quelqu’un dans **Gestion des utilisateurs**.

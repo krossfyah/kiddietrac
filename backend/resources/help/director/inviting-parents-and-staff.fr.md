@@ -77,6 +77,17 @@ Vous pouvez modifier le titre, l’accueil, les premières étapes et la formule
 ??? Le message de bienvenue du personnel est-il envoyé aux parents? | Non. Les parents reçoivent le courriel distinct de bienvenue du prestataire, qui leur présente leur prestataire. Le message de bienvenue du personnel va seulement au nouveau membre du personnel, avec les directeurs et administrateurs en copie.
 ??? Puis-je le renvoyer? | Il est envoyé une seule fois, automatiquement. Envoyez un essai à partir de l’éditeur de modèle pour l’aperçu.
 
+## Donner un rôle personnalisé à quelqu’un
+
+Si votre agence a créé ses propres rôles dans [[custom-roles-and-permissions]], donnez-en un à un membre du personnel à partir de sa fiche :
+
+1. Ouvrez **Gestion des utilisateurs** et ouvrez la personne.
+2. À côté de **Ajouter / définir un rôle**, choisissez le rôle personnalisé (marqué **★**, sous **Vos rôles personnalisés**) et, pour un rôle de centre, le **Centre**.
+3. Appuyez sur **Appliquer**. Une pastille **★** avec le nom du rôle apparaît à côté de son rôle intégré.
+4. Pour le retirer, choisissez de nouveau le rôle intégré et appuyez sur **Appliquer**.
+
+> ℹ️ Un rôle personnalisé limite seulement son rôle de base : la personne voit toujours les mêmes centres et les mêmes enfants, sans les écrans que le rôle désactive.
+
 ## Trois listes, pas une
 
 **Administration → Gestion des utilisateurs** les sépare, avec un compte sur chacune :

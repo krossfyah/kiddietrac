@@ -77,6 +77,17 @@ Puede cambiar el encabezado, la bienvenida, los primeros pasos y la despedida en
 ??? ¿La bienvenida del personal llega a los padres? | No. Los padres reciben el correo aparte de Bienvenida del proveedor, que les presenta a su proveedor. La bienvenida del personal solo llega al nuevo miembro del personal, con copia a directores y administradores.
 ??? ¿Puedo reenviarla? | Se envía una sola vez, automáticamente. Envíe una prueba desde el editor de plantillas para verla.
 
+## Dar un rol personalizado a alguien
+
+Si su agencia creó sus propios roles en [[custom-roles-and-permissions]], dé uno a un miembro del personal desde su ficha:
+
+1. Abra **Gestión de usuarios** y abra a la persona.
+2. Junto a **Agregar / fijar rol**, elija el rol personalizado (marcado con **★**, en **Sus roles personalizados**) y, para un rol de centro, el **Centro**.
+3. Pulse **Aplicar**. Aparece una etiqueta **★** con el nombre del rol junto a su rol integrado.
+4. Para quitarlo, elija otra vez el rol integrado y pulse **Aplicar**.
+
+> ℹ️ Un rol personalizado solo limita su rol base: la persona sigue viendo los mismos centros y niños, sin las pantallas que el rol desactiva.
+
 ## Tres listas, no una
 
 **Administración → Gestión de usuarios** las separa, con un recuento en cada una:

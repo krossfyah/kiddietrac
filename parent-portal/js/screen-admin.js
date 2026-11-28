@@ -3149,6 +3149,7 @@
       Dom.clear(glanceGrid);
       var fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.name || '—';
       var roles = (u.roles && u.roles.length) ? u.roles.map(function (r) { return String(r).replace(/_/g, ' '); }).join(', ') : (record['Role'] || '—');
+      if (u.custom_roles && u.custom_roles.length) roles += ' · ★ ' + u.custom_roles.map(function (x) { return x.name; }).join(', ');   // custom roles (2026-11-28)
 
       // Identity first — name, status and role are the questions an admin opens
       // this modal to answer.
@@ -3881,6 +3882,13 @@
     if (!user.roles || user.roles.length === 0) {
       pillsWrap.appendChild(Dom.el('span', { style: 'font-size: 12px; color: #6B7280;' }, 'No roles assigned'));
     }
+    // Custom roles (2026-11-28): the agency's own job title, shown beside the built-in role it narrows.
+    (user.custom_roles || []).forEach(function (cr) {
+      pillsWrap.appendChild(Dom.el('span', {
+        style: 'padding: 3px 10px; border-radius: 999px; background: #0F766E; color: white; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;',
+        'data-kttip': 'Custom role based on ' + (roleLabels[cr.base_role] || cr.base_role),
+      }, '★ ' + String(cr.name).toUpperCase()));
+    });
     roleSection.appendChild(pillsWrap);
 
     // Change-role form
@@ -3908,6 +3916,19 @@
     changeRoleOpts.forEach(function (r) {
       newRoleSelect.appendChild(Dom.el('option', { value: r.v }, r.l));
     });
+    /* THIS AGENCY'S CUSTOM ROLES (2026-11-28). Each is based on a built-in role and can only turn things off; the
+       person is saved with the base role plus the custom role, which then applies at every centre they hold that
+       base role in this agency. Picking the built-in role again removes the custom role. */
+    var customGroup = Dom.el('optgroup', { label: 'Your custom roles' });
+    Api.get('/admin/roles').then(function (r) {
+      var list = ((r && r.roles) || []).filter(function (x) { return !x.is_system && x.base_role; });
+      if (!list.length) return;
+      list.forEach(function (x) {
+        customGroup.appendChild(Dom.el('option', { value: 'custom:' + x.id + ':' + x.base_role },
+          '★ ' + x.name + ' (' + (roleLabels[x.base_role] || x.base_role) + ')'));
+      });
+      newRoleSelect.appendChild(customGroup);
+    }).catch(function () {});
     changeBox.appendChild(newRoleSelect);
 
     // Optional centre picker for non-admin roles
@@ -3934,6 +3955,8 @@
         return;
       }
       var payload = { role: newRoleSelect.value };
+      var cm = /^custom:(\d+):([a-z_]+)$/.exec(newRoleSelect.value);
+      if (cm) payload = { role: cm[2], custom_role_id: parseInt(cm[1], 10) };
       if (newCentreSelect.value) payload.centre_id = parseInt(newCentreSelect.value, 10);
       applyRoleBtn.disabled = true;
       applyRoleBtn.textContent = 'Saving…';
@@ -3959,7 +3982,7 @@
 
     roleSection.appendChild(Dom.el('div', {
       style: 'font-size: 11px; color: #6B7280; margin-top: 8px; line-height: 1.4;',
-    }, 'Adding a role is additive — existing roles stay active. To revoke, contact support.'));
+    }, 'Adding a role is additive — existing roles stay active. A custom role (★) narrows its built-in role at every centre they hold it in this agency; choose the built-in role again to remove it. To revoke a role, contact support.'));
 
     if (!_dirMode) body.appendChild(roleSection);   // roles are agency-admin only
 
