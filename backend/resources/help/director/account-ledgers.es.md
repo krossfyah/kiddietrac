@@ -33,10 +33,10 @@ roles: agency_admin, platform_admin
 
 Las cifras siempre cuadran:
 
-> 💡 **Facturado − (Recibido − Reembolsado) = Pendiente**
+> 💡 **Facturado − (Cobrado − Reembolsado) = Pendiente**
 
 - **Facturado**: todo lo facturado, sin contar lo anulado. Una factura anulada no tiene saldo y aparece en su propia cifra **Anulada**.
-- **Recibido**: lo que las propias facturas indican como pagado.
+- **Cobrado**: lo que las propias facturas indican como pagado.
 - **Reembolsado**: dinero devuelto. Un reembolso "des-cobra": el saldo vuelve a subir exactamente lo devuelto.
 - **Pendiente**: lo que se debe hoy. **Vencido** es la parte cuya fecha de vencimiento ya pasó.
 - **Vence este mes**, **Perdidas** y **Scheduled in total** aparecen cuando la persona tiene cuotas o facturación recurrente por venir.

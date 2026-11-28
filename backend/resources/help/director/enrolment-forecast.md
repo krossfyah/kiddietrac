@@ -16,7 +16,7 @@ rooms and how hard to push tours.
 
 ## Reading the forecast
 
-1. Open **Marketing › Enrolment forecast**. The banner reads **📈 Enrolment forecast** and says how many tours are in the pipeline.
+1. Open **Marketing › Enrolment forecast**. The banner reads **🔮 Enrolment forecast** and says how many tours are in the pipeline.
 2. Read the four tiles: **Current enrolment**, **Tour pipeline · 60d**, **Monthly adds** and **Monthly churn %**.
 3. Look at the **6-month enrolment trajectory** chart. The green dot is **Current**; the blue line is **Projected**, with the number above each month.
 4. Scroll to **Month-by-month breakdown** for each month's **Projected** total, **+ Adds** and **− Churn**.

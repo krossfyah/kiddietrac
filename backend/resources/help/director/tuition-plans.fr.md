@@ -43,7 +43,7 @@ Un forfait de frais, c'est un montant nommé et sa fréquence de facturation, pa
 
 Chaque facture a une ligne de frais de garde avec le nom, la fréquence et le montant du forfait, datée d'aujourd'hui, numérotée selon la règle habituelle de votre agence, dans la devise de votre agence (selon **Country & compliance**).
 
-> ⚠️ **Générer les factures** crée une nouvelle facture chaque fois que vous appuyez. Appuyer deux fois pour les mêmes familles les facture deux fois : annulez les factures en trop dans la liste des factures.
+> 💡 **Générer les factures** facture chaque famille une seule fois par période de facturation (la semaine, le bloc de deux semaines ou le mois en cours; une seule fois pour un forfait unique). Si vous appuyez de nouveau, les familles déjà facturées par ce forfait pour cette période sont ignorées : le message indique combien. Annuler une facture permet de la générer de nouveau pour cette famille.
 
 ## Qui peut faire quoi
 

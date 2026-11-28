@@ -323,6 +323,10 @@ final class PurchaseOrderController extends Controller
         }
         $po->supplier = DB::table('suppliers')->where('id', $po->supplier_id)->first();
         $po->lines = DB::table('purchase_order_lines')->where('purchase_order_id', $poId)->get();
+        /* The bill made from this order, if any (2026-11-27): the screen offered "Convert to bill" only while the order
+           was not yet received, so marking it received first hid the button for good. It now asks this instead. */
+        $po->bill = DB::table('expense_invoices')->where('purchase_order_id', $poId)->whereNull('deleted_at')
+            ->first(['id', 'reference', 'status']);
         return ['purchase_order' => $po];
     }
 }

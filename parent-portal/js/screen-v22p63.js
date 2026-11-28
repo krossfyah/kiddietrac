@@ -508,7 +508,7 @@
     const plans = r.data || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>📅 Payment schedules</h2>
+        <h2>🏧 Payment schedules</h2>
         <p>${isStaff && !fid ? 'Choose a family to see their payment schedules.' : plans.length + ' schedule(s). Dated instalments, each raising its own invoice shortly before it falls due.'}</p>
         ${isStaff ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pp-new">+ New payment schedule</button></div>' : ''}
       </div>

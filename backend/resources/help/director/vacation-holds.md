@@ -16,7 +16,7 @@ screens: vacation-holds
 New requests show the status **requested**, with **Approve** and **Deny** on the row. Directors and agency admins get a notification when a family asks — "Vacation hold requested by" the family, with the dates.
 
 1. Open **Administration › Vacation holds**.
-2. Find the row with the status **requested**. Check **Family**, **Dates** and **Reason**.
+2. Find the row with the status **requested**. Check **Family**, **Centre**, **Dates** and **Reason**.
 3. Press **Approve**. The **Approve vacation hold** box opens.
 4. Type a credit amount for the family, or leave the box blank to calculate it automatically.
 5. Press **Approve**. The row changes to **approved** and the **Credit** column shows the amount.
@@ -50,7 +50,7 @@ Use this when a family tells you by phone, email or at the door.
 | Role | Can |
 |---|---|
 | Agency admin | See every hold in the agency, add holds, approve or deny |
-| Centre director | Add, approve and deny holds for families in their own centres |
+| Centre director | See, add, approve and deny holds for families in their own centres only; other centres' holds are not listed |
 | Platform admin | The same as an agency admin, in the agency being viewed |
 | Parent | Asks for a hold for their own family and is told the decision |
 

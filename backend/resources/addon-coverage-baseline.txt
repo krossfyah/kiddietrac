@@ -86,6 +86,7 @@ route announcements/popup
 route app/versions
 route attendance/pattern
 route attendance/weekly-overview
+route auditor/children
 route auth/active-agency
 route auth/agencies
 route auth/agreement

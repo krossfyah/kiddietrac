@@ -169,14 +169,18 @@
       title: 'Generate invoices · ' + p.name,
       body: body,
       actions: [{
-        label: 'Generate invoices', primary: true,
+        label: 'Generate invoices', primary: true, busyLabel: 'Generating…',
         handler: function () {
           var ids = checks.filter(function (c) { return c.checked; }).map(function (c) { return parseInt(c.value, 10); });
           if (!ids.length) { if (Dom.toast) Dom.toast('Select at least one family', 'error'); return false; }
           return Api.post('/admin/fee-plans/' + p.id + '/generate-invoices', {
             family_ids: ids, status: statusSel.value, due_days: parseInt(dueIn.value, 10) || 0,
           }).then(function (r) {
-            if (Dom.toast) Dom.toast('Generated ' + (r.created || 0) + ' invoice' + (r.created === 1 ? '' : 's') + ' (' + r.status + ').', 'success');
+            /* The server bills each family once per plan and period (2026-11-27); families it skipped already have
+               this period's invoice from the plan. */
+            var msg = 'Generated ' + (r.created || 0) + ' invoice' + (r.created === 1 ? '' : 's') + ' (' + r.status + ').';
+            if (r.skipped) msg += ' ' + r.skipped + ' famil' + (r.skipped === 1 ? 'y was' : 'ies were') + ' already invoiced for this period.';
+            if (Dom.toast) Dom.toast(msg, r.created ? 'success' : 'info');
           }).catch(function (e) { if (Dom.toast) Dom.toast(e.message || 'Generation failed', 'error'); return false; });
         },
       }],

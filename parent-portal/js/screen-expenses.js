@@ -441,11 +441,16 @@
         body.appendChild(lc);
       }
       var actions = [];
-      var alreadyBill = false;
-      if (po.status !== 'received' && po.status !== 'cancelled') {
-        actions.push({ label: '→ Convert to bill', primary: true, handler: function () {
+      /* Convert stays until a bill exists (2026-11-27): it was offered only while the order was not received, so an
+         order marked received before it was billed could never become a bill. po.bill is the bill made from it. */
+      if (po.bill) {
+        body.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#166534;background:#F0FBF4;border:1px solid #BFE3CF;border-radius:8px;padding:8px 12px;margin-top:4px;' }, 'Billed: ' + (po.bill.reference || 'bill created') + '.'));
+      } else if (po.status !== 'cancelled') {
+        actions.push({ label: '→ Convert to bill', primary: true, busyLabel: 'Converting…', handler: function () {
           return Api.post('/admin/purchase-orders/' + id + '/convert-to-bill', {}).then(function (r) { toast('Bill ' + (r.reference || '') + ' created'); Shell.Modal.close && Shell.Modal.close(); _tab = 'bills'; render(container); }).catch(function (e) { toast(e.message || 'Failed', 'error'); return false; });
         } });
+      }
+      if (po.status !== 'received' && po.status !== 'cancelled') {
         var nextStatus = po.status === 'draft' ? 'ordered' : 'received';
         actions.push({ label: 'Mark ' + nextStatus, style: 'btn-secondary', handler: function () { return Api.post('/admin/purchase-orders/' + id + '/status', { status: nextStatus }).then(function () { toast('Updated'); Shell.Modal.close && Shell.Modal.close(); render(container); }).catch(function (e) { toast(e.message || 'Failed', 'error'); return false; }); } });
       }

@@ -1574,7 +1574,8 @@
 
     var body = Dom.el('div', { style: 'padding:16px;' });
     function field(label, value, copyText, strong, note) {
-      var row = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;margin-bottom:10px;' + (strong ? 'background:#FFFBEB;border-color:#FCD34D;' : '') });
+      // data-i18n-ctx: "Answer" here is the security answer, not the verb (kt-i18n context key interac::Answer).
+      var row = Dom.el('div', { 'data-i18n-ctx': 'interac', style: 'border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;margin-bottom:10px;' + (strong ? 'background:#FFFBEB;border-color:#FCD34D;' : '') });
       var top = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
       top.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
         Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;' }, label),

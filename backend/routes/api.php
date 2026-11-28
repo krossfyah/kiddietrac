@@ -3921,6 +3921,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::delete('/admin/report-schedules/{id}',       [\App\Http\Controllers\Api\ScheduledReportController::class, 'destroy'])->middleware('role:agency_admin,centre_director,platform_admin');
     Route::post  ('/admin/report-schedules/{id}/run',   [\App\Http\Controllers\Api\ScheduledReportController::class, 'runNow'])->middleware('role:agency_admin,centre_director,platform_admin');
     Route::post  ('/reports/preview',               [\App\Http\Controllers\Api\ReportsController::class, 'preview'])->middleware('role:centre_director,agency_admin,platform_admin,auditor');
+    // The auditor's Children screen (2026-11-27): read-only, agency-wide like their reports; /director/enrollments is not theirs.
+    Route::get   ('/auditor/children',              [\App\Http\Controllers\Api\ChildController::class, 'auditorChildren'])->middleware('role:auditor,agency_admin');
     // Reactions + video
     Route::get   ('/reactions/{type}/{id}',         [\App\Http\Controllers\Api\MediaV2Controller::class, 'listReactions']);
     Route::post  ('/reactions',                     [\App\Http\Controllers\Api\MediaV2Controller::class, 'addReaction']);

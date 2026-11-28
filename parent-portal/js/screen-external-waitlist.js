@@ -53,7 +53,7 @@
     Api.post('/agency/waitlist/' + e.id + '/enroll', {}).then(async function (r) {
       load(container);
       if (KT.toast) KT.toast('🎓', 'Enrolled', 'Family created — enrolment started.', '#16A34A');
-      if (r && r.family_id && await KT.confirm({ title: 'Family created', description: 'Open the Families list now?', okLabel: 'Open Families', cancelLabel: 'Stay here' })) { location.hash = '#families'; }
+      if (r && r.family_id && await KT.confirm({ title: 'Family created', description: 'Open the Families list now?', okLabel: 'Open Families', cancelLabel: 'Stay here' })) { location.hash = '#admin-families'; }   // the Families screen for admins and directors (2026-11-27: #families exists for no staff role)
     }).catch(function (err) { if (KT.toast) KT.toast('⚠️', 'Could not enrol', (err && err.message) || 'Error.', '#DC2626'); });
   }
   /* FAMILIES FROM A CLOSED PROVIDER (#251, 2026-11-24). A linked row is a family already in

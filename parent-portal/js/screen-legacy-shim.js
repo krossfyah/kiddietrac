@@ -211,7 +211,9 @@
     Shell.registerScreen(r + ':room-rotations',    bridge('KT.V22p56', 'renderRoomRotations'));
   });
   ['guardian'].forEach(function (r) {
-    Shell.registerScreen(r + ':vacation-holds', bridge('KT.V22p56', 'renderVacationHolds'));
+    /* No parent Vacation holds screen (2026-11-27). guardian:vacation-holds drew the STAFF screen (+ Add hold, a family
+       picker, Approve/Deny) and its list call is staff-only, so a parent got an empty staff page. There is no parent view
+       of holds to give them, so the entry is gone; their hold notices link to #billing. */
     /* ONE DOCUMENTS SCREEN FOR A PARENT (2026-10-09). This e-signature table listed only
        e-signed agreements (the NDA), so a parent who opened "Documents" here saw none of
        the forms she had signed, while #my-documents had them all. #my-documents now also

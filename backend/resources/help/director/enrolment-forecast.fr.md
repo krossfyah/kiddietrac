@@ -12,7 +12,7 @@ habituellement. Servez-vous-en pour planifier le personnel, les locaux et l'effo
 
 ## Lire la prévision
 
-1. Ouvrez **Marketing › Enrolment forecast**. La bannière indique **📈 Enrolment forecast** et le nombre de visites en cours.
+1. Ouvrez **Marketing › Enrolment forecast**. La bannière indique **🔮 Enrolment forecast** et le nombre de visites en cours.
 2. Lisez les quatre tuiles : **Current enrolment**, **Tour pipeline · 60d**, **Monthly adds** et **Monthly churn %**.
 3. Regardez le graphique **6-month enrolment trajectory**. Le point vert est **Current**; la ligne bleue est **Projected**, avec le nombre au-dessus de chaque mois.
 4. Faites défiler jusqu'à **Month-by-month breakdown** pour le total **Projected**, les **+ Adds** et le **− Churn** de chaque mois.

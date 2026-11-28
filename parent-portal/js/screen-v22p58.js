@@ -317,7 +317,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>↩ Refunds</h2>
-        <p>Process partial or full refunds against any payment. Stripe payments are refunded automatically; manual ones are recorded for audit.</p>
+        <p>Process partial or full refunds against any payment. Card payments taken through Stripe or Helcim are refunded to the card automatically; manual ones are recorded for audit.</p>
       </div>
       <div class="kt-card">
         <label style="font-size:13px;font-weight:600;">Choose the payment to refund</label>
@@ -1248,7 +1248,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>📅 Billing schedule</h2>
+        <h2>🧮 Billing schedule</h2>
         <p>Pick weekly, biweekly, or monthly billing per family.</p>
       </div>
       <div class="kt-card">
@@ -1274,10 +1274,19 @@
     const _bsLoad = main.querySelector('#bs-load');
     if (_bsLoad) _bsLoad.onclick = async () => {
       const fid = +document.getElementById('bs-fid').value;
-      if (!fid) { document.getElementById('bs-detail').innerHTML = '<div style="color:#B91C1C;font-size:13px;">Choose a family first.</div>'; return; }
-      const r = await Api.get(`/billing/schedule/${fid}`);
-      const s = r.data || { frequency: 'monthly' };
-      document.getElementById('bs-detail').innerHTML = `
+      const detail = document.getElementById('bs-detail');
+      if (!fid) { detail.innerHTML = '<div style="color:#B91C1C;font-size:13px;">Choose a family first.</div>'; return; }
+      let r;
+      try { r = await Api.get(`/billing/schedule/${fid}`); }
+      catch (e) { detail.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + esc((e && e.message) || 'Could not load this family\u2019s schedule.') + '</div>'; return; }
+      /* A disabled schedule is no schedule (2026-11-27). The row stays (active = 0), and the form used to redraw it with
+         its old values and a Disable button, as if nothing had happened; a family with no row at all got
+         { frequency: 'monthly' }, so Disable showed for them too. */
+      const on = !!(r && r.data && +r.data.active);
+      const s = on ? r.data : { frequency: 'monthly' };
+      detail.innerHTML = `
+        <div style="font-size:13px;color:#475569;margin-bottom:12px;">${on ? 'This family has its own billing schedule.' : 'No billing schedule is set for this family. Save one to start it.'}</div>`;
+      detail.insertAdjacentHTML('beforeend', `
         <label style="font-size:13px;font-weight:600;display:block;">Frequency</label>
         <select id="bs-freq" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
           <option value="weekly" ${s.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
@@ -1289,22 +1298,35 @@
         <label style="font-size:13px;font-weight:600;display:block;margin-top:14px;">Day of month (1-31)</label>
         <input id="bs-dom" type="number" min="1" max="31" value="${s.day_of_month || 1}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
         ${s.next_charge_at ? `<div style="margin-top:14px;color:#475569;font-size:13px;">Next charge: <strong>${fmtDate(s.next_charge_at)}</strong></div>` : ''}
-        <button id="bs-save" class="kt-btn kt-btn-primary" style="margin-top:14px;">Save schedule</button>
-        ${s.frequency ? `<button id="bs-off" class="kt-btn kt-btn-danger" style="margin-top:14px;margin-left:8px;">Disable</button>` : ''}
-      `;
+        <button id="bs-save" class="kt-btn kt-btn-primary" style="margin-top:14px;"${on ? '' : ' data-kt-always-save'}>Save schedule</button>
+        ${on ? `<button id="bs-off" class="kt-btn kt-btn-danger" style="margin-top:14px;margin-left:8px;">Disable</button>` : ''}
+        <div id="bs-msg" role="status" style="font-size:13px;min-height:18px;margin-top:10px;"></div>
+      `);
+      // Say what went wrong (2026-11-27): a failed Save or Disable used to leave the screen exactly as it was.
+      const fail = (e, what) => {
+        const m = document.getElementById('bs-msg');
+        if (m) { m.style.color = '#B91C1C'; m.textContent = (e && e.message) || what; }
+      };
       const _bsSave = main.querySelector('#bs-save');
       if (_bsSave) _bsSave.onclick = async () => {
-        await Api.post('/billing/schedule', {
-          family_id: fid,
-          frequency: document.getElementById('bs-freq').value,
-          day_of_week: +document.getElementById('bs-dow').value,
-          day_of_month: +document.getElementById('bs-dom').value,
-        });
+        _bsSave.disabled = true;
+        try {
+          await Api.post('/billing/schedule', {
+            family_id: fid,
+            frequency: document.getElementById('bs-freq').value,
+            day_of_week: +document.getElementById('bs-dow').value,
+            day_of_month: +document.getElementById('bs-dom').value,
+          });
+        } catch (e) { _bsSave.disabled = false; fail(e, 'Could not save the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule saved', 'success');
         document.getElementById('bs-load').click();
       };
       const off = document.getElementById('bs-off');
       if (off) off.onclick = async () => {
-        await Api.delete(`/billing/schedule/${fid}`);
+        off.disabled = true;
+        try { await Api.delete(`/billing/schedule/${fid}`); }
+        catch (e) { off.disabled = false; fail(e, 'Could not disable the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule disabled', 'success');
         document.getElementById('bs-load').click();
       };
     };

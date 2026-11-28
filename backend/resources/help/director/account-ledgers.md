@@ -34,10 +34,10 @@ screens: account-ledgers
 
 The figures always tie together:
 
-> 💡 **Invoiced − (Received − Refunded) = Outstanding**
+> 💡 **Billed − (Collected − Refunded) = Outstanding**
 
-- **Invoiced**: everything billed, excluding anything voided. A voided invoice carries no balance and shows in its own **Voided** figure.
-- **Received**: what the invoices themselves say was settled.
+- **Billed**: everything invoiced, excluding anything voided. A voided invoice carries no balance and shows in its own **Voided** figure.
+- **Collected**: what the invoices themselves say was settled.
 - **Refunded**: money handed back. A refund *un-collects*: the balance rises again by exactly what was returned.
 - **Outstanding**: what is still owed today. **Overdue** is the part of it past its due date.
 - **Due this month**, **Missed** and **Scheduled in total** appear when the person has instalments or recurring billing coming.

@@ -43,7 +43,7 @@ Un plan de cuotas es un monto con nombre y la frecuencia con que se factura, por
 
 Cada factura tiene una línea de matrícula con el nombre, la frecuencia y el monto del plan, con fecha de hoy, numerada como su agencia acostumbra, en la moneda de su agencia (según **Country & compliance**).
 
-> ⚠️ **Generar facturas** crea una factura nueva cada vez que lo pulsa. Pulsarlo dos veces para las mismas familias les cobra dos veces: anule las sobrantes desde la lista de facturas.
+> 💡 **Generar facturas** factura a cada familia una sola vez por período de facturación (la semana, el bloque de dos semanas o el mes en curso; una sola vez para un plan único). Si lo pulsa de nuevo, se omiten las familias ya facturadas con este plan en ese período: el aviso dice cuántas. Anular una factura permite generarla de nuevo para esa familia.
 
 ## Quién puede hacer qué
 

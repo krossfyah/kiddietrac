@@ -200,7 +200,7 @@
 
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>📈 Enrolment forecast</h2>
+        <h2>🔮 Enrolment forecast</h2>
         <p>6-month projection. Combines current enrolment, ${r.tour_pipeline_60d} tour pipeline (last 60 days), assumed 30% conversion + 2.5% monthly churn.</p>
       </div>
       <div class="kt-kpi-grid">

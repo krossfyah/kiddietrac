@@ -12,7 +12,7 @@ title: नामांकन पूर्वानुमान
 
 ## पूर्वानुमान पढ़ना
 
-1. **Marketing › Enrolment forecast** खोलें। बैनर में **📈 Enrolment forecast** और पाइपलाइन में टूर की संख्या दिखती है।
+1. **Marketing › Enrolment forecast** खोलें। बैनर में **🔮 Enrolment forecast** और पाइपलाइन में टूर की संख्या दिखती है।
 2. चार टाइल पढ़ें: **Current enrolment**, **Tour pipeline · 60d**, **Monthly adds** और **Monthly churn %**।
 3. **6-month enrolment trajectory** चार्ट देखें। हरा बिंदु **Current** है; नीली रेखा **Projected** है, हर महीने के ऊपर संख्या के साथ।
 4. हर महीने का **Projected** कुल, **+ Adds** और **− Churn** देखने के लिए **Month-by-month breakdown** तक स्क्रॉल करें।

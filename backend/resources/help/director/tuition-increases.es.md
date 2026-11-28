@@ -23,7 +23,7 @@ roles: agency_admin, centre_director, platform_admin
 
 ## Leer la lista
 
-1. Cada fila muestra la fecha **Vigente**, el **Tipo**, el **Importe** (en % o en dólares) y **Notificar** (cuántos días antes de la fecha deben saberlo las familias, 60 por defecto).
+1. Cada fila muestra la fecha **Vigente**, el **Centro** (o **Todos los centros**), el **Tipo**, el **Importe** (en % o en dólares) y **Notificar** (cuántos días antes de la fecha deben saberlo las familias, 60 por defecto).
 2. La etiqueta de **Estado** dice **Programada** para un aumento que usted planificó.
 3. La fecha de vigencia más reciente aparece arriba. Puede planificar varios aumentos (por ejemplo en enero y en septiembre); cada uno tiene su fila y su fecha.
 
@@ -39,8 +39,8 @@ roles: agency_admin, centre_director, platform_admin
 
 | Rol | Lo que puede hacer |
 |---|---|
-| Administrador de agencia | Programa aumentos y ve todo el calendario de la agencia. |
-| Director de centro | Ve el calendario de la agencia y puede programar un aumento. Acuérdelo antes con su administrador de agencia: un aumento es para toda la agencia. |
+| Administrador de agencia | Programa aumentos para un centro o **Todos los centros**, y ve todo el calendario de la agencia. |
+| Director de centro | Ve los aumentos de toda la agencia y los de sus centros, y programa aumentos solo para sus centros (elija el centro en **Centro**). |
 | Administrador de plataforma | Lo mismo que un administrador de agencia, en la agencia donde trabaja. |
 
 Los educadores y los padres no ven esta pantalla.

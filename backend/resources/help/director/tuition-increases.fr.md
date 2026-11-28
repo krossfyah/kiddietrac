@@ -23,7 +23,7 @@ roles: agency_admin, centre_director, platform_admin
 
 ## Lire la liste
 
-1. Chaque ligne affiche la date **En vigueur**, le **Type**, le **Montant** (en % ou en dollars) et **Aviser** (combien de jours avant la date les familles devraient être prévenues, 60 par défaut).
+1. Chaque ligne affiche la date **En vigueur**, le **Centre** (ou **Tous les centres**), le **Type**, le **Montant** (en % ou en dollars) et **Aviser** (combien de jours avant la date les familles devraient être prévenues, 60 par défaut).
 2. L'étiquette **Statut** indique **Prévue** pour une hausse que vous avez planifiée.
 3. La date d'effet la plus récente est en haut. Vous pouvez prévoir plusieurs hausses (par exemple en janvier et en septembre); chacune a sa propre ligne et sa propre date.
 
@@ -39,8 +39,8 @@ roles: agency_admin, centre_director, platform_admin
 
 | Rôle | Ce qu'il peut faire |
 |---|---|
-| Administrateur d'agence | Planifie les hausses et voit tout le calendrier de l'agence. |
-| Directeur de centre | Voit le calendrier de l'agence et peut planifier une hausse. Entendez-vous d'abord avec votre administrateur d'agence : une hausse vaut pour toute l'agence. |
+| Administrateur d'agence | Planifie les hausses pour un centre ou **Tous les centres**, et voit tout le calendrier de l'agence. |
+| Directeur de centre | Voit les hausses de toute l'agence et celles de ses centres, et planifie des hausses pour ses centres seulement (choisissez le centre sous **Centre**). |
 | Administrateur de plateforme | Comme un administrateur d'agence, dans l'agence où il travaille. |
 
 Les éducatrices et les parents ne voient pas cet écran.

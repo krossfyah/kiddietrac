@@ -14,7 +14,7 @@ order: 84
 Les nouvelles demandes ont le statut **demandé**, avec **Approuver** et **Refuser** dans la ligne. Les directeurs et administrateurs d’agence reçoivent une notification quand une famille fait une demande — « Vacation hold requested by » suivi de la famille, avec les dates.
 
 1. Ouvrez **Administration › Places réservées (vacances)**.
-2. Trouvez la ligne au statut **demandé**. Vérifiez **Famille**, **Dates** et **Motif**.
+2. Trouvez la ligne au statut **demandé**. Vérifiez **Famille**, **Centre**, **Dates** et **Motif**.
 3. Appuyez sur **Approuver**. La boîte **Approuver la suspension pour vacances** s’ouvre.
 4. Tapez un montant de crédit pour la famille, ou laissez la case vide pour un calcul automatique.
 5. Appuyez sur **Approuver**. La ligne passe à **approved** et la colonne **Crédit** affiche le montant.
@@ -48,7 +48,7 @@ Utilisez cette option quand une famille vous prévient par téléphone, par cour
 | Rôle | Peut |
 |---|---|
 | Administrateur d’agence | Voir toutes les suspensions de l’agence, en ajouter, approuver ou refuser |
-| Directeur de centre | Ajouter, approuver et refuser des suspensions pour les familles de ses centres |
+| Directeur de centre | Voir, ajouter, approuver et refuser les suspensions des familles de ses centres seulement; celles des autres centres ne sont pas listées |
 | Administrateur de plateforme | La même chose qu’un administrateur d’agence, dans l’agence consultée |
 | Parent | Demande une suspension pour sa propre famille et est avisé de la décision |
 

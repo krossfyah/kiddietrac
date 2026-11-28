@@ -14,7 +14,7 @@ order: 84
 Las solicitudes nuevas tienen el estado **solicitado**, con **Aprobar** y **Denegar** en la fila. Los directores y administradores de agencia reciben una notificación cuando una familia la pide: «Vacation hold requested by» y la familia, con las fechas.
 
 1. Abra **Administración › Reservas por vacaciones**.
-2. Busque la fila con el estado **solicitado**. Revise **Familia**, **Fechas** y **Motivo**.
+2. Busque la fila con el estado **solicitado**. Revise **Familia**, **Centro**, **Fechas** y **Motivo**.
 3. Presione **Aprobar**. Se abre el cuadro **Aprobar pausa por vacaciones**.
 4. Escriba un monto de crédito para la familia, o deje el cuadro vacío para calcularlo automáticamente.
 5. Presione **Aprobar**. La fila cambia a **approved** y la columna **Crédito** muestra el monto.
@@ -48,7 +48,7 @@ Use esto cuando una familia le avise por teléfono, por correo o en persona.
 | Rol | Puede |
 |---|---|
 | Administrador de agencia | Ver todas las pausas de la agencia, agregarlas, aprobarlas o denegarlas |
-| Director de centro | Agregar, aprobar y denegar pausas para las familias de sus centros |
+| Director de centro | Ver, agregar, aprobar y denegar pausas solo de las familias de sus centros; las de otros centros no aparecen |
 | Administrador de plataforma | Lo mismo que un administrador de agencia, en la agencia que esté viendo |
 | Padre o madre | Pide una pausa para su propia familia y recibe la decisión |
 

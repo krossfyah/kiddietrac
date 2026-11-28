@@ -44,7 +44,7 @@ A fee plan is a named amount and how often it bills, for example "Toddler full-t
 
 Each invoice has one tuition line with the plan's name, frequency and amount, dated today, numbered your agency's usual way, in your agency's currency (from **Country & compliance**).
 
-> ⚠️ **Generate invoices** creates a new invoice each time you press it. Pressing it twice for the same families bills them twice: void the extra ones from the invoice list.
+> 💡 **Generate invoices** bills each family once per billing period (the week, two-week block or month that today falls in; once ever for a one-time plan). Press it again and families already invoiced from this plan for that period are skipped: the toast says how many. Voiding an invoice lets that family be generated again.
 
 ## Who can do what
 

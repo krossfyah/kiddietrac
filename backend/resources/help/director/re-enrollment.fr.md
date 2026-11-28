@@ -21,7 +21,7 @@ order: 60
 
 Un message indique combien d’enfants ont été invités (par exemple « Invited 84 children »), et la campagne paraît en haut de la liste avec le statut **sent**.
 
-> ⚠️ Une campagne part vers **chaque enfant inscrit de l’agence** dès que vous la lancez, et leurs parents sont avisés tout de suite. Il n’y a pas de brouillon, pas de filtre par centre et pas d’annulation — vérifiez le nom, le trimestre et la date limite avant.
+> ⚠️ Une campagne part vers **chaque enfant inscrit** du centre choisi sous **Centre** (ou de toute l’agence avec **Tous les centres**) dès que vous la lancez, et leurs parents sont avisés tout de suite. Il n’y a pas de brouillon ni d’annulation — vérifiez le centre, le nom, le trimestre et la date limite avant.
 
 ## Ce que reçoivent les familles
 
@@ -55,7 +55,7 @@ Les enfants retirés, en liste d’attente ou archivés au moment du lancement n
 
 ??? Lancer la campagne ne fait rien quand j’appuie. | Les trois champs sont obligatoires. Remplissez **Nom de la campagne**, **Trimestre visé** et **Date limite**, et assurez-vous que la date limite est après aujourd’hui.
 ??? Le message indique « Invited 0 children ». | Aucun enfant de l’agence n’avait le statut Inscrit à ce moment. Vérifiez **Administration › Enfants** avec le filtre de statut sur **Inscrit**.
-??? Puis-je l’envoyer à un seul centre? | Pas à partir de cet écran — une campagne va toujours à chaque enfant inscrit de l’agence.
+??? Puis-je l’envoyer à un seul centre? | Oui. Choisissez le centre sous **Centre** avant de lancer. La liste affiche le **Centre** de chaque campagne.
 ??? Répondu reste à 0. | Les familles n’ont peut-être pas encore répondu. Rappelez-le-leur avant la date limite par message ou par annonce, et notez dans le dossier de l’enfant les réponses reçues par téléphone.
 ??? Puis-je fermer ou supprimer une campagne? | Non. Une campagne reste dans la liste avec ses comptes comme historique; lancez-en une nouvelle pour le prochain trimestre.
 ??? Comment les familles sont-elles avisées? | Chaque tuteur d’un enfant invité reçoit une notification dans la cloche du portail et sur son téléphone.

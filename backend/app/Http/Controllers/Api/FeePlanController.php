@@ -117,8 +117,7 @@ final class FeePlanController extends Controller
         $amount = round((float) $plan->amount, 2);
 
         $issue = now();
-        $periodStart = $issue->copy()->startOfMonth();
-        $periodEnd = $issue->copy()->endOfMonth();
+        [$periodStart, $periodEnd] = self::periodFor((string) $plan->frequency, $issue);
         $due = $issue->copy()->addDays($dueDays);
 
         // Restrict to families in this agency (and the plan's centre, if scoped).
@@ -132,8 +131,26 @@ final class FeePlanController extends Controller
         }
         $families = $famQ->get(['id', 'centre_id', 'family_name']);
 
+        /* ONCE PER PLAN, FAMILY AND PERIOD (2026-11-27, help-writer check: pressing Generate twice billed every family
+           twice). The plan row is locked for the run, so two presses - two tabs, a double click - queue up instead of
+           racing; the second finds the first one's invoices and skips those families. A voided invoice does not count
+           (the office voided it to bill again). A one-time plan bills a family once, ever. Invoices raised from a plan
+           before fee_plan_id existed are recognised by the note they carry. */
         $created = 0;
+        $skipped = 0;
+        DB::transaction(function () use ($id, $plan, $families, $aid, $issue, $periodStart, $periodEnd, $due, $amount, $status, &$created, &$skipped) {
+        DB::table('fee_plans')->where('id', $id)->lockForUpdate()->first();
+        $already = DB::table('invoices')->whereIn('family_id', $families->pluck('id')->all() ?: [0])
+            ->where('status', '<>', 'void')
+            ->where(fn ($w) => $w->where('fee_plan_id', $id)
+                ->orWhere(fn ($x) => $x->whereNull('fee_plan_id')->where('notes', 'Auto-generated from plan: ' . $plan->name)))
+            ->when($plan->frequency !== 'one_time', fn ($q) => $q->whereDate('period_start', $periodStart->toDateString()))
+            ->pluck('family_id')->map(fn ($v) => (int) $v)->flip()->all();
         foreach ($families as $f) {
+            if (isset($already[(int) $f->id])) {
+                $skipped++;
+                continue;
+            }
             /* The agency's numbering convention. This built its own shape with a random
                md5 fragment on the end - unique, and unreadable to the bookkeeper who has
                to quote it down a phone. InvoiceNumber guarantees uniqueness without the
@@ -142,6 +159,7 @@ final class FeePlanController extends Controller
                 'date' => $issue, 'family_id' => $f->id,
             ]);
             $invId = DB::table('invoices')->insertGetId([
+                'fee_plan_id' => $id,
                 'centre_id' => $f->centre_id,
                 'family_id' => $f->id,
                 'invoice_number' => $num,
@@ -168,17 +186,45 @@ final class FeePlanController extends Controller
             ]);
             $created++;
         }
+        });
 
         \App\Support\Audit::write([
             'user_id' => $r->user()->id,
             'action' => 'fee_plan.invoices_generated',
             'entity_type' => 'fee_plan',
             'entity_id' => $id,
-            'payload' => json_encode(['created' => $created, 'amount' => $amount, 'status' => $status]),
+            'payload' => json_encode(['created' => $created, 'skipped' => $skipped, 'amount' => $amount, 'status' => $status,
+                'period_start' => $periodStart->toDateString()]),
             'created_at' => now(),
         ]);
 
-        return response()->json(['created' => $created, 'status' => $status]);
+        return response()->json(['created' => $created, 'skipped' => $skipped, 'status' => $status,
+            'period_start' => $periodStart->toDateString(), 'period_end' => $periodEnd->toDateString()]);
+    }
+
+    /**
+     * The billing period a plan's invoice covers, from its frequency: the calendar month (monthly, and one-time), the
+     * Monday-to-Sunday week (weekly), or the two-week block (biweekly, blocks counted from Monday 2024-01-01). This is
+     * what "already invoiced" is checked against, so a weekly plan can bill each week and a monthly plan each month.
+     *
+     * @return array{0: \Illuminate\Support\Carbon, 1: \Illuminate\Support\Carbon}
+     */
+    private static function periodFor(string $frequency, $at): array
+    {
+        $at = \Illuminate\Support\Carbon::parse($at);
+        if ($frequency === 'weekly') {
+            $start = $at->copy()->startOfWeek(\Carbon\CarbonInterface::MONDAY);
+            return [$start, $start->copy()->addDays(6)->endOfDay()];
+        }
+        if ($frequency === 'biweekly') {
+            $anchor = \Illuminate\Support\Carbon::parse('2024-01-01');
+            $week = $at->copy()->startOfWeek(\Carbon\CarbonInterface::MONDAY);
+            if (intdiv((int) $anchor->diffInDays($week), 7) % 2 === 1) {
+                $week->subWeek();
+            }
+            return [$week, $week->copy()->addDays(13)->endOfDay()];
+        }
+        return [$at->copy()->startOfMonth(), $at->copy()->endOfMonth()];
     }
 
     /* OWN CENTRES ONLY (2026-10-05). An agency-wide plan (centre_id NULL) is the agency

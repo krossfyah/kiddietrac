@@ -33,10 +33,10 @@ roles: agency_admin, platform_admin
 
 Les chiffres concordent toujours :
 
-> 💡 **Facturé − (Reçu − Remboursé) = En souffrance**
+> 💡 **Facturé − (Encaissé − Remboursé) = En souffrance**
 
 - **Facturé** : tout ce qui a été facturé, sauf ce qui a été annulé. Une facture annulée ne porte aucun solde et apparaît dans son propre chiffre **Annulée**.
-- **Reçu** : ce que les factures elles-mêmes indiquent comme réglé.
+- **Encaissé** : ce que les factures elles-mêmes indiquent comme réglé.
 - **Remboursé** : l'argent rendu. Un remboursement « dé-encaisse » : le solde remonte exactement du montant rendu.
 - **En souffrance** : ce qui est encore dû aujourd'hui. **En retard** est la partie dont l'échéance est passée.
 - **À payer ce mois-ci**, **Manqués** et **Scheduled in total** apparaissent quand la personne a des versements ou une facturation récurrente à venir.

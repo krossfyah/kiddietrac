@@ -21,7 +21,7 @@ order: 60
 
 Un mensaje dice cuántos niños fueron invitados (por ejemplo «Invited 84 children») y la campaña aparece arriba en la lista con el estado **sent**.
 
-> ⚠️ Una campaña llega a **todos los niños matriculados de la agencia** en cuanto la lanza, y se avisa a sus padres de inmediato. No hay borrador, ni filtro por centro, ni forma de deshacerla: revise el nombre, el período y la fecha límite antes.
+> ⚠️ Una campaña llega a **todos los niños matriculados** del centro que elija en **Centro** (o de toda la agencia con **Todos los centros**) en cuanto la lanza, y se avisa a sus padres de inmediato. No hay borrador ni forma de deshacerla: revise el centro, el nombre, el período y la fecha límite antes.
 
 ## Lo que reciben las familias
 
@@ -55,7 +55,7 @@ Los niños retirados, en lista de espera o archivados al lanzar no se invitan. U
 
 ??? Lanzar campaña no hace nada cuando lo presiono. | Los tres campos son obligatorios. Llene **Nombre de la campaña**, **Período objetivo** y **Fecha límite**, y asegúrese de que la fecha límite sea posterior a hoy.
 ??? Dijo «Invited 0 children». | Ningún niño de la agencia tenía el estado Matriculado en ese momento. Revise **Administración › Niños** con el filtro de estado en **Matriculado**.
-??? ¿Puedo enviarla a un solo centro? | No desde esta pantalla: una campaña siempre va a todos los niños matriculados de la agencia.
+??? ¿Puedo enviarla a un solo centro? | Sí. Elija el centro en **Centro** antes de lanzarla. La lista muestra el **Centro** de cada campaña.
 ??? Respondió se queda en 0. | Puede que las familias todavía no hayan respondido. Recuérdeles antes de la fecha límite por mensaje o anuncio, y anote en el expediente del niño las respuestas que reciba por teléfono.
 ??? ¿Puedo cerrar o eliminar una campaña? | No. Una campaña queda en la lista con sus conteos como registro; lance una nueva para el próximo período.
 ??? ¿Cómo se avisa a las familias? | Cada tutor de un niño invitado recibe una notificación en la campana del portal y en su teléfono.

@@ -47,7 +47,7 @@ The screen has four tabs: **📊 Summary**, **🧾 Bills**, **📦 Purchase orde
 2. When the supplier's invoice comes in, press **→ Convert to bill**. The bill is created from the order's lines, so nothing is typed twice, and the screen moves to **🧾 Bills**.
 3. If the order will not go ahead, choose **🚫 Cancel order** from its row menu instead.
 
-> ⚠️ **→ Convert to bill** is offered only until the order is marked received or cancelled. Convert the order first; use **Mark received** only for an order that will not get its own bill.
+> 💡 **→ Convert to bill** stays on the order, received or not, until a bill is made from it (only a cancelled order loses it). Once converted, the order shows **Billed:** and the bill's reference, so it cannot be billed twice.
 
 ## Recording a bill
 

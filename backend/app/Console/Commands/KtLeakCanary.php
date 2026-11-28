@@ -17,7 +17,8 @@ use Illuminate\Support\Str;
  * room, seven people (agency admin, director, educator, home visitor, parent, a staff member who is also a parent,
  * an integration account), two families, two children, an enrolment, and one of each record type the probe looks
  * for: family chat message, team chat message, daily event, incident, child note, quick note, announcement, bell row,
- * custom form, document, family file, invoice (paid, $0) and HR employee file. Every text field that can carry it
+ * custom form, document, family file, invoice (paid, $0), HR employee file, and (2026-11-27) a vacation hold,
+ * tuition increase and re-enrolment campaign at each canary centre (the sibling's carry the centre marker). Every text field that can carry it
  * carries the agency's marker KTCANARY-<agency>-<10 hex>.
  *
  * Safe by construction: test agencies send nothing; the people have @leakguard.invalid addresses, random unknown
@@ -264,6 +265,33 @@ final class KtLeakCanary extends Command
                 ]));
                 DB::table('background_checks')->where('id', $bc)->update(['expires_at' => $exp]);
                 DB::table('staff_certifications')->where('id', $sc)->update(['expires_at' => $exp]);
+            }
+
+            /* FAMILY-SIDE BILLING RECORDS, AT BOTH CENTRES (2026-11-27, vacation holds / tuition increases /
+               re-enrolment campaigns were agency-only, so a director saw every centre's). The sibling centre gets a
+               family whose name carries the CENTRE marker, and each centre gets one vacation hold, one tuition increase
+               and one re-enrolment campaign: the primary centre's carry the agency marker (cross-agency coverage), the
+               sibling's the centre marker (centre scope). All inert: the hold is 'requested' (calendars read approved
+               ones only) and every date is in 2030; nothing applies an increase or sends a campaign by itself. */
+            $cm = LeakGuard::centreMarker($marker);
+            $sibFam = $get('family_sibling', 'families', fn () => DB::table('families')->insertGetId([
+                'centre_id' => $sib, 'family_name' => 'Canary sibling family ' . $cm,
+                'primary_email' => 'canary-family-sibling@' . LeakGuard::EMAIL_DOMAIN, 'notes' => 'Leak guard canary ' . $cm,
+                'created_at' => $now, 'updated_at' => $now,
+            ]));
+            foreach (['' => [$fam, $centre, $marker], '_sibling' => [$sibFam, $sib, $cm]] as $k => [$fid, $cid, $mk]) {
+                $get('vacation_hold' . $k, 'vacation_holds', fn () => DB::table('vacation_holds')->insertGetId([
+                    'family_id' => $fid, 'start_date' => '2030-07-01', 'end_date' => '2030-07-05', 'reason' => 'Canary ' . $mk,
+                    'status' => 'requested', 'notes' => 'Leak guard canary ' . $mk, 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                $get('tuition_increase' . $k, 'tuition_increases', fn () => DB::table('tuition_increases')->insertGetId([
+                    'agency_id' => $agencyId, 'centre_id' => $cid, 'effective_date' => '2030-09-01', 'increase_type' => 'percent',
+                    'amount' => 0, 'notify_families_days_before' => 0, 'notes' => 'Leak guard canary ' . $mk, 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                $get('reenrollment_campaign' . $k, 'reenrollment_campaigns', fn () => DB::table('reenrollment_campaigns')->insertGetId([
+                    'agency_id' => $agencyId, 'centre_id' => $cid, 'campaign_name' => 'Canary ' . $mk, 'target_term' => 'Canary',
+                    'deadline' => '2030-06-30', 'status' => 'closed', 'total_invited' => 0, 'created_at' => $now, 'updated_at' => $now,
+                ]));
             }
             return $made;
         });

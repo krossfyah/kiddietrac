@@ -681,15 +681,16 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Family</th><th>Dates</th><th>Reason</th><th>Status</th><th>Credit</th><th></th></tr></thead>
+          <thead><tr><th>Family</th><th>Centre</th><th>Dates</th><th>Reason</th><th>Status</th><th>Credit</th><th></th></tr></thead>
           <tbody>${(r.data || []).map(h => `<tr>
             <td><strong>${esc(h.family_name)}</strong></td>
+            <td>${esc(h.centre_name || '')}</td>
             <td>${fmtDate(h.start_date)} – ${fmtDate(h.end_date)}</td>
             <td>${esc(h.reason || '')}</td>
             <td><span class="kt-pill ${h.status === 'approved' ? 'kt-pill-success' : h.status === 'denied' ? 'kt-pill-danger' : 'kt-pill-warning'}">${esc(h.status)}</span></td>
             <td>${h.credit_amount ? fmtMoney(h.credit_amount) : '—'}</td>
             <td>${h.status === 'requested' ? `<button class="kt-btn kt-btn-success" data-decide="${h.id}" data-action="approved">Approve</button> <button class="kt-btn kt-btn-danger" data-decide="${h.id}" data-action="denied" style="margin-left:6px;">Deny</button>` : ''}</td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No vacation holds.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No vacation holds.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -768,23 +769,33 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Effective</th><th>Type</th><th>Amount</th><th>Notify</th><th>Status</th></tr></thead>
+          <thead><tr><th>Effective</th><th>Centre</th><th>Type</th><th>Amount</th><th>Notify</th><th>Status</th></tr></thead>
           <tbody>${(r.data || []).map(t => `<tr>
             <td><strong>${fmtDate(t.effective_date)}</strong></td>
+            <td>${esc(t.centre_name || 'All centres')}</td>
             <td>${esc(t.increase_type)}</td>
             <td><strong>${t.increase_type === 'percent' ? t.amount + '%' : fmtMoney(t.amount)}</strong></td>
             <td>${t.notify_families_days_before} days before</td>
             <td>${t.applied_at ? '<span class="kt-pill kt-pill-success">Applied</span>' : t.notification_sent_at ? '<span class="kt-pill kt-pill-info">Notified</span>' : '<span class="kt-pill kt-pill-warning">Scheduled</span>'}</td>
-          </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#64748B;">No tuition increases scheduled.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No tuition increases scheduled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
     document.getElementById('ti-new').onclick = async () => {
+      /* Which centre (2026-11-27): the increase went in agency-wide whatever the caller's scope. The list comes from
+         /admin/centres, which already gives a director only their own centres; only an agency-wide caller (who sees
+         more than a director would) is offered "All centres". The server checks it again. */
+      const _cr = await Api.get('/admin/centres').catch(() => ({}));
+      const centres = (_cr.centres || _cr.data || []).filter(c => !c.deleted_at);
+      const isDirector = /\brole-centre-director\b/.test(document.body.className || '');
+      const centreOpts = (isDirector ? [] : [{ value: '', label: 'All centres' }])
+        .concat(centres.map(c => ({ value: String(c.id), label: c.name })));
       // One dialog for what used to be three prompts in a row.
       const v = await KT.prompt({
         title: 'Schedule a tuition increase',
         description: 'Families are told before it takes effect; their tuition changes from that date.',
         fields: [
+          { key: 'centre', label: 'Centre', type: 'select', options: centreOpts, value: centreOpts.length ? centreOpts[0].value : '' },
           { key: 'eff', label: 'Effective date', type: 'date' },
           { key: 'amount', label: 'Amount (number)', type: 'number', step: 'any' },
           { key: 'type', label: 'Type: "percent" or "flat"', value: 'percent' },
@@ -795,8 +806,10 @@
       const eff = v.eff, amount = v.amount, type = v.type;
       if (!eff || !amount) return;
       Api.post('/billing/tuition-increases', {
+        centre_id: v.centre ? parseInt(v.centre, 10) : null,
         effective_date: eff, amount: parseFloat(amount), increase_type: type || 'percent',
-      }).then(() => renderTuitionIncreases(main));
+      }).then(() => renderTuitionIncreases(main))
+        .catch(e => KT.Dom.toast((e && e.message) || 'Could not schedule the increase.', 'error'));
     };
   }
 
@@ -813,25 +826,34 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Campaign</th><th>Term</th><th>Deadline</th><th>Status</th><th>Invited</th><th>Responded</th><th>Renewed</th></tr></thead>
+          <thead><tr><th>Campaign</th><th>Centre</th><th>Term</th><th>Deadline</th><th>Status</th><th>Invited</th><th>Responded</th><th>Renewed</th></tr></thead>
           <tbody>${(r.data || []).map(c => `<tr>
             <td><strong>${esc(c.campaign_name)}</strong></td>
+            <td>${esc(c.centre_name || 'All centres')}</td>
             <td>${esc(c.target_term)}</td>
             <td>${fmtDate(c.deadline)}</td>
             <td><span class="kt-pill kt-pill-info">${esc(c.status)}</span></td>
             <td>${c.total_invited}</td>
             <td>${c.total_responded}</td>
             <td><strong style="color:#15803D;">${c.total_renewed}</strong></td>
-          </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No campaigns yet.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;padding:40px;color:#64748B;">No campaigns yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
     document.getElementById('re-new').onclick = async () => {
+      /* Which centre (2026-11-27): the server requires one for a director ("Choose one of your centres") but this
+         dialog never asked, so a director could not launch a campaign at all. Same list as Tuition increases. */
+      const _cr = await Api.get('/admin/centres').catch(() => ({}));
+      const centres = (_cr.centres || _cr.data || []).filter(c => !c.deleted_at);
+      const isDirector = /\brole-centre-director\b/.test(document.body.className || '');
+      const centreOpts = (isDirector ? [] : [{ value: '', label: 'All centres' }])
+        .concat(centres.map(c => ({ value: String(c.id), label: c.name })));
       // One dialog for what used to be three prompts in a row.
       const v = await KT.prompt({
         title: 'Launch a re-enrolment campaign',
         description: 'Every guardian is notified and asked to confirm next term in the portal.',
         fields: [
+          { key: 'centre', label: 'Centre', type: 'select', options: centreOpts, value: centreOpts.length ? centreOpts[0].value : '' },
           { key: 'name', label: 'Campaign name', value: 'Fall 2026 re-enrolment' },
           { key: 'term', label: 'Target term', value: 'Fall 2026' },
           { key: 'deadline', label: 'Deadline', type: 'date' },
@@ -841,8 +863,9 @@
       if (!v) return;
       const name = v.name, term = v.term, deadline = v.deadline;
       if (!name || !term || !deadline) return;
-      Api.post('/engagement/reenrollment', { campaign_name: name, target_term: term, deadline })
-        .then(r => { alert(`Invited ${r.invited} children`); renderReenrollment(main); });
+      Api.post('/engagement/reenrollment', { centre_id: v.centre ? parseInt(v.centre, 10) : null, campaign_name: name, target_term: term, deadline })
+        .then(r => { KT.Dom.toast(`Invited ${r.invited} children`, 'success'); renderReenrollment(main); })
+        .catch(e => KT.Dom.toast((e && e.message) || 'Could not launch the campaign.', 'error'));
     };
   }
 

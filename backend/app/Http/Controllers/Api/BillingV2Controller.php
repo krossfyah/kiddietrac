@@ -23,12 +23,20 @@ final class BillingV2Controller extends Controller
     public function listHolds(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $rows = DB::table('vacation_holds as vh')
+        /* Centre scope + live families (2026-11-27, help-writer check): the list filtered by agency only, so a centre
+           director saw every centre's holds, and families that had left or whose centre had closed stayed listed. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $q = DB::table('vacation_holds as vh')
             ->join('families as f', 'f.id', '=', 'vh.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
-            ->where('c.agency_id', $agencyId)
-            ->orderByDesc('vh.start_date')
-            ->select('vh.*', 'f.family_name')
+            ->where('c.agency_id', $agencyId);
+        \App\Support\Live::families($q, 'f');
+        \App\Support\Live::centres($q, 'c');
+        if ($scope !== null) {
+            $q->whereIn('f.centre_id', $scope ?: [0]);
+        }
+        $rows = $q->orderByDesc('vh.start_date')
+            ->select('vh.*', 'f.family_name', 'c.name as centre_name')
             ->limit(200)
             ->get();
         return response()->json(['data' => $rows]);
@@ -162,8 +170,15 @@ final class BillingV2Controller extends Controller
     public function listIncreases(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $rows = DB::table('tuition_increases')->where('agency_id', $agencyId)
-            ->orderByDesc('effective_date')->get();
+        /* Centre scope (2026-11-27): a director sees their own centres' increases and the agency-wide ones (they apply
+           to their centre too), never another centre's. Increases for a closed centre are not listed. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $open = \App\Support\Live::centreIds($agencyId);
+        $visible = $scope === null ? $open : array_values(array_intersect($open, $scope));
+        $rows = DB::table('tuition_increases as ti')->leftJoin('centres as c', 'c.id', '=', 'ti.centre_id')
+            ->where('ti.agency_id', $agencyId)
+            ->where(fn ($w) => $w->whereNull('ti.centre_id')->orWhereIn('ti.centre_id', $visible ?: [0]))
+            ->orderByDesc('ti.effective_date')->select('ti.*', 'c.name as centre_name')->get();
         return response()->json(['data' => $rows]);
     }
 
@@ -178,9 +193,23 @@ final class BillingV2Controller extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
         $agencyId = $this->resolveAgencyId($request);
+        /* Authorise the destination (2026-11-27): centre_id was written unchecked (any agency's centre), and a director
+           with no centre_id created an AGENCY-WIDE increase. A director must name one of their own open centres (their
+           only one is used when they have just one); an agency admin may name any open centre of this agency or none. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $centreId = isset($data['centre_id']) && $data['centre_id'] ? (int) $data['centre_id'] : null;
+        if ($centreId === null && $scope !== null && count($scope) === 1) {
+            $centreId = (int) $scope[0];
+        }
+        if ($centreId !== null && ! in_array($centreId, \App\Support\Live::centreIds($agencyId), true)) {
+            return response()->json(['message' => 'That centre is not open in this agency.'], 422);
+        }
+        if (! \App\Support\CentreScope::canWrite($scope, $centreId)) {
+            return response()->json(['message' => $centreId === null ? 'Choose one of your centres for this increase.' : 'You can only schedule increases for your own centres.'], $centreId === null ? 422 : 403);
+        }
         $id = DB::table('tuition_increases')->insertGetId([
             'agency_id' => $agencyId,
-            'centre_id' => $data['centre_id'] ?? null,
+            'centre_id' => $centreId,
             'effective_date' => $data['effective_date'],
             'increase_type' => $data['increase_type'],
             'amount' => $data['amount'],

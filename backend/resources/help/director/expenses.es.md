@@ -46,7 +46,7 @@ La pantalla tiene cuatro pestañas: **📊 Resumen**, **🧾 Facturas de proveed
 2. Cuando llegue la factura del proveedor, pulse **→ Convertir en factura de proveedor**. La factura se crea con las líneas de la orden, sin escribir nada dos veces, y la pantalla pasa a **🧾 Facturas de proveedores**.
 3. Si la orden no seguirá adelante, elija en su lugar **🚫 Cancelar el pedido** en el menú de su fila.
 
-> ⚠️ **→ Convertir en factura de proveedor** solo se ofrece mientras la orden no esté marcada como recibida ni cancelada. Convierta primero la orden; use **Marcar como recibido** solo para una orden que no tendrá su propia factura.
+> 💡 **→ Convertir en factura de proveedor** sigue disponible en la orden, recibida o no, hasta que se crea una factura con ella (solo una orden cancelada lo pierde). Una vez convertida, la orden muestra **Billed:** y la referencia de la factura, para que nunca se facture dos veces.
 
 ## Registrar una factura de proveedor
 

@@ -187,7 +187,7 @@
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-weight:700;color:' + C.ink + ';">' + esc(iv.number) + '</div>'
           + '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:2px;">'
-          + esc(iv.source) + ' · billed ' + money(iv.total) + ' · received ' + money(iv.paid)
+          + esc(iv.source) + ' · billed ' + money(iv.total) + ' · collected ' + money(iv.paid)
           + (iv.due_at ? ' · due ' + fmtDate(iv.due_at) : '') + '</div></div>'
           + '<div style="text-align:right;white-space:nowrap;">'
           + '<div style="font-size:11px;color:' + C.muted + ';text-transform:uppercase;letter-spacing:.4px;font-weight:800;">Refundable</div>'
@@ -234,7 +234,7 @@
       shell('<div style="padding:11px 12px;background:#F8FAFC;border:1px solid ' + C.rule + ';border-radius:10px;margin-bottom:14px;">'
         + '<div style="font-weight:800;color:' + C.ink + ';">' + esc(iv.number) + '</div>'
         + '<div style="font-size:12px;color:' + C.muted + ';margin-top:2px;">' + esc(iv.source)
-        + ' · billed ' + money(iv.total) + ' · received ' + money(iv.paid) + '</div></div>'
+        + ' · billed ' + money(iv.total) + ' · collected ' + money(iv.paid) + '</div></div>'
         + recPick
         + '<label style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:' + C.muted + ';display:block;margin-top:12px;">Amount</label>'
         + '<div style="display:flex;gap:8px;align-items:center;margin-top:5px;">'
@@ -446,7 +446,7 @@
       + '</div>';
   }
 
-  /** Invoiced against received, by month. Where the gap opens up. */
+  /** Billed against collected, by month. Where the gap opens up. */
   function monthlyChart(entries) {
     var by = {};
     entries.forEach(function (e) {
@@ -471,7 +471,7 @@
       var hr = Math.max((m.rec / max) * H, m.rec > 0 ? 2 : 0);
       return '<div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px;">'
         + '<div style="height:' + H + 'px;display:flex;align-items:flex-end;gap:3px;width:100%;justify-content:center;" '
-        + 'title="' + esc(fmtMonth(k)) + ' — invoiced ' + money(m.inv) + ', received ' + money(m.rec) + '">'
+        + 'title="' + esc(fmtMonth(k)) + ' — billed ' + money(m.inv) + ', collected ' + money(m.rec) + '">'
         + '<div style="width:42%;max-width:16px;height:' + hi.toFixed(1) + 'px;background:' + C.accent + ';opacity:.85;border-radius:3px 3px 0 0;"></div>'
         + '<div style="width:42%;max-width:16px;height:' + hr.toFixed(1) + 'px;background:' + C.good + ';opacity:.85;border-radius:3px 3px 0 0;"></div>'
         + '</div>'
@@ -482,8 +482,8 @@
     return '<div style="display:flex;align-items:flex-end;gap:6px;border-bottom:1px solid ' + C.rule + ';padding-bottom:6px;">'
       + bars + '</div>'
       + '<div style="display:flex;gap:16px;margin-top:10px;font-size:11.5px;color:' + C.muted + ';">'
-      + '<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:' + C.accent + ';margin-right:5px;"></span>Invoiced</span>'
-      + '<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:' + C.good + ';margin-right:5px;"></span>Received</span>'
+      + '<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:' + C.accent + ';margin-right:5px;"></span>Billed</span>'
+      + '<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:' + C.good + ';margin-right:5px;"></span>Collected</span>'
       + '</div>';
   }
 
@@ -1117,8 +1117,8 @@
       + '</div></div>';
 
     var tiles = [
-      kpi('Invoiced', money(sm.billed), C.ink, owed.filter(function (e) { return e.kind === 'invoice'; }).length + ' invoice(s)'),
-      kpi('Received', money(sm.credited), C.good, owed.filter(function (e) { return e.kind === 'receipt'; }).length + ' payment(s)'),
+      kpi('Billed', money(sm.billed), C.ink, owed.filter(function (e) { return e.kind === 'invoice'; }).length + ' invoice(s)'),
+      kpi('Collected', money(sm.credited), C.good, owed.filter(function (e) { return e.kind === 'receipt'; }).length + ' payment(s)'),
       kpi('Outstanding', money(bal > 0 ? bal : 0), C.warn, sm.open_count + ' still open'),
       kpi('Overdue', money(sm.overdue), Number(sm.overdue) > 0.005 ? C.bad : C.faint,
         Number(sm.overdue) > 0.005 ? 'past the due date' : 'nothing late')
@@ -1162,7 +1162,7 @@
     if (Number(sm.refunded) > 0.005) tiles.push(kpi('Refunded', money(sm.refunded), C.warn, 'returned to them'));
     if (Number(sm.voided) > 0.005) tiles.push(kpi('Voided', money(sm.voided), C.faint, 'issued then withdrawn'));
     if (Number(sm.overpaid) > 0.005) {
-      tiles.push(kpi('Overpaid', money(sm.overpaid), C.warn, 'received above what was billed'));
+      tiles.push(kpi('Overpaid', money(sm.overpaid), C.warn, 'collected above what was billed'));
     }
     if (Number(sm.paid_out) > 0.005) tiles.push(kpi('Paid out', money(sm.paid_out), C.out, sm.payslips + ' document(s)'));
 
@@ -1173,7 +1173,7 @@
        it means, so it says so rather than sitting as an unexplained tile. */
     var overpaidNote = Number(sm.overpaid) > 0.005
       ? '<div class="kt-card" style="padding:12px 16px;--kt-edge:' + C.warn + ';font-size:12.5px;color:#475569;line-height:1.6;">'
-        + '<strong style="color:' + C.ink + ';">' + money(sm.overpaid) + ' more was received than was invoiced.</strong> '
+        + '<strong style="color:' + C.ink + ';">' + money(sm.overpaid) + ' more was collected than was billed.</strong> '
         + 'Shown on the receipt lines below and never netted into the balance — whether that is a credit this '
         + 'account can draw on or a payment recorded twice at source is an accounting decision, not one this screen makes.'
         + '</div>'
@@ -1182,14 +1182,14 @@
     // ── charts ────────────────────────────────────────────────────────
     var charts = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;">'
       + card('Balance over time', 'every charge and payment, in order', balanceChart(owed))
-      + card('Invoiced against received', 'by month, last 12', monthlyChart(owed))
+      + card('Billed against collected', 'by month, last 12', monthlyChart(owed))
       + card('How old the unpaid money is', money(bal > 0 ? bal : 0) + ' outstanding', ageingChart(openItems))
-      + card('Where the billing went', money(sm.billed) + ' invoiced', compositionBar(sm))
+      + card('Where the billing went', money(sm.billed) + ' billed', compositionBar(sm))
       + '</div>';
 
     // ── outstanding ───────────────────────────────────────────────────
     var openTable = openItems.length
-      ? table(['Invoice', 'Issued', 'Due', 'Invoiced', 'Outstanding', ''], openItems.map(function (o) {
+      ? table(['Invoice', 'Issued', 'Due', 'Billed', 'Outstanding', ''], openItems.map(function (o) {
         var late = o.days_overdue > 0
           ? '<div style="color:' + C.bad + ';font-weight:700;font-size:11.5px;">' + o.days_overdue + ' days late</div>' : '';
         return [

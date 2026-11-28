@@ -7,16 +7,16 @@
   var Shell = window.KT.Shell;
   var Modal = Shell.Modal;
 
-  function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
-  function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
-
-  async function api(method, path, body) {
-    var opts = { method: method, headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } };
-    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-    var res = await fetch(apiBase() + path, opts);
-    var json = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(json.message || ('API ' + res.status));
-    return json;
+  /* THE HOUSE API CLIENT (2026-11-27). This screen used its own fetch(), which sent no X-Active-Agency-Id: someone in
+     two agencies listed and made codes in whichever agency the server picked, not the one on screen. KT.Api adds the
+     agency header (and view-as, retries and friendly errors) like every other screen. */
+  function api(method, path, body) {
+    var A = window.KT.Api;
+    if (method === 'GET') return A.get(path);
+    if (method === 'POST') return A.post(path, body);
+    if (method === 'PATCH') return A.patch(path, body);
+    if (method === 'DELETE') return A.delete(path);
+    return A.request(path, { method: method, body: body });
   }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function fmtDate(s) { if (!s) return '-'; try { return new Date(s).toLocaleString('en-CA', { dateStyle: 'medium' }); } catch (e) { return s; } }

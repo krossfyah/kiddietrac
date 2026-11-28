@@ -28,8 +28,13 @@ final class EngagementController extends Controller
     public function listCampaigns(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $rows = DB::table('reenrollment_campaigns')->where('agency_id', $agencyId)
-            ->orderByDesc('created_at')->get();
+        /* Centre scope (2026-11-27, same shape as vacation holds / tuition increases): a director saw every centre's
+           campaigns. They now see their own centres' and the agency-wide ones; the centre is named on each row. */
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
+        $rows = DB::table('reenrollment_campaigns as rc')->leftJoin('centres as c', 'c.id', '=', 'rc.centre_id')
+            ->where('rc.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('rc.centre_id')->orWhereIn('rc.centre_id', $scope ?: [0])))
+            ->orderByDesc('rc.created_at')->select('rc.*', 'c.name as centre_name')->get();
         return response()->json(['data' => $rows]);
     }
 
@@ -62,6 +67,9 @@ final class EngagementController extends Controller
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id as child_id', 'ch.family_id');
+        // Only families still with us at open centres (2026-11-27): a departed family or a closed centre's is never invited.
+        \App\Support\Live::families($q, 'f');
+        \App\Support\Live::centres($q, 'c');
         if (!empty($data['centre_id'])) $q->where('f.centre_id', $data['centre_id']);
         $kids = $q->get();
 

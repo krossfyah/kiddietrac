@@ -46,7 +46,7 @@ L'écran compte quatre onglets : **📊 Résumé**, **🧾 Factures fournisseurs
 2. Quand la facture du fournisseur arrive, appuyez sur **→ Convertir en facture fournisseur**. La facture est créée à partir des lignes de la commande, sans rien ressaisir, et l'écran passe à **🧾 Factures fournisseurs**.
 3. Si la commande n'aura pas lieu, choisissez plutôt **🚫 Annuler la commande** dans le menu de sa ligne.
 
-> ⚠️ **→ Convertir en facture fournisseur** n'est offert que tant que la commande n'est ni reçue ni annulée. Convertissez d'abord la commande; n'utilisez **Marquer comme reçu** que pour une commande qui n'aura pas sa propre facture.
+> 💡 **→ Convertir en facture fournisseur** reste offert sur la commande, reçue ou non, jusqu'à ce qu'une facture en soit tirée (seule une commande annulée le perd). Une fois convertie, la commande affiche **Billed:** et la référence de la facture, pour qu'elle ne soit jamais facturée deux fois.
 
 ## Saisir une facture fournisseur
 

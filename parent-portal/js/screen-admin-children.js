@@ -67,8 +67,16 @@
     return '<span style="padding:2px 8px;border-radius:999px;background:' + m[0] + ';color:' + m[1] + ';font-size:10px;font-weight:700;letter-spacing:0.5px;">' + m[2] + '</span>';
   }
 
+  /* THE AUDITOR'S READ-ONLY LIST (2026-11-27). /director/enrollments and /admin/centres are for directors and admins,
+     so an auditor's Children screen said "Could not load". They read GET /auditor/children (the same rows, agency-wide,
+     with the centre list) and get a list only: no Edit, and no record popup, which is built on director routes. */
+  function isAuditor() {
+    return /\brole-auditor\b/.test(document.body.className || '');
+  }
+
   function renderChildren(container) {
     Dom.clear(container);
+    var auditor = isAuditor();
 
     var wrap = Dom.el('div', { style: 'padding: 24px; max-width: 1800px; margin: 0 auto;' });
     container.appendChild(wrap);
@@ -150,7 +158,8 @@
       // children still with us (2026-10-09), so an empty value would hide withdrawn ones.
       params.status = statusSelect.value || 'all';
       if (searchInput.value.trim()) params.search = searchInput.value.trim();
-      Api.get('/director/enrollments', params).then(function (data) {
+      Api.get(auditor ? '/auditor/children' : '/director/enrollments', params).then(function (data) {
+        if (auditor) { fillCentres(data.centres || []); }
         renderResults(data.children || []);
       }).catch(function (e) {
         showError(e.message || 'Server error');
@@ -192,7 +201,7 @@
       // v22p26: branch on card/table view preference
       var view = (window.matchMedia && window.matchMedia('(max-width:768px)').matches) ? 'table' : (localStorage.getItem('kt_view_children') || localStorage.getItem('kt_view_pref') || 'cards');
       if (view === 'table') {
-        resultsEl.appendChild(renderChildrenTable(children, centreSelect.value));
+        resultsEl.appendChild(renderChildrenTable(children, centreSelect.value, auditor));
         /* The table is built AFTER a fetch, and the global sweep has long since run by
            then — so on a fresh load it arrived with no sorting and no row counter, and
            only picked them up if you happened to navigate away and back. Asking for the
@@ -207,12 +216,12 @@
       children.forEach(function (c) {
         /* The href stays so the card is still a real link (middle-click, copy link
            address); the click handler below opens the popup instead of navigating. */
-        var card = Dom.el('a', {
-          href: '#child-detail?id=' + c.id + (centreSelect.value ? '&centre_id=' + centreSelect.value : ''),
+        var card = Dom.el(auditor ? 'div' : 'a', {
+          href: auditor ? null : '#child-detail?id=' + c.id + (centreSelect.value ? '&centre_id=' + centreSelect.value : ''),
           class: 'kt-lift',
           style: 'display:block;background:white;padding:14px 16px;border-radius:12px;text-decoration:none;color:#111827;box-shadow:0 1px 3px rgba(0,0,0,.04);--kt-edge:' + (c.room_color || '#1F6080') + ';',
         });
-        card.addEventListener('click', function (ev) {
+        if (!auditor) card.addEventListener('click', function (ev) {
           /* Let a deliberate new-tab through: ctrl/cmd/middle-click on a real link is a
              habit worth keeping, and the href above still points at the full screen. */
           if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) { return; }
@@ -254,7 +263,7 @@
         var cEdit = Dom.el('button', { type: 'button', style: 'background:transparent;border:1px solid #D1D5DB;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;' }, '✏️ Edit');
         cEdit.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); _openChild(c, centreSelect.value || '', true); });
         cardBar.appendChild(cOpen); cardBar.appendChild(cEdit);
-        card.appendChild(cardBar);
+        if (!auditor) card.appendChild(cardBar);
         grid.appendChild(card);
       });
       resultsEl.appendChild(grid);
@@ -263,13 +272,19 @@
     }
 
     // Load centres for the dropdown (parallel with the initial fetch)
-    Api.get('/admin/centres').then(function (data) {
-      (data.centres || []).forEach(function (c) {
+    var centresFilled = false;
+    function fillCentres(list) {
+      if (centresFilled) return;
+      centresFilled = true;
+      (list || []).forEach(function (c) {
         var opt = Dom.el('option', { value: c.id }, c.name);
         if (filters.centre_id && String(filters.centre_id) === String(c.id)) opt.selected = true;
         centreSelect.appendChild(opt);
       });
-    });
+    }
+    if (!auditor) {
+      Api.get('/admin/centres').then(function (data) { fillCentres(data.centres || []); });
+    }
 
     // Wire change handlers
     var debounceT;
@@ -309,7 +324,7 @@
   }
 
   // v22p26: children table view.
-  function renderChildrenTable(children, centreIdHint) {
+  function renderChildrenTable(children, centreIdHint, readOnly) {
     /* data-kt-no-search: this screen already has a search box, and it is the better
        of the two — it queries the server for every child in the agency, while
        kt-table-filter's can only see the rows currently loaded. Two boxes that look
@@ -328,14 +343,14 @@
 
     var tbody = Dom.el('tbody');
     children.forEach(function (c) {
-      var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;cursor:pointer;' });
+      var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;' + (readOnly ? '' : 'cursor:pointer;') });
       /* THE RECORD OPENS IN A POPUP (2026-09-21). Anthony: "view children record should
          be a popup which includes archived records". Opening it used to LEAVE this list -
          and coming back landed at the top of it, having lost the filter and the scroll.
          KT.ChildDetail.openModal renders the same record into a dialog; if an old cached
          build has no opener it falls back to the hash, so nothing can become a dead
          click. */
-      tr.addEventListener('click', function () {
+      if (!readOnly) tr.addEventListener('click', function () {
         _openChild(c, centreIdHint);
       });
 
@@ -425,6 +440,7 @@
         _openChild(c, centreIdHint, true);
       });
       actTd.appendChild(editBtn);
+      if (readOnly) Dom.clear(actTd);
       tr.appendChild(actTd);
 
       tbody.appendChild(tr);

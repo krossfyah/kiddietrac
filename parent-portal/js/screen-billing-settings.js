@@ -221,7 +221,7 @@
       +     '</div>'
       +     '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;min-height:15px;">Percentage of the invoice subtotal.</div></div>'
 
-      +   '<div><label for="b_label" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Called</label>'
+      +   '<div><label for="b_label" data-i18n-ctx="tax" style="display:block;font-size:13px;font-weight:700;color:#475569;margin:0 0 4px;">Called</label>'
       +     '<input id="b_label" type="text" value="' + esc(b.tax_label || 'Tax') + '" placeholder="HST" style="' + INP + 'width:100%;">'
       +     '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;min-height:15px;">Appears on the invoice, e.g. HST or GST.</div></div>'
       + '</div>'

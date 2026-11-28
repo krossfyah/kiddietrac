@@ -12,7 +12,7 @@ personal, salas y cuánto impulsar las visitas.
 
 ## Leer el pronóstico
 
-1. Abra **Marketing › Enrolment forecast**. El encabezado dice **📈 Enrolment forecast** e indica cuántas visitas hay en curso.
+1. Abra **Marketing › Enrolment forecast**. El encabezado dice **🔮 Enrolment forecast** e indica cuántas visitas hay en curso.
 2. Lea los cuatro recuadros: **Current enrolment**, **Tour pipeline · 60d**, **Monthly adds** y **Monthly churn %**.
 3. Mire el gráfico **6-month enrolment trajectory**. El punto verde es **Current**; la línea azul es **Projected**, con el número sobre cada mes.
 4. Desplácese a **Month-by-month breakdown** para ver el total **Projected**, **+ Adds** y **− Churn** de cada mes.

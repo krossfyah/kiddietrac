@@ -472,7 +472,7 @@
           { hash: 'sms',                 label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',            label: 'Churn risk',  icon: '📉' },
           { hash: 'ai-docs',             label: 'AI doc extract', icon: '🪄' },
-          { hash: 'forecast',            label: 'Enrolment forecast', icon: '📈' },
+          { hash: 'forecast',            label: 'Enrolment forecast', icon: '🔮' },
         ]},
         { label: 'Programs', items: [
           { hash: 'menu',                label: 'Weekly menu',     icon: '🍽' },
@@ -762,7 +762,7 @@
           // Ontario OCCMS reporting (2026-10-13): hidden unless an Ontario agency (screen-subsidy-roa.js).
           { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🏷️' },
           { hash: 'retention',         label: 'Retention',        icon: '📊' },
-          { hash: 'forecast',          label: 'Enrolment forecast',icon: '📈' },
+          { hash: 'forecast',          label: 'Enrolment forecast',icon: '🔮' },
           { hash: 'anomalies',         label: 'Anomalies',        icon: '🔍' },
         ]},
         { label: 'Enrollment', items: [

@@ -24,7 +24,7 @@ screens: tuition-increases
 
 ## Reading the list
 
-1. Each row shows the **Effective** date, the **Type**, the **Amount** (as a % or in dollars) and **Notify** (how many days before the date families should hear about it, 60 by default).
+1. Each row shows the **Effective** date, the **Centre** (or **All centres**), the **Type**, the **Amount** (as a % or in dollars) and **Notify** (how many days before the date families should hear about it, 60 by default).
 2. The **Status** pill reads **Scheduled** for an increase you have planned.
 3. The newest effective date is at the top. You can plan several increases (for example January and September); each has its own row and date.
 
@@ -40,8 +40,8 @@ screens: tuition-increases
 
 | Role | What they can do |
 |---|---|
-| Agency admin | Schedules increases and sees the agency's whole schedule. |
-| Centre director | Sees the agency's schedule and can schedule an increase. Agree it with your agency admin first: an increase is agency-wide. |
+| Agency admin | Schedules increases for one centre or **All centres**, and sees the agency's whole schedule. |
+| Centre director | Sees the agency-wide increases and their own centres' ones, and schedules increases for their own centres only (choose the centre under **Centre**). |
 | Platform admin | The same as an agency admin, in the agency they are working in. |
 
 Educators and parents do not see this screen.

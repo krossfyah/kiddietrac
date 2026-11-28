@@ -22,7 +22,7 @@ screens: reenrollment
 
 A message says how many children were invited (for example "Invited 84 children"), and the campaign appears at the top of the list with the status **sent**.
 
-> ⚠️ A campaign goes to **every enrolled child in the agency** the moment you launch it, and their parents are notified straight away. There is no draft, no centre filter and no undo — check the name, term and deadline first.
+> ⚠️ A campaign goes to **every enrolled child** at the centre you choose under **Centre** (or the whole agency for **All centres**) the moment you launch it, and their parents are notified straight away. There is no draft and no undo — check the centre, name, term and deadline first.
 
 ## What families receive
 
@@ -56,7 +56,7 @@ Children who are withdrawn, waitlisted or archived when you launch are not invit
 
 ??? Launch campaign does nothing when I press it. | All three fields are required. Fill in **Campaign name**, **Target term** and **Deadline**, and make sure the deadline is after today.
 ??? It said "Invited 0 children". | No child in the agency had the status Enrolled at that moment. Check **Administration › Children** with the status filter on **Enrolled**.
-??? Can I send it to one centre only? | Not from this screen — a campaign always goes to every enrolled child in the agency.
+??? Can I send it to one centre only? | Yes. Choose the centre under **Centre** before you launch. The list shows each campaign's **Centre**.
 ??? Responded stays at 0. | Families may not have answered yet. Remind them before the deadline by message or announcement, and note answers you get by phone in the child's record.
 ??? Can I close or delete a campaign? | No. A campaign stays in the list with its counts as a record; launch a new one for the next term.
 ??? How are families told? | Each guardian of an invited child gets a notification in the portal bell and on their phone.

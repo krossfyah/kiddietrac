@@ -19,6 +19,23 @@ final class ChildController extends Controller
 
     use ResolvesCentreContext;
 
+    /**
+     * THE AUDITOR'S CHILDREN LIST (2026-11-27). GET only (EnforceAuditorReadOnly refuses every write for a pure
+     * auditor): the same rows as /director/enrollments, scoped to the active agency's open centres exactly as an agency
+     * admin's are, plus the agency's open centres for the screen's centre filter (/admin/centres is not theirs).
+     */
+    public function auditorChildren(Request $request): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if (! $agencyId) {
+            return response()->json(['children' => [], 'centres' => []]);
+        }
+        $payload = $this->enrollmentList($request)->getData(true);
+        $payload['centres'] = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
+            ->orderBy('name')->get(['id', 'name']);
+        return response()->json($payload);
+    }
+
     public function enrollmentList(Request $request): JsonResponse
     {
         // v22p5: allow agency_admin to scope to any centre they own via ?centre_id=
@@ -28,8 +45,10 @@ final class ChildController extends Controller
         // own centre. The centre filter still narrows when supplied.
         $user = $request->user();
         $requestedCentre = $request->integer("centre_id");
+        /* An auditor is agency-wide too (Visibility::AGENCY_WIDE), read-only: they reach this through
+           GET /auditor/children (2026-11-27; their Children screen called /director/enrollments and got a 403). */
         $isAgencyLevel = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $user->id)
-            ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
+            ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin', 'auditor'])->exists();
 
         /* CURRENT BY DEFAULT (2026-10-09). With no status this returned every child ever
            enrolled — withdrawn ones and the closed providers' too — to every caller that
