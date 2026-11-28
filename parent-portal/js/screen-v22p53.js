@@ -1023,45 +1023,84 @@
         + '<div class="kt-ftv-fee">Trip fees from signed slips<b>' + money(st.fees_12m) + '</b>last 12 months and upcoming</div></div>';
     el.appendChild(grid);
   }
+  /* NEW TRIP (2026-11-28, help-writer bug batch). The form posted whatever was typed: no title,
+     destination or date check, and no catch, so a refused save (the server requires all three, and
+     every child must be at the trip's centre) left the popup sitting there with nothing said. The
+     children list was the whole agency whatever centre was picked, which is how "Some of the
+     children picked are not at this centre." happened. Now: the house popup, a centre chosen first
+     (never the first in the list), only that centre's children, every field checked before sending,
+     and the server's own sentence shown inside the popup when it refuses. */
   async function openFieldTripModal() {
-    /* v22p70: fix field-trip modal response keys */
     const childrenRes = await Api.get('/admin/children').catch(() => ({ children: [] }));
     const centresRes = await Api.get('/director/centres').catch(() => ({ centres: [] }));
     const children = childrenRes.children || childrenRes.data || [];
     const centres = centresRes.centres || centresRes.data || (Array.isArray(centresRes) ? centresRes : []);
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:560px;width:92%;max-height:88vh;overflow:auto;">
-      <h3 style="margin:0 0 12px;">New field trip</h3>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Centre <select id="ft-centre" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">${centres.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Title <input id="ft-title" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Destination <input id="ft-dest" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Trip date <input id="ft-date" type="date" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Cost per child ($) <input id="ft-cost" type="number" step="0.01" value="0" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Children invited</label>
-      <div id="ft-children" style="max-height:200px;overflow:auto;border:1px solid #E5E7EB;border-radius:4px;padding:8px;">
-        ${children.map(c => `<label style="display:block;padding:4px 0;font-size:13px;"><input type="checkbox" data-cid="${c.id}"> ${esc(c.first_name)} ${esc(c.last_name)}</label>`).join('') || '<em>No children loaded.</em>'}
-      </div>
-      <div style="margin-top:18px;text-align:right;">
-        <button id="ft-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
-        <button id="ft-save" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Create + send permission slips</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#ft-cancel').onclick = () => m.remove();
-    m.querySelector('#ft-save').onclick = async () => {
-      const childIds = Array.from(m.querySelectorAll('input[data-cid]:checked')).map(c => +c.dataset.cid);
-      if (!childIds.length) { alert('Pick at least one child'); return; }
-      await Api.post('/operations/field-trips', {
-        centre_id: +m.querySelector('#ft-centre').value,
-        title: m.querySelector('#ft-title').value,
-        destination: m.querySelector('#ft-dest').value,
-        trip_date: m.querySelector('#ft-date').value,
-        cost_per_child: parseFloat(m.querySelector('#ft-cost').value) || 0,
-        child_ids: childIds,
-      });
-      m.remove();
-      renderFieldTrips(document.querySelector('main') || document.getElementById('main'));
+    const inp = 'width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13.5px;box-sizing:border-box;';
+    const lab = 'display:block;margin-top:10px;font-size:13px;font-weight:700;color:#334155;';
+    const today = (window.KT && KT.agencyToday) ? KT.agencyToday() : '';
+    const body = document.createElement('div');
+    body.innerHTML = `
+      <label style="${lab}">Centre *<select id="ft-centre" style="${inp}">${centres.length === 1 ? '' : '<option value="">— Pick a centre —</option>'}${centres.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+      <label style="${lab}">Title *<input id="ft-title" maxlength="200" placeholder="e.g. Pumpkin patch visit" style="${inp}"></label>
+      <label style="${lab}">Destination *<input id="ft-dest" maxlength="255" placeholder="Where you are going" style="${inp}"></label>
+      <label style="${lab}">Trip date *<input id="ft-date" type="date"${today ? ` min="${today}"` : ''} style="${inp}"></label>
+      <label style="${lab}">Cost per child ($)<input id="ft-cost" type="number" min="0" step="0.01" value="0" style="${inp}"></label>
+      <div style="${lab}display:flex;align-items:center;justify-content:space-between;gap:8px;"><span>Children invited *</span><button type="button" id="ft-all" style="background:none;border:0;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;padding:0;">Select all</button></div>
+      <div id="ft-children" style="max-height:220px;overflow:auto;border:1px solid #E2E8F0;border-radius:8px;padding:8px;margin-top:4px;"></div>
+      <div id="ft-status" role="alert" style="min-height:18px;font-size:13px;color:#B91C1C;margin-top:10px;"></div>`;
+    const $ = (s) => body.querySelector(s);
+    const status = (t) => { $('#ft-status').textContent = t || ''; };
+    const paintChildren = () => {
+      const cid = +$('#ft-centre').value;
+      const box = $('#ft-children');
+      if (!cid) { box.innerHTML = '<em style="color:#64748B;font-size:13px;">Pick a centre to see its children.</em>'; return; }
+      const here = children.filter(c => +c.centre_id === cid);
+      box.innerHTML = here.map(c => `<label style="display:block;padding:4px 0;font-size:13px;"><input type="checkbox" data-cid="${c.id}"> ${esc(c.first_name)} ${esc(c.last_name)}</label>`).join('')
+        || '<em style="color:#64748B;font-size:13px;">No children at this centre.</em>';
     };
+    $('#ft-centre').onchange = () => { status(''); paintChildren(); };
+    $('#ft-all').onclick = () => {
+      const boxes = Array.from(body.querySelectorAll('input[data-cid]'));
+      const on = boxes.some(b => !b.checked);
+      boxes.forEach(b => { b.checked = on; });
+    };
+    paintChildren();
+    KT.Shell.Modal.open({
+      title: '🚐 New field trip',
+      body,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Create + send permission slips', primary: true, busyLabel: 'Sending…', handler: async () => {
+          status('');
+          const centreId = +$('#ft-centre').value;
+          const title = ($('#ft-title').value || '').trim();
+          const destination = ($('#ft-dest').value || '').trim();
+          const tripDate = $('#ft-date').value;
+          const childIds = Array.from(body.querySelectorAll('input[data-cid]:checked')).map(c => +c.dataset.cid);
+          if (!centreId) { status('Pick a centre.'); return false; }
+          if (!title) { status('Give the trip a title.'); $('#ft-title').focus(); return false; }
+          if (!destination) { status('Say where the trip is going.'); $('#ft-dest').focus(); return false; }
+          if (!tripDate) { status('Pick the trip date.'); $('#ft-date').focus(); return false; }
+          if (!childIds.length) { status('Pick at least one child.'); return false; }
+          try {
+            await Api.post('/operations/field-trips', {
+              centre_id: centreId,
+              title,
+              destination,
+              trip_date: tripDate,
+              cost_per_child: parseFloat($('#ft-cost').value) || 0,
+              child_ids: childIds,
+            });
+          } catch (e) {
+            status((e && e.message) || 'The trip could not be saved. Try again.');
+            return false;
+          }
+          if (window.KT && KT.toast) KT.toast('🚐', 'Trip created', 'Permission slips are on their way to the families.', '#16A34A');
+          renderFieldTrips(document.getElementById('appMain') || document.querySelector('main'));
+          return true;
+        } },
+      ],
+    });
   }
   /* TRIP DETAILS (2026-10-24, Anthony: "add to the kebab view which pops up all of the information
      about the trip including map, children, steps, how long, add more detail"). One call

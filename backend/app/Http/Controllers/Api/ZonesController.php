@@ -191,6 +191,67 @@ final class ZonesController extends Controller
         return response()->json(['id' => $id], 201);
     }
 
+    /**
+     * A zone this person may change or remove (2026-11-28, help-writer bug batch: zones could
+     * be added but never renamed, re-coloured or taken away). The same scope as adding one:
+     * a zone of a centre they can see; an educator only their own rooms' zones (a whole-centre
+     * zone is a director's call, as it is to create).
+     */
+    private function editableZone(Request $request, int $id): object
+    {
+        $zone = DB::table('activity_zones')->where('id', $id)->where('active', 1)->first();
+        abort_unless($zone, 404, 'That zone is no longer there.');
+        $this->assertCentre((int) $request->user()->id, (int) $zone->centre_id);
+        $s = $this->zoneScope($request);
+        abort_unless($this->centreAllowed($s, (int) $zone->centre_id), 403, 'That centre is not one you can see.');
+        if ($s['rooms'] !== null) {
+            abort_unless($zone->room_id !== null && in_array((int) $zone->room_id, $s['rooms'], true), 403, 'Only your director can change a whole-centre zone.');
+        }
+
+        return $zone;
+    }
+
+    /** PATCH /zones/{id} — rename, move to another room, new icon or colour. */
+    public function updateZone(Request $request, int $id): JsonResponse
+    {
+        $zone = $this->editableZone($request, $id);
+        $data = $request->validate([
+            'name' => 'sometimes|required|string|max:80',
+            'room_id' => 'sometimes|nullable|integer',
+            'icon' => 'sometimes|nullable|string|max:20',
+            'color' => 'sometimes|nullable|string|max:20',
+        ]);
+        if (array_key_exists('room_id', $data)) {
+            $s = $this->zoneScope($request);
+            if ($s['rooms'] !== null) {
+                abort_unless(! empty($data['room_id']) && in_array((int) $data['room_id'], $s['rooms'], true), 403, 'Choose one of your rooms.');
+            }
+            if (! empty($data['room_id'])) {
+                $roomCentre = (int) DB::table('rooms')->where('id', (int) $data['room_id'])->value('centre_id');
+                abort_unless($roomCentre === (int) $zone->centre_id, 422, 'That room is not in this centre.');
+            }
+        }
+        $set = [];
+        foreach (['name', 'room_id', 'icon', 'color'] as $k) {
+            if (array_key_exists($k, $data)) $set[$k] = $k === 'room_id' ? ($data[$k] ? (int) $data[$k] : null) : $data[$k];
+        }
+        if ($set) DB::table('activity_zones')->where('id', $id)->update($set);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * DELETE /zones/{id} — the zone leaves the screen. Switched off, not erased, so the
+     * visits already logged in it keep their zone name in past days' reports.
+     */
+    public function deleteZone(Request $request, int $id): JsonResponse
+    {
+        $this->editableZone($request, $id);
+        DB::table('activity_zones')->where('id', $id)->update(['active' => 0]);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function logVisit(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -205,7 +266,7 @@ final class ZonesController extends Controller
         // still let a visit be filed into another agency's zone, and vice versa.
         $this->assertChild((int) $request->user()->id, (int) $data['child_id']);
 
-        $zone = DB::table('activity_zones')->where('id', (int) $data['zone_id'])->first(['centre_id', 'room_id']);
+        $zone = DB::table('activity_zones')->where('id', (int) $data['zone_id'])->where('active', 1)->first(['centre_id', 'room_id']);   // a removed zone takes no new visits
         abort_unless($zone && (int) $zone->centre_id > 0, 422, 'That zone does not exist.');
         $this->assertCentre((int) $request->user()->id, (int) $zone->centre_id);
 

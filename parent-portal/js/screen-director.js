@@ -806,6 +806,7 @@
          the normal route in (parents scan, educators tap the roster). */
       var act = Dom.el('button', {
         type: 'button',
+        'data-i18n-ctx': 'attendance',
         style: 'margin-top:8px;width:100%;padding:6px 8px;font-size:12px;font-weight:700;'
           + 'font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid '
           + (child.is_at_centre

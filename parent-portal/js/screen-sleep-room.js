@@ -228,7 +228,7 @@
       if (n) {
         var since = Math.max(0, Math.round((serverNow() - Date.parse(n.since)) / 60000));
         sub = 'Asleep since ' + esc(n.since_local) + ' (' + since + ' min) · every ' + n.interval + ' min<br>'
-          + (n.last_check ? 'Last check ' + esc(n.last_check.at_local) + ' by ' + esc(n.last_check.by) + ' · ' + esc((d.positions || {})[n.last_check.position] || n.last_check.position)
+          + (n.last_check ? 'Last check ' + esc(n.last_check.at_local) + ' by ' + esc(n.last_check.by) + ' · <span data-i18n-ctx="sleep-position">' + esc((d.positions || {})[n.last_check.position] || n.last_check.position) + '</span>'
             + (n.last_check.breathing_ok && n.last_check.colour_ok ? '' : ' · <b style="color:#B91C1C;">concern noted</b>') + ' · ' + n.checks_count + ' check' + (n.checks_count === 1 ? '' : 's')
             : '<b>No check recorded yet</b>');
         right = '<div><div class="sl-cdl">Next check in</div><div class="sl-cd" data-due="' + esc(n.due_at) + '">–</div></div>';
@@ -288,7 +288,7 @@
       var last = (c.nap.last_check && c.nap.last_check.position) || 'back';
       h += '<div data-kid="' + c.nap.nap_event_id + '" style="border-top:1px solid #EEF2F6;padding:10px 0 4px;">'
         + '<div style="font-weight:800;font-size:14px;">' + esc(c.name) + (c.under12 ? ' <span class="sl-pill w">Under 12 months</span>' : '') + (c.physician_direction ? ' <span class="sl-pill g">Physician direction: ' + esc(c.physician_note || '') + '</span>' : '') + '</div>'
-        + '<span class="sl-l">Position</span><div class="sl-pos">' + Object.keys(P).filter(function (k) { return k === 'back' || k === 'side' || k === 'tummy' || k === 'sitting'; }).map(function (k) {
+        + '<span class="sl-l">Position</span><div class="sl-pos" data-i18n-ctx="sleep-position">' + Object.keys(P).filter(function (k) { return k === 'back' || k === 'side' || k === 'tummy' || k === 'sitting'; }).map(function (k) {
             return '<button type="button" data-pos="' + k + '" class="' + (k === last ? 'on' : '') + '">' + esc(P[k]) + '</button>';
           }).join('') + '</div>'
         + '<div class="sl-row" style="margin-top:8px;gap:14px;">'

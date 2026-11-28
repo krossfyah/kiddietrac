@@ -436,6 +436,7 @@
       + '<label style="' + LBL + '">' + (act === 'other' ? 'What happened' : 'Note (optional)') + '</label>'
       + '<textarea data-note rows="3" maxlength="1000" style="' + FLD + 'resize:vertical;" placeholder="' + (act === 'picked_up' ? 'e.g. Picked up by dad, sign-out was missed' : act === 'still_here' ? 'e.g. Mum running late, arriving 6:15' : '') + '"></textarea>',
       act === 'picked_up' ? 'Sign out' : 'Save');
+    if (act === 'picked_up') m.querySelector('[data-ok]').setAttribute('data-i18n-ctx', 'attendance');   // the child leaves, not an account sign-out
     m.querySelector('[data-ok]').onclick = async function () {
       var body = { resolution: act, note: m.querySelector('[data-note]').value.trim() || null };
       var t = m.querySelector('[data-time]');

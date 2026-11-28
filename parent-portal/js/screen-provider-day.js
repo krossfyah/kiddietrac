@@ -707,7 +707,7 @@
            only; the server checks that again. */
         + '<td style="padding:8px 6px;text-align:right;">' + (
             (state.date === todayISO() && r.room_id)
-              ? '<button type="button" class="pd-act" data-child="' + r.id + '" data-room="' + r.room_id + '"'
+              ? '<button type="button" class="pd-act" data-i18n-ctx="attendance" data-child="' + r.id + '" data-room="' + r.room_id + '"'
                 + ' data-going="' + (r.status === 'in' ? 'out' : 'in') + '"'
                 + ' style="padding:5px 10px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid '
                 + (r.status === 'in' ? '#E2E8F0;background:#fff;color:#475569;' : '#BFDBFE;background:#EFF6FF;color:#1E40AF;')

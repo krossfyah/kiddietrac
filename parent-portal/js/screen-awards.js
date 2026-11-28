@@ -56,7 +56,7 @@
         var ok = (KT.confirm) ? await KT.confirm('Delete this award?') : window.confirm('Delete this award?');
         if (!ok) return;
         try { await Api.delete('/provider/awards/' + b.getAttribute('data-award-del')); loadAwards(main); }
-        catch (err) { alert('Could not delete: ' + (err.message || '')); }
+        catch (err) { if (KT.toast) KT.toast('⚠️', 'Could not delete the award', (err && err.message) || 'Try again.', '#DC2626'); }
       });
     });
     if (typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
@@ -76,6 +76,10 @@
       '</div></div>';
   }
 
+  /* THE HOUSE POPUP (2026-11-28, help-writer bug batch). This was a hand-built overlay with its own
+     white header and × (and its own phone padding to clear the bottom bar), so it looked like no
+     other popup. KT.Shell.Modal gives the navy-to-teal band, the ✕ in the header, one scroll region
+     and Esc; the form and the checks are unchanged. A refused save keeps the popup open and says why. */
   async function openAwardModal(main) {
     var children = [];
     try {
@@ -86,18 +90,9 @@
     children = children.filter(function (c) { if (seen[c.id]) return false; seen[c.id] = 1; return true; });
     children.sort(function (a, b) { return ((a.first_name || '') + a.last_name).localeCompare((b.first_name || '') + b.last_name); });
 
-    // Mobile: lift the card above the fixed bottom nav + home indicator so the
-    // whole form (incl. the Give-award button) stays reachable and centred.
-    var isMobile = window.matchMedia && window.matchMedia('(max-width:768px)').matches;
-    var ovPad = isMobile
-      ? 'padding:10px 12px calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px))) 12px;'
-      : 'padding:16px;';
-    var cardMaxH = isMobile ? 'calc(100vh - 150px)' : '92vh';
-
     var inp = 'width:100%;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;';
-    var ov = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:9999;' + ovPad });
-    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:22px;max-height:' + cardMaxH + ';overflow:auto;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div style="font-weight:800;font-size:18px;color:#0F172A;">🏆 New award</div><button type="button" data-x style="background:none;border:none;font-size:22px;cursor:pointer;color:#94A3B8;line-height:1;">×</button></div>' +
+    var ov = document.createElement('div');
+    ov.innerHTML =
       '<div style="display:grid;gap:12px;">' +
         '<label style="font-size:13px;font-weight:700;">Child *<select id="aw-child" style="' + inp + '"><option value="">— Pick a child —</option>' + children.map(function (c) { return '<option value="' + c.id + '">' + esc(((c.first_name || '') + ' ' + (c.last_name || '')).trim()) + '</option>'; }).join('') + '</select></label>' +
         (children.length ? '' : '<div style="font-size:12px;color:#B91C1C;">No children found in your rooms.</div>') +
@@ -107,15 +102,9 @@
           '<label style="font-size:13px;font-weight:700;">Period<select id="aw-period" style="' + inp + '"><option value="">—</option><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option></select></label>' +
           '<label style="font-size:13px;font-weight:700;">Date<input id="aw-date" type="date" value="' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '" style="' + inp + '"></label>' +
         '</div>' +
-        '<label style="font-size:13px;font-weight:700;">Message (optional)<textarea id="aw-note" rows="2" maxlength="1000" placeholder="A note for the child / parents" style="' + inp + ';resize:vertical;"></textarea></label>' +
+        '<label style="font-size:13px;font-weight:700;">Message (optional)<textarea id="aw-note" rows="2" maxlength="1000" placeholder="A note for the child / parents" style="' + inp + ';resize:vertical;min-height:64px;"></textarea></label>' +
       '</div>' +
-      '<div id="aw-status" style="min-height:18px;font-size:13px;margin-top:8px;"></div>' +
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;"><button type="button" data-x style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:9px 16px;font-weight:800;cursor:pointer;">Cancel</button><button type="button" id="aw-save" style="background:#F59E0B;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">Give award</button></div>' +
-      '</div>';
-    document.body.appendChild(ov);
-    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
-    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
-    ov.querySelectorAll('[data-x]').forEach(function (b) { b.addEventListener('click', close); });
+      '<div id="aw-status" role="alert" style="min-height:18px;font-size:13px;margin-top:8px;color:#B91C1C;"></div>';
 
     var badge = BADGES[0];
     ov.querySelectorAll('.aw-badge').forEach(function (b) {
@@ -125,22 +114,31 @@
         b.style.borderColor = '#F59E0B'; b.style.background = '#FEF3C7';
       });
     });
-    ov.querySelector('#aw-save').addEventListener('click', async function () {
-      var childId = +ov.querySelector('#aw-child').value;
-      var title = (ov.querySelector('#aw-title').value || '').trim();
-      var status = ov.querySelector('#aw-status');
-      if (!childId) { status.style.color = '#B91C1C'; status.textContent = 'Pick a child.'; return; }
-      if (!title) { status.style.color = '#B91C1C'; status.textContent = 'Enter an award title.'; return; }
-      var save = ov.querySelector('#aw-save'); save.disabled = true;
-      try {
-        await Api.post('/provider/awards', {
-          child_id: childId, title: title, badge: badge,
-          period: ov.querySelector('#aw-period').value || null,
-          note: (ov.querySelector('#aw-note').value || '').trim() || null,
-          awarded_on: ov.querySelector('#aw-date').value || null,
-        });
-        close(); loadAwards(main);
-      } catch (e) { save.disabled = false; status.style.color = '#B91C1C'; status.textContent = '✗ ' + (e.message || 'Could not save'); }
+    KT.Shell.Modal.open({
+      title: '🏆 New award',
+      body: ov,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Give award', primary: true, handler: async function () {
+          var childId = +ov.querySelector('#aw-child').value;
+          var title = (ov.querySelector('#aw-title').value || '').trim();
+          var status = ov.querySelector('#aw-status');
+          status.textContent = '';
+          if (!childId) { status.textContent = 'Pick a child.'; return false; }
+          if (!title) { status.textContent = 'Enter an award title.'; return false; }
+          try {
+            await Api.post('/provider/awards', {
+              child_id: childId, title: title, badge: badge,
+              period: ov.querySelector('#aw-period').value || null,
+              note: (ov.querySelector('#aw-note').value || '').trim() || null,
+              awarded_on: ov.querySelector('#aw-date').value || null,
+            });
+          } catch (e) { status.textContent = (e && e.message) || 'The award could not be saved. Try again.'; return false; }
+          if (KT.toast) KT.toast('🏆', 'Award given', title, '#16A34A');
+          loadAwards(main);
+          return true;
+        } },
+      ],
     });
   }
 

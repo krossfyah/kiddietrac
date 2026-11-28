@@ -1,8 +1,8 @@
 /* ===================================================================
    KiddieTrac — Tasks.
 
-   Agency admins & centre directors assign tasks to educators; the
-   educator sees their open tasks (a tile + a list) and marks them
+   Agency admins & centre directors assign tasks to educators, home visitors
+   and parents (TaskController::ASSIGNABLE); the assignee sees their open tasks (a tile + a list) and marks them
    in-progress / done. One screen file, two audiences:
      • educator:my-tasks        → renderMyTasks   (my assigned work)
      • <reviewer>:tasks         → renderManageTasks (assign + track)
@@ -142,7 +142,7 @@
         + '<h1 style="font-size:22px;font-weight:900;color:#0F172A;margin:0;">Tasks</h1>'
         + '<button id="kt-task-new" class="kt-icon-tip" title="Assign task" data-kttip="Assign task" aria-label="Assign task" type="button" style="background:#0EA5A6;color:#fff;border:none;border-radius:10px;width:40px;height:40px;padding:0;font-weight:800;font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">➕</button>'
       + '</div>'
-      + '<div style="color:#64748B;font-size:13.5px;margin:0 2px 16px;">Assign work to educators and track it to completion.</div>'
+      + '<div style="color:#64748B;font-size:13.5px;margin:0 2px 16px;">Assign work to educators, home visitors and parents, and track it to completion.</div>'
       + '<div id="kt-tasks-counts" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>'
       + '<div id="kt-tasks-form"></div>'
       + '<div id="kt-tasks-table"><div style="padding:40px;text-align:center;color:#64748B;">Loading…</div></div>'
@@ -164,7 +164,7 @@
         tbl.innerHTML = '<div style="padding:44px 20px;text-align:center;color:#64748B;">'
           + '<div style="font-size:38px;margin-bottom:6px;">🗂️</div>'
           + '<div style="font-weight:800;color:#475569;">No tasks yet</div>'
-          + '<div style="font-size:13px;margin-top:4px;">Use “Assign task” to give an educator something to do.</div></div>';
+          + '<div style="font-size:13px;margin-top:4px;">Use “Assign task” to give an educator, a home visitor or a parent something to do.</div></div>';
         return;
       }
       tbl.innerHTML = manageTable(tasks);

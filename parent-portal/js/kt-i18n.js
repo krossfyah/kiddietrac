@@ -78,12 +78,22 @@
      while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
      entry written in DICT above always wins. New UI text can still go straight into DICT. */
   var PACK_V = '20261126brc';
-  var BASE_V = '20261127billfix';   // + Finance screens sweep: Subsidies = « Aides financières » (FR), tax/interac context keys (2026-11-27). Was 20261127hrfix:    + HR screens sweep, context keys (2026-11-27). Was 20261127pgh1:   // + Help reader: On this page, More on this page (2026-11-27). Was 20261127rsnd1: + Campaigns: Resend to bounced (2026-11-27). Was 20261127hr4b10: + HR Phase 4 batch 10: quick requests, My HR to-do, starter paths, help filters (2026-11-27). Was 20261127hrdash: + HR dashboard insights (2026-11-27). Was 20261127hr4b9: + HR Phase 4 batch 9: closures taken from leave, leave to review, pro-rata (2026-11-27). Was 20261127hr4b8: + HR Phase 4 batch 8: rota publish, shift tools, clock-in fixes (2026-11-27). Was 20261127gjobs: + HR settings Google Jobs (2026-11-27). Was 20261127orgpdf2:   // + HR org chart labels (2026-11-27). Was 20261127orgpdf: + HR org chart diagram + print (2026-11-27). Was 20261127formsre: + Forms reusable column + one-time tag (2026-11-27). Was 20261127hr4b7: + HR Phase 4 batch 7: health & safety (2026-11-27). Was 20261127hr4b6: + HR Phase 4 batch 6: quizzes, directory, kudos, approvers (2026-11-27). Was 20261127fam5: + Campaigns: Recipients & stats (2026-11-27). Was 20261127hrnav: + HR nav restructure: Human Resources entries, tabs, My HR tiles (2026-11-27). Was 20261127fam2: + Marketing > Campaigns: {first_name} field, ⋮ View popup (2026-11-27). Was 20261127hr4b5: + HR Phase 4 batch 5: HR dashboard + reports (2026-11-27). Was 20261127hr4b4: + HR Phase 4 batch 4: document vault, sick notes, pay history, leaving pack (2026-11-27). Was 20261127hr4b3b: + HR Phase 4 batch 3: open shifts + shift notices (2026-11-27). Was 20261127hr4b2: + HR Phase 4 batch 2: overtime + time in lieu, timesheet approve and lock (2026-11-27). Was 20261127hr4b1: + HR Phase 4 batch 1: lateness, absence score, leave clashes (2026-11-27). Was 20261126hr3ot: + HR overtime with scheduled shifts (2026-11-26). Was 20261126hr3i12: + HR item 12 letter templates (2026-11-26). Was 20261126hr3i11: + HR item 11 clock-in rules (2026-11-26). Was 20261126hr3i10b: + HR item 10 rota (2026-11-26). Was 20261126hr3i10: + HR item 10 rota (2026-11-26). Was 20261126hr3c9: + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
+  var BASE_V = '20261128hw6c';   // + Tasks banner: educators, home visitors and parents (2026-11-28). Was 20261127platfix:   // + help sweep platfix: 👁 Open verb, Withdraw (ES), Running late, Play Spark, notes, clock strip, health form, time-off (2026-11-27). Was 20261128hw6:   // + Help-writer batch 6: context keys (media Play, sleep position, attendance), announcements, walkie, parent feedback, § / {1} templates from the dictionary (2026-11-28). Was 20261127billfix:   // + Finance screens sweep: Subsidies = « Aides financières » (FR), tax/interac context keys (2026-11-27). Was 20261127hrfix:    + HR screens sweep, context keys (2026-11-27). Was 20261127pgh1:   // + Help reader: On this page, More on this page (2026-11-27). Was 20261127rsnd1: + Campaigns: Resend to bounced (2026-11-27). Was 20261127hr4b10: + HR Phase 4 batch 10: quick requests, My HR to-do, starter paths, help filters (2026-11-27). Was 20261127hrdash: + HR dashboard insights (2026-11-27). Was 20261127hr4b9: + HR Phase 4 batch 9: closures taken from leave, leave to review, pro-rata (2026-11-27). Was 20261127hr4b8: + HR Phase 4 batch 8: rota publish, shift tools, clock-in fixes (2026-11-27). Was 20261127gjobs: + HR settings Google Jobs (2026-11-27). Was 20261127orgpdf2:   // + HR org chart labels (2026-11-27). Was 20261127orgpdf: + HR org chart diagram + print (2026-11-27). Was 20261127formsre: + Forms reusable column + one-time tag (2026-11-27). Was 20261127hr4b7: + HR Phase 4 batch 7: health & safety (2026-11-27). Was 20261127hr4b6: + HR Phase 4 batch 6: quizzes, directory, kudos, approvers (2026-11-27). Was 20261127fam5: + Campaigns: Recipients & stats (2026-11-27). Was 20261127hrnav: + HR nav restructure: Human Resources entries, tabs, My HR tiles (2026-11-27). Was 20261127fam2: + Marketing > Campaigns: {first_name} field, ⋮ View popup (2026-11-27). Was 20261127hr4b5: + HR Phase 4 batch 5: HR dashboard + reports (2026-11-27). Was 20261127hr4b4: + HR Phase 4 batch 4: document vault, sick notes, pay history, leaving pack (2026-11-27). Was 20261127hr4b3b: + HR Phase 4 batch 3: open shifts + shift notices (2026-11-27). Was 20261127hr4b2: + HR Phase 4 batch 2: overtime + time in lieu, timesheet approve and lock (2026-11-27). Was 20261127hr4b1: + HR Phase 4 batch 1: lateness, absence score, leave clashes (2026-11-27). Was 20261126hr3ot: + HR overtime with scheduled shifts (2026-11-26). Was 20261126hr3i12: + HR item 12 letter templates (2026-11-26). Was 20261126hr3i11: + HR item 11 clock-in rules (2026-11-26). Was 20261126hr3i10b: + HR item 10 rota (2026-11-26). Was 20261126hr3i10: + HR item 10 rota (2026-11-26). Was 20261126hr3c9: + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
   var packAsked = {};
   var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in
   window.KT_I18N_BASE = function (map) {
     for (var k in map) {
       if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      /* TEMPLATES FROM THE DICTIONARY (2026-11-28). A key holding § (a number) or {1} (free text) is a
+         template: translatePattern / translateNamed only ever read PATTERNS and NAMED here, so such keys written
+         in kt-i18n-base.js were dead ("§ at Centre · …" never matched). They now join those templates; one
+         written here in the engine still wins. */
+      if (k.indexOf('§') !== -1) {
+        var pe = PATTERNS[k] || (PATTERNS[k] = {});
+        for (var pl in map[k]) if (Object.prototype.hasOwnProperty.call(map[k], pl) && !pe[pl]) pe[pl] = map[k][pl];
+        continue;
+      }
+      if (/\{\d\}/.test(k)) { addNamed(k, map[k]); continue; }
       var e = DICT[k] || (DICT[k] = {});
       for (var l in map[k]) if (Object.prototype.hasOwnProperty.call(map[k], l)) e[l] = map[k][l];   // the dictionary wins
     }
@@ -310,10 +320,14 @@
     ['Good afternoon, {1}!', { fr: 'Bon après-midi, {1}!', es: '¡Buenas tardes, {1}!', hi: 'नमस्कार, {1}!' }],
     ['Good evening, {1}!', { fr: 'Bonsoir, {1}!', es: '¡Buenas tardes, {1}!', hi: 'शुभ संध्या, {1}!' }]
   ];
-  var NAMED_RX = NAMED.map(function (n) {
+  function namedRx(n) {
     var rx = n[0].replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(\d)\}/g, '([\\s\\S]+?)');
     return [new RegExp('^' + rx + '$'), n[1], (n[0].match(/\{(\d)\}/g) || []).map(function (t) { return +t.charAt(1); })];
-  });
+  }
+  var NAMED_RX = NAMED.map(namedRx);
+  var namedSeen = {};
+  NAMED.forEach(function (n) { namedSeen[n[0]] = 1; });
+  function addNamed(tpl, tr) { if (namedSeen[tpl]) return; namedSeen[tpl] = 1; NAMED_RX.push(namedRx([tpl, tr])); }
   function translateNamed(text, loc) {
     var raw = String(text), body = raw.trim();
     if (!body) return null;

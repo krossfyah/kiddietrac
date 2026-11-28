@@ -1539,7 +1539,7 @@
     'billing-settings': 'Tax rate and other invoicing defaults.',
     'phone-voicemail': 'The toll-free greeting (voice and wording) and the voicemails callers leave.',
     'calendar-settings': 'Choose which layers the calendar draws.',
-    'tasks': 'Assign tasks to educators and track them to completion.',
+    'tasks': 'Assign tasks to educators, home visitors and parents, and track them to completion.',
     'my-tasks': 'Tasks assigned to you — mark them in progress or done.',
     'certifications': 'Staff qualifications and their expiry dates.',
     'timesheets': 'Hours worked, ready for payroll.',

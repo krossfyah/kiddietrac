@@ -1147,7 +1147,7 @@
           + '<div class="ib-ico">' + (isVm ? '📼' : ARR_IN) + '</div>'
           + '<div class="ib-main"><div class="ib-who">' + (fresh ? '<span class="ib-new" aria-label="New"></span>' : '') + '<span data-nm="' + esc(r.from) + '">' + esc(r.from_pretty) + '</span></div><div class="ib-sub">' + sub + '</div>' + said + '</div>'
           + '<div class="ib-acts">'
-          + (isVm && r.has_audio ? '<button type="button" data-vm="' + r.id + '" title="Play">▶ Play</button>' : '')
+          + (isVm && r.has_audio ? '<button type="button" data-i18n-ctx="media" data-vm="' + r.id + '" title="Play">▶ Play</button>' : '')
           + (isVm ? (r.lead_id ? '<a href="#sales-lead?id=' + r.lead_id + '" title="Open the lead" style="height:28px;display:inline-flex;align-items:center;padding:0 9px;border:1px solid #A7F3D0;background:#ECFDF5;color:#047857;border-radius:7px;font-size:12px;font-weight:800;text-decoration:none;">🎯 Lead</a>'
                        : '<button type="button" data-lead="' + r.id + '" title="Turn this voicemail into a sales lead">➕ Lead</button>') : '')
           + (!isVm && r.voicemail_id ? '<button type="button" data-golist="vm" title="Open the voicemail">📼</button>' : '')

@@ -64,6 +64,31 @@ final class AnalyticsController extends Controller
     public function hdlhGaps(Request $request, int $childId): JsonResponse
     {
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
+
+        return response()->json($this->gapsFor($childId));
+    }
+
+    /**
+     * GET /analytics/hdlh-gaps?child_ids=1,2,3 — the same answer for up to 50 children in one call
+     * (2026-11-28, help-writer bug batch). The Framework gaps screen asked once per child, one after
+     * another, so it stopped at the first 30 children to stay usable; an agency with more never saw
+     * the rest. Children the caller may not see are left out, never an error for the whole page.
+     */
+    public function hdlhGapsMany(Request $request): JsonResponse
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', explode(',', (string) $request->query('child_ids', ''))))));
+        abort_if(count($ids) > 50, 422, 'Ask for 50 children or fewer at a time.');
+        $user = $request->user();
+        $out = [];
+        foreach ($ids as $id) {
+            if ($this->canAccessChildId($user, $id)) $out[(string) $id] = $this->gapsFor($id);
+        }
+
+        return response()->json(['data' => $out]);
+    }
+
+    private function gapsFor(int $childId): array
+    {
         /* Framework-aware (2026-09-29). This used to count observations whose domain was
            literally "Belonging" etc -- but domains are stored as social_emotional,
            physical, ... so every child showed four gaps. Now each observation counts toward
@@ -94,13 +119,13 @@ final class AnalyticsController extends Controller
             ->select('domain', 'status', DB::raw('COUNT(*) as count'))
             ->groupBy('domain', 'status')
             ->get()->groupBy('domain');
-        return response()->json([
+        return [
             'data' => $rows,
             'framework' => ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']],
             'gaps_count' => $gaps,
             'milestones_by_domain' => $milestones,
             'planned_window' => $planned['window'],
-        ]);
+        ];
     }
 
     /**

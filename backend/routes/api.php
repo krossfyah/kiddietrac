@@ -3853,6 +3853,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Analytics
     Route::get('/analytics/trends/{childId}',        [\App\Http\Controllers\Api\AnalyticsController::class, 'childTrends']);
     Route::get('/analytics/hdlh-gaps/{childId}',     [\App\Http\Controllers\Api\AnalyticsController::class, 'hdlhGaps']);
+    Route::get('/analytics/hdlh-gaps',               [\App\Http\Controllers\Api\AnalyticsController::class, 'hdlhGapsMany']);   // ?child_ids=1,2,3 (up to 50), Framework gaps screen (2026-11-28)
     // Drip + curriculum (admin)
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/marketing/drip',         [\App\Http\Controllers\Api\GrowthController::class, 'listDrip']);
@@ -4063,6 +4064,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/zones/visit',               [\App\Http\Controllers\Api\ZonesController::class, 'logVisit']);
         Route::get ('/zones/daily-report',        [\App\Http\Controllers\Api\ZonesController::class, 'dailyReport']);
         Route::get ('/zones/options',             [\App\Http\Controllers\Api\ZonesController::class, 'options']);
+        Route::patch ('/zones/{id}',              [\App\Http\Controllers\Api\ZonesController::class, 'updateZone'])->where('id', '[0-9]+');   // edit a zone (2026-11-28)
+        Route::delete('/zones/{id}',              [\App\Http\Controllers\Api\ZonesController::class, 'deleteZone'])->where('id', '[0-9]+');   // remove (switch off) a zone
     });
     // Support tickets
     Route::get ('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'listMine']);

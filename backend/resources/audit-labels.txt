@@ -1033,6 +1033,8 @@ post xero/sync/invoice/{id} | Synced an invoice to Xero
 post xero/tenant | Chose the Xero organisation
 post zones | Created a zone
 post zones/visit | Logged a zone visit
+patch zones/{id} | Changed an activity zone
+delete zones/{id} | Removed an activity zone
 post zumrails/webhook | Payment update received from Zūm Rails
 patch photos/{id}/children | Changed who is tagged in a photo
 put educator-points/settings | Changed the educator points settings
