@@ -12,8 +12,10 @@ accès.
 [[open: #walkie | Ouvrir le Walkie-talkie]]
 
 Il se trouve sous **Opérations › Walkie-talkie** (administrateurs et directions) ou **Walkie-talkie** dans votre menu
-(éducatrices et visiteuses à domicile). L’écran montre **Canaux** et **Personnes** à gauche, le bouton pour parler au
-centre et **Historique** en dessous.
+(éducatrices et visiteuses à domicile). L’écran tient dans votre fenêtre : **Parler à** à gauche (recherche, canaux,
+puis personnes par centre), le bouton pour parler en haut à droite et **Prises de parole récentes** en dessous. Chaque
+liste défile toute seule, donc le bouton ne bouge jamais. Sur téléphone, le bouton reste en haut et un sélecteur
+en dessous affiche **Parler à** ou **Prises de parole récentes**.
 
 ## Parler sur un canal
 
@@ -30,7 +32,7 @@ attendez un instant et réessayez. Une prise de parole s’arrête d’elle-mêm
 
 ## Parler à une seule personne
 
-1. Sous **Personnes**, tapez dans **Search names** pour trouver la ou le collègue.
+1. Sous **Personnes**, tapez dans **Rechercher des canaux et des personnes** pour trouver la ou le collègue.
 2. Appuyez sur son nom.
 3. Tenez **🎙 Hold to talk**, parlez et relâchez.
 
@@ -62,38 +64,82 @@ Quand une prise de parole arrive, une carte montre qui parle :
 2. Appuyez sur **🎙 Répondre** pour ouvrir le même canal et répondre, ou
 3. Appuyez sur **Busy, can't talk** pour faire savoir que vous avez entendu mais ne pouvez pas parler maintenant.
 
-## Ne pas déranger
+## Trouver quelqu’un rapidement
 
-1. Sur l’écran Walkie-talkie, trouvez la liste déroulante **Do not disturb**.
-2. Choisissez **For 1 hour**, **For 4 hours** ou **Until I turn it off**. La note à côté indique jusqu’à quand.
-3. Pour y mettre fin plus tôt, remettez la liste sur **Off**.
+- Tapez dans **Rechercher des canaux et des personnes** en haut de **Parler à** : canaux et noms se filtrent pendant
+  la saisie.
+- Les personnes sont regroupées par centre (administrateurs et responsables d’abord). Dans chaque groupe, les
+  personnes **présentes** viennent en premier : un point vert signifie pointé, un point bleu signifie que leur
+  téléphone écoute. L’en-tête du groupe indique combien sont présentes.
+- Appuyez sur un canal ou une personne pour le sélectionner. Son nom s’affiche au-dessus du bouton pour parler.
 
-Les prises de parole reçues pendant ce temps sont gardées dans **Historique** pour que vous les écoutiez plus tard. Le
-canal d’urgence joue quand même.
+## Sons radio
 
-## Réécouter (Historique)
+Comme une vraie radio bidirectionnelle, le walkie émet des sons courts et discrets :
 
-1. Choisissez un canal ou une personne.
-2. Regardez sous **Historique** : chaque prise de parole indique **Quand**, **Qui**, **Durée** et ce qui s’est passé pour vous : **Heard**, **Busy**, **Do not disturb**, **Not on shift** (arrivée alors que votre téléphone n’écoute que pendant vos heures pointées) ou **Not played**.
-3. Appuyez sur **▶ Play** pour réécouter.
+| Son | Quand |
+|---|---|
+| Deux bips rapides montants | Vous avez appuyé et le canal est à vous : parlez |
+| Un bip « roger » et un court souffle | Vous avez relâché |
+| Un clic et un gazouillis montant | Quelqu’un commence à vous parler |
+| Un bip court et un léger souffle | La personne a terminé |
+| Trois bips urgents | Une prise de parole sur le canal d’urgence |
 
-Si c’est vous qui parliez, vous voyez aussi combien de personnes l’ont entendue et qui a répondu être occupé.
+Les sons ne jouent jamais par-dessus une voix. Désactivez-les avec **Sons du walkie** dans vos paramètres du walkie
+(ci-dessous). Le canal d’urgence bipe toujours.
 
-> 🔒 Les prises de parole sont chiffrées pendant l’envoi et conservées chiffrées, puis supprimées après le nombre de
-> jours choisi par votre agence (30 par défaut). Le journal d’audit garde qui a parlé à qui, quand et combien de
-> temps — jamais ce qui a été dit.
+## Vos paramètres du walkie (Ne pas déranger, Sons du walkie)
+
+Vos propres paramètres sont dans **Mes paramètres › Notifications › 📻 Walkie-talkie**. Sur l’écran du walkie,
+appuyez sur **⚙️ Mes paramètres du walkie** pour y aller directement.
+
+1. **Ne pas déranger** : choisissez **Pendant 1 heure**, **Pendant 4 heures** ou **Jusqu’à ce que je le désactive**.
+   La note en dessous indique jusqu’à quand. Remettez **Désactivé** pour l’arrêter plus tôt. Tant qu’il est actif,
+   l’écran du walkie affiche **🔕 Ne pas déranger est activé**.
+2. **Sons du walkie** : **Activés (bips radio)** ou **Désactivés**. Appuyez sur **▶ Essayer** pour les entendre.
+
+Les prises de parole reçues pendant Ne pas déranger sont gardées dans **Prises de parole récentes** pour être écoutées
+plus tard. Le canal d’urgence joue quand même.
+
+[[open: #settings?tab=notifications&sub=walkie | Ouvrir mes paramètres du walkie]]
+
+## Prises de parole récentes (réécouter)
+
+**Prises de parole récentes** liste celles que vous avez faites ou reçues, les plus récentes d’abord, regroupées par
+jour (**Aujourd’hui**, **Hier**, puis la date). Chacune indique qui a parlé → à qui (une personne ou un canal), il y a
+combien de temps, l’heure et la durée.
+
+- **Nouveau** et un bord coloré marquent une prise de parole pas encore écoutée. Sur téléphone, le sélecteur
+  **Prises de parole récentes** en montre le nombre.
+- Appuyez sur **▶** pour l’écouter. Une barre se remplit pendant la lecture; appuyez sur **■** pour arrêter.
+- Appuyez sur **↩ Répondre** pour sélectionner cette personne (ou ce canal), puis maintenez le bouton pour parler.
+- Appuyez sur **⋮** pour le reste : **Ouvrir ce canal**, **Marquer comme écouté**, et pour vos propres prises de
+  parole, combien de personnes l’ont entendue.
+- Utilisez les pastilles pour filtrer : **Tout**, **À moi**, **Les miennes** ou **Ce canal** (celui choisi à gauche).
+- Cochez **Lire la suivante** pour lire automatiquement la suivante quand une se termine.
+
+Pour les prises de parole reçues, la ligne indique aussi ce qui s’est passé si elle n’a pas joué chez vous :
+**Occupé**, **Ne pas déranger** ou **Pas en service** (arrivée alors que votre téléphone n’écoute que pendant le
+service). Pour les vôtres, elle montre combien l’ont entendue sur combien de destinataires, et qui était occupé.
+
+> 🔒 Les prises de parole sont chiffrées pendant l’envoi et stockées chiffrées, puis supprimées après le nombre de jours
+> choisi par votre agence (30 par défaut). Le journal d’audit garde qui a parlé à qui, quand et combien de temps —
+> jamais ce qui a été dit.
 
 ## Paramètres de l’agence (administrateurs d’agence)
 
-Au bas de l’écran, **Paramètres de l’agence** (les changements s’enregistrent au fur et à mesure et sont notés au
-journal d’audit) :
+Les paramètres du walkie de l’agence sont dans **Paramètres › Notifications de l’agence › 📻 Walkie-talkie**. Sur
+l’écran du walkie, les administrateurs appuient sur **⚙️ Paramètres du walkie de l’agence** pour y aller directement.
+Les changements s’enregistrent aussitôt et sont inscrits au journal d’audit :
 
 - **Walkie-talkie** — activé ou désactivé pour l’agence.
-- **Phones listen** — **All the time (24/7)** ou **Only while clocked in**.
-- **Keep recordings for (days)** — durée de conservation des enregistrements.
-- **Emergency channel** — **Off** ou **On (always plays)**, son nom (**Emergency channel name**) et **Who can talk on
-  it** : **Directeurs et administrateurs** ou **Administrateurs seulement**.
-- **Educators can call** — **Staff at their own centres** ou **Anyone on staff in the agency**.
+- **Les téléphones écoutent** — **Tout le temps (24 h/24)** ou **Seulement pendant le service**.
+- **Garder les enregistrements (jours)**.
+- **Canal d’urgence** — **Désactivé** ou **Activé (joue toujours)**, son **Nom du canal d’urgence** et **Qui peut y
+  parler** : **Directions et administrateurs** ou **Administrateurs seulement**.
+- **Les éducatrices peuvent appeler** — **Le personnel de leurs centres** ou **Tout le personnel de l’agence**.
+
+[[open: #notification-settings?tab=walkie | Ouvrir les paramètres du walkie de l’agence]]
 
 ## Qui peut faire quoi
 
@@ -106,7 +152,7 @@ journal d’audit) :
 
 ## Questions et problèmes
 
-??? « The walkie-talkie is switched off for your agency. » | Un administrateur d’agence l’active dans Paramètres de l’agence, au bas de cet écran.
+??? « The walkie-talkie is switched off for your agency. » | Un administrateur d’agence l’active dans Paramètres › Notifications de l’agence › 📻 Walkie-talkie.
 ??? « Microphone blocked » ou « Allow the microphone for KiddieTrac to talk. » | Le navigateur ou le téléphone a refusé le micro. Autorisez-le dans les permissions du site ou de l’appli, puis réessayez.
 ??? « Someone is talking » quand j’appuie sur le bouton. | Une personne parle à la fois par canal. Attendez qu’elle ait fini, puis tenez de nouveau le bouton.
 ??? Je ne peux pas parler sur un canal. | Il affiche Listen only : votre rôle peut entendre ce canal, mais pas y parler.

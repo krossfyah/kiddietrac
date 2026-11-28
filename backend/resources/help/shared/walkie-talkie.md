@@ -15,8 +15,9 @@ agency's own staff only. Parents are never on it.
 [[open: #walkie | Open Walkie-talkie]]
 
 Find it under **Operations › Walkie-talkie** (admins and directors) or **Walkie-talkie** in your menu (educators and
-home visitors). The screen has **Channels** and **People** on the left, the talk button in the middle and **History**
-underneath.
+home visitors). The screen fits your window: **Talk to** on the left (search, channels, then people by centre), the
+talk button top right, and **Recent talks** under it. Each list scrolls on its own, so the talk button never moves. On
+a phone, the talk button stays at the top and a switch below it shows **Talk to** or **Recent talks**.
 
 ## Talking on a channel
 
@@ -32,7 +33,7 @@ moment and try again. A talk stops by itself after one minute.
 
 ## Talking to one person
 
-1. Under **People**, type in **Search names** to find the colleague.
+1. Under **People**, type in **Search channels and people** to find the colleague.
 2. Press their name.
 3. Hold **🎙 Hold to talk**, speak, and let go.
 
@@ -63,28 +64,66 @@ When a talk arrives, a card shows who is talking:
 2. Press **🎙 Reply** to open the same channel and answer, or
 3. Press **Busy, can't talk** to let the speaker know you heard but cannot talk right now.
 
-## Do not disturb
+## Finding someone quickly
 
-1. On the Walkie-talkie screen, find the **Do not disturb** drop-down.
-2. Choose **For 1 hour**, **For 4 hours** or **Until I turn it off**. The note beside it says until when.
-3. To end it early, set the drop-down back to **Off**.
+- Type in **Search channels and people** at the top of **Talk to**: channels and names filter as you type.
+- People are grouped by centre (admins and leaders first). In each group, people **on now** come first: a green dot
+  means clocked in, a blue dot means their phone is listening. The group header shows how many are on now.
+- Press a channel or a person to select it. Its name shows above the talk button.
 
-Talks sent to you while it is on are kept in **History** so you can listen later. The emergency channel still plays.
+## Radio sounds
 
-## Listening again (History)
+Like a real two-way radio, the walkie makes short, quiet sounds:
 
-1. Select a channel or person.
-2. Look under **History**: each talk shows **When**, **Who**, **Length** and what happened to you: **Heard**, **Busy**, **Do not disturb**, **Not on shift** (it arrived while your phone only listens when clocked in) or **Not played**.
-3. Press **▶ Play** to listen again.
+| Sound | When |
+|---|---|
+| Two quick rising beeps | You pressed and the channel is yours: start talking |
+| A "roger" beep and a short hiss | You let go |
+| A click and a rising chirp | Someone starts talking to you |
+| A short beep and a soft hiss | They finished |
+| Three urgent beeps | A talk on the emergency channel |
 
-If you were the speaker, you also see how many people heard it and who said they were busy.
+The sounds never play over a voice. Turn them off with **Walkie sounds** in your walkie settings (below). The emergency
+channel always beeps.
+
+## Your walkie settings (Do not disturb, Walkie sounds)
+
+Your own settings are in **My settings › Notifications › 📻 Walkie-talkie**. On the walkie screen, press
+**⚙️ My walkie settings** to go straight there.
+
+1. **Do not disturb**: choose **For 1 hour**, **For 4 hours** or **Until I turn it off**. The note under it says
+   until when. Set it back to **Off** to end it early. While it is on, the walkie screen shows **🔕 Do not disturb is on**.
+2. **Walkie sounds**: **On (radio beeps)** or **Off**. Press **▶ Try** to hear them.
+
+Talks sent to you while Do not disturb is on are kept in **Recent talks** so you can listen later. The emergency
+channel still plays.
+
+[[open: #settings?tab=notifications&sub=walkie | Open my walkie settings]]
+
+## Recent talks (listen again)
+
+**Recent talks** lists the talks you gave or were sent, newest first, grouped by day (**Today**, **Yesterday**, then
+the date). Each one shows who talked → to whom (a person or a channel), how long ago, the time and the length.
+
+- **New** and a coloured edge mark a talk you have not heard yet. The **Recent talks** switch on a phone shows how many.
+- Press **▶** to play it. A bar under the talk fills as it plays; press **■** to stop.
+- Press **↩ Talk back** to select that person (or channel), then hold the talk button.
+- Press **⋮** for the rest: **Open this channel**, **Mark as heard**, and for your own talks how many heard it.
+- Use the chips to narrow the list: **All**, **To me**, **Mine** or **This channel** (the one selected on the left).
+- Tick **Play next** to play the next talk in the list automatically when one ends.
+
+For talks you received, the line also says what happened if it did not play for you: **Busy**, **Do not disturb** or
+**Not on shift** (it arrived while your phone only listens when clocked in). For your own talks it shows how many heard
+it out of how many it was sent to, and who said they were busy.
 
 > 🔒 Talks are encrypted on the way and stored encrypted, then deleted after the number of days your agency chose (30
 > by default). The audit log keeps who talked to whom, when and for how long — never what was said.
 
 ## Agency settings (agency admins)
 
-At the bottom of the screen, **Agency settings** (changes save as you make them and are recorded in the audit log):
+The agency's walkie settings are in **Settings › Agency notifications › 📻 Walkie-talkie**. On the walkie screen,
+admins press **⚙️ Agency walkie settings** to go straight there. Changes save as you make them and are recorded in the
+audit log:
 
 - **Walkie-talkie** — on or off for the agency.
 - **Phones listen** — **All the time (24/7)** or **Only while clocked in**.
@@ -92,6 +131,8 @@ At the bottom of the screen, **Agency settings** (changes save as you make them 
 - **Emergency channel** — **Off** or **On (always plays)**, its **Emergency channel name**, and **Who can talk on
   it**: **Directors and admins** or **Admins only**.
 - **Educators can call** — **Staff at their own centres** or **Anyone on staff in the agency**.
+
+[[open: #notification-settings?tab=walkie | Open the agency walkie settings]]
 
 ## Who can do what
 
@@ -104,7 +145,7 @@ At the bottom of the screen, **Agency settings** (changes save as you make them 
 
 ## Questions and problems
 
-??? "The walkie-talkie is switched off for your agency." | An agency admin turns it on under Agency settings at the bottom of this screen.
+??? "The walkie-talkie is switched off for your agency." | An agency admin turns it on in Settings › Agency notifications › 📻 Walkie-talkie.
 ??? "Microphone blocked" or "Allow the microphone for KiddieTrac to talk." | Your browser or phone refused the microphone. Allow it in the site or app permissions, then try again.
 ??? "Someone is talking" when I press the button. | One person talks per channel. Wait until they finish, then hold the button again.
 ??? I can't talk on a channel. | It shows Listen only: your role can hear that channel but not talk on it.

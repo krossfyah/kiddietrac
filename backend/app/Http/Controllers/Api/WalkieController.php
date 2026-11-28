@@ -79,6 +79,10 @@ final class WalkieController extends Controller
             if (! \App\Support\LeakGuard::isCanaryUser($me)) $ids = array_values(array_filter($ids, fn ($i) => ! \App\Support\LeakGuard::isCanaryUser((int) $i)));
             $centres = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
             $guests = Walkie::guests($aid);
+            // Who is "on now" (the screen lists them first): clocked in, or a phone with the walkie listener.
+            $onShift = array_flip(Walkie::onShift($ids));
+            $listening = array_flip(DB::table('walkie_devices')->whereIn('user_id', $ids ?: [0])->whereNotNull('push_token')
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->all());
             $roles = [];
             foreach (DB::table('role_assignments')->whereIn('user_id', $ids ?: [0])->where('active', 1)->whereIn('role', Walkie::STAFF)
                 ->where(fn ($w) => $w->where('agency_id', $aid)->orWhereIn('centre_id', $centres->keys()->all() ?: [0]))->get(['user_id', 'role', 'centre_id']) as $r) {
@@ -92,7 +96,8 @@ final class WalkieController extends Controller
                 $f = $floor[$key] ?? null;
                 $people[] = ['id' => (int) $u->id, 'key' => $key, 'name' => trim((($u->preferred_name ?: $u->first_name) ?? '') . ' ' . ($u->last_name ?? '')),
                     'photo_url' => $u->photo_url, 'sex' => $u->sex, 'role' => in_array((int) $u->id, $guests, true) ? 'Super admin' : (self::ROLE_LABEL[$rs[0] ?? ''] ?? ''),
-                    'centres' => array_keys($roles[(int) $u->id]['c'] ?? []), 'talking' => $f && (int) $f->speaker_user_id !== $me ? Walkie::firstName((int) $f->speaker_user_id) : null];
+                    'centres' => array_keys($roles[(int) $u->id]['c'] ?? []), 'talking' => $f && (int) $f->speaker_user_id !== $me ? Walkie::firstName((int) $f->speaker_user_id) : null,
+                    'on_shift' => isset($onShift[(int) $u->id]), 'listening' => isset($listening[(int) $u->id])];
             }
         }
         $p = DB::table('walkie_prefs')->where('user_id', $me)->first();
@@ -317,7 +322,11 @@ final class WalkieController extends Controller
         return ['ok' => true];
     }
 
-    /** GET walkie/history?channel= - talks I gave or was sent, newest first (within the agency's retention). */
+    /**
+     * GET walkie/history?channel=&scope=all|to_me|mine - talks I gave or was sent, newest first (within the agency's
+     * retention). Each row carries what the "Recent talks" list shows: who (name, photo), to whom, how long ago,
+     * whether I have heard it, and the channel to talk back on (2026-11-27 redesign).
+     */
     public function history(Request $request): JsonResponse
     {
         [$aid, $me] = $this->ctx($request);
@@ -326,14 +335,31 @@ final class WalkieController extends Controller
                 ->whereColumn('r.transmission_id', 't.id')->where('r.user_id', $me)));
         $ch = (string) $request->query('channel', '');
         if ($ch !== '') $q->where('t.channel', $ch);
-        $rows = $q->orderByDesc('t.id')->limit(150)->get(['t.id', 't.channel', 't.channel_label', 't.speaker_user_id', 't.to_user_id', 't.emergency', 't.duration_ms', 't.recipients', 't.started_at']);
+        $scope = (string) $request->query('scope', 'all');
+        if ($scope === 'mine') $q->where('t.speaker_user_id', $me);
+        elseif ($scope === 'to_me') $q->where('t.speaker_user_id', '<>', $me);
+        $rows = $q->orderByDesc('t.started_at')->orderByDesc('t.id')->limit(150)->get(['t.id', 't.channel', 't.channel_label', 't.speaker_user_id', 't.to_user_id', 't.emergency', 't.duration_ms', 't.recipients', 't.started_at']);
         $ids = $rows->pluck('id')->all();
         $mine = DB::table('walkie_recipients')->whereIn('transmission_id', $ids ?: [0])->where('user_id', $me)->pluck('status', 'transmission_id');
         $stats = DB::table('walkie_recipients')->whereIn('transmission_id', $ids ?: [0])->select('transmission_id', 'status', DB::raw('count(*) n'))
             ->groupBy('transmission_id', 'status')->get()->groupBy('transmission_id');
+        $people = DB::table('users')->whereIn('id', $rows->pluck('speaker_user_id')->merge($rows->pluck('to_user_id'))->filter()->unique()->all() ?: [0])
+            ->get(['id', 'first_name', 'last_name', 'preferred_name', 'photo_url', 'sex'])->keyBy('id');
+        $nameOf = fn ($id) => ($u = $people[(int) $id] ?? null) ? trim((($u->preferred_name ?: $u->first_name) ?? '') . ' ' . ($u->last_name ?? '')) : '';
+        $nowTs = now()->getTimestamp();
         $out = [];
         foreach ($rows as $t) {
             $isMine = (int) $t->speaker_user_id === $me;
+            $sp = $people[(int) $t->speaker_user_id] ?? null;
+            $dm = $t->to_user_id ? Walkie::dmKey((int) $t->speaker_user_id, (int) $t->to_user_id) : null;
+            $myStatus = $mine[$t->id] ?? null;
+            $extra = [
+                'from_id' => (int) $t->speaker_user_id, 'from_name' => $nameOf($t->speaker_user_id), 'from_photo' => $sp->photo_url ?? null, 'from_sex' => $sp->sex ?? null,
+                'to_label' => $t->to_user_id ? ($isMine ? $nameOf($t->to_user_id) : 'You') : (string) $t->channel_label,
+                'back' => $isMine ? ($dm ?: (string) $t->channel) : Walkie::dmKey($me, (int) $t->speaker_user_id),
+                'played' => $isMine || in_array($myStatus, ['heard', 'busy'], true),
+                'ago_s' => max(0, $nowTs - \Carbon\Carbon::parse((string) $t->started_at, config('app.timezone'))->getTimestamp()),
+            ];
             $st = [];
             foreach ($stats[$t->id] ?? [] as $s) $st[$s->status] = (int) $s->n;
             $out[] = ['id' => (int) $t->id, 'channel' => $t->to_user_id ? Walkie::dmKey((int) $t->speaker_user_id, (int) $t->to_user_id) : $t->channel,
@@ -341,10 +367,11 @@ final class WalkieController extends Controller
                 'from' => $isMine ? 'You' : Walkie::fullName((int) $t->speaker_user_id), 'mine' => $isMine, 'emergency' => (bool) $t->emergency,
                 'seconds' => round((int) $t->duration_ms / 1000, 1), 'at' => self::local($t->started_at, $aid), 'my_status' => $mine[$t->id] ?? null,
                 'heard' => $isMine ? (($st['heard'] ?? 0) + ($st['busy'] ?? 0)) : null, 'busy' => $isMine ? ($st['busy'] ?? 0) : null,
-                'sent' => $isMine ? (int) $t->recipients : null];
+                'sent' => $isMine ? (int) $t->recipients : null] + $extra;
         }
 
-        return response()->json(['items' => $out, 'retention_days' => Walkie::settings($aid)['retention_days']]);
+        return response()->json(['items' => $out, 'retention_days' => Walkie::settings($aid)['retention_days'],
+            'today' => now()->setTimezone(\App\Support\AgencyTime::tz($aid))->format('Y-m-d')]);
     }
 
     /** GET walkie/tx/{id}/audio - the recording, for its speaker and the people it was sent to. Audited. */

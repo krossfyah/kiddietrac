@@ -26,7 +26,7 @@
     sel: null, replies: {}, card: null, timer: null, booted: false, worker: null, lastInbox: 0 };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function T(s) { try { return (KT.i18n && KT.i18n.t) ? KT.i18n.t(s) : s; } catch (e) { return s; } }
+  function T(s, c) { try { return (KT.i18n && KT.i18n.t) ? KT.i18n.t(s, c) : s; } catch (e) { return s; } }   // c = context key ('walkie' -> 'walkie::Play')
   function toast(i, t, m, c) { try { KT.toast && KT.toast(i, T(t), m ? T(m) : '', c); } catch (e) {} }
   function api() { return KT.Api; }
   function errMsg(e) { var m = (e && ((e.data && e.data.message) || e.message)) || ''; return m && !/fetch|network|undefined|null|status \d/i.test(m) ? m : 'That did not work. Please try again.'; }
@@ -162,7 +162,7 @@
       var playHere = !S.nativeOn && isLeader() && !!c && !!(w.crypto && w.crypto.subtle);
       var card = showCard(t, playHere && !unlocked());
       var stop = false, done = false, key = null, heard = false;
-      function finish() { if (done) return; done = true; setTimeout(function () { if (S.card && S.card.t === t) hideCard(); resolve(); }, 900); }
+      function finish() { if (done) return; done = true; setTimeout(function () { if (S.card && S.card.t === t) hideCard(); if (S.view && d.querySelector('[data-wt-hist]')) S.view.history(); resolve(); }, 900); }
       function markHeard(busy) { if (heard && !busy) return; heard = true; api().post('/walkie/tx/' + t.id + '/heard', { busy: !!busy }, { quiet: true }).catch(function () {}); }
       card.addEventListener('click', function (e) {
         var b = e.target.closest('[data-wt]'); if (!b) return;
@@ -332,17 +332,41 @@
       + '#kt-wt-card.em{border-left-color:#DC2626;}#kt-wt-card .wt-ch{font-size:12px;font-weight:800;color:#0E7490;text-transform:uppercase;letter-spacing:.04em;}#kt-wt-card.em .wt-ch{color:#B91C1C;}'
       + '#kt-wt-card .wt-who{margin:4px 0 9px;font-size:15px;}#kt-wt-card .wt-act{display:flex;gap:6px;flex-wrap:wrap;}#kt-wt-card .btn{height:30px;padding:0 10px;font-size:13px;}'
       + '@media (max-width:760px){#kt-wt-card{bottom:calc(env(safe-area-inset-bottom,0px) + 84px);}}'
-      + '.wt-wrap{display:grid;grid-template-columns:minmax(240px,320px) 1fr;gap:14px;align-items:start;}@media (max-width:860px){.wt-wrap{grid-template-columns:1fr;}}'
-      + '.wt-list{background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}.wt-list h3{margin:0;padding:9px 12px;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;background:#F8FAFC;border-bottom:1px solid #E2E8F0;}'
-      + '.wt-row{display:flex;align-items:center;gap:9px;width:100%;padding:7px 12px;border:0;border-bottom:1px solid #F1F5F9;background:#fff;text-align:left;font-size:13.5px;cursor:pointer;min-height:38px;}.wt-row:hover{background:#F0FAFC;}.wt-row.on{background:#E0F4F7;box-shadow:inset 3px 0 0 #159FB4;}'
-      + '.wt-row .wt-sub{font-size:12px;color:#64748B;}.wt-row .wt-live{margin-left:auto;font-size:11.5px;font-weight:700;color:#B45309;white-space:nowrap;}.wt-row .wt-ico{width:26px;text-align:center;font-size:17px;}'
-      + '.wt-scroll{max-height:calc(100vh - 330px);min-height:180px;overflow:auto;}.wt-q{margin:8px 10px;width:calc(100% - 20px);height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 9px;font-size:13px;}'
-      + '.wt-main{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px;}.wt-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}.wt-head h2{margin:0;font-size:18px;}'
-      + '.wt-ptt{display:flex;flex-direction:column;align-items:center;gap:8px;margin:18px 0 14px;}'
-      + '.wt-btn{width:148px;height:148px;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,#2DB3C7,#0E5A75);color:#fff;font-size:44px;box-shadow:0 10px 26px rgba(14,90,117,.35);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s;}'
+      + '.wt-wrap{display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:12px;height:560px;min-height:0;}'
+      + '.wt-list{display:flex;flex-direction:column;min-height:0;background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}'
+      + '.wt-lhead{padding:8px;border-bottom:1px solid #E2E8F0;background:#F8FAFC;flex:0 0 auto;}.wt-q{display:block;width:100%;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 9px;font-size:13px;box-sizing:border-box;}'
+      + '.wt-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#CBD5E1 transparent;}.wt-scroll::-webkit-scrollbar{width:6px;}.wt-scroll::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:6px;}'
+      + '.wt-gh{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;gap:6px;padding:6px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;background:#F1F7F9;border-bottom:1px solid #E2E8F0;}.wt-gn{font-weight:700;color:#64748B;text-transform:none;letter-spacing:0;white-space:nowrap;}'
+      + '.wt-row{display:flex;align-items:center;gap:9px;width:100%;padding:5px 12px;border:0;border-bottom:1px solid #F1F5F9;background:#fff;text-align:left;font-size:13.5px;cursor:pointer;min-height:38px;}.wt-row:hover{background:#F0FAFC;}.wt-row.on{background:#E0F4F7;box-shadow:inset 3px 0 0 #159FB4;}'
+      + '.wt-rt{display:flex;flex-direction:column;min-width:0;flex:1;}.wt-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wt-sub{font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.wt-row .wt-live{margin-left:auto;font-size:11.5px;font-weight:700;color:#B45309;white-space:nowrap;}.wt-ico{width:26px;text-align:center;font-size:17px;flex:0 0 26px;}'
+      + '.wt-av{position:relative;display:inline-flex;flex:0 0 auto;}.wt-dot{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:#16A34A;border:2px solid #fff;}.wt-dot.ph{background:#159FB4;}'
+      + '.wt-empty{padding:12px;font-size:13px;color:#64748B;}'
+      + '.wt-right{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;}'
+      + '.wt-talk{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;flex:0 0 auto;}'
+      + '.wt-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}.wt-head h2{margin:0;font-size:17px;}.wt-state{font-size:13px;font-weight:700;color:#B45309;}'
+      + '.wt-ptt{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0 4px;}'
+      + '.wt-btn{width:120px;height:120px;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,#2DB3C7,#0E5A75);color:#fff;font-size:40px;box-shadow:0 10px 26px rgba(14,90,117,.35);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s;}'
       + '.wt-btn:active,.wt-btn.on{transform:scale(.96);background:radial-gradient(circle at 35% 30%,#F87171,#B91C1C);box-shadow:0 0 0 10px rgba(220,38,38,.15),0 10px 26px rgba(185,28,28,.35);}.wt-btn[disabled]{opacity:.45;cursor:not-allowed;}'
-      + '.wt-state{font-size:14px;font-weight:700;color:#0F172A;min-height:20px;text-align:center;}.wt-hint{font-size:12.5px;color:#64748B;text-align:center;max-width:520px;}'
-      + '.wt-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin-bottom:10px;}.wt-bar select,.wt-bar .btn{height:30px;font-size:13px;}'
+      + '.wt-hint{font-size:12px;color:#64748B;text-align:center;}.wt-tip{cursor:help;color:#64748B;font-size:13px;}'
+      + '.wt-recent{display:flex;flex-direction:column;flex:1;min-height:0;background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}'
+      + '.wt-rhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;border-bottom:1px solid #E2E8F0;background:#F8FAFC;flex:0 0 auto;}.wt-rt-title{font-size:13px;}'
+      + '.wt-chips{display:flex;gap:4px;flex-wrap:wrap;}.wt-wrap .wt-chips button.wt-chip{height:26px;min-height:0;padding:0 10px;border-radius:13px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;line-height:24px;font-weight:600;color:#334155;cursor:pointer;box-shadow:none;}.wt-wrap .wt-chips button.wt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}'
+      + '.wt-auto{margin-left:auto;font-size:12.5px;color:#334155;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;}'
+      + '.wt-day{position:sticky;top:0;z-index:1;padding:5px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#475569;background:#F8FAFC;border-bottom:1px solid #EEF2F6;}'
+      + '.wt-msg{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 12px;border-bottom:1px solid #F1F5F9;}.wt-msg:hover{background:#F0FAFC;}.wt-msg.new{box-shadow:inset 3px 0 0 #159FB4;background:#F5FBFC;}.wt-msg.new .wt-m1 b{font-weight:800;}.wt-msg.em{box-shadow:inset 3px 0 0 #DC2626;}'
+      + '.wt-mb{flex:1;min-width:0;}.wt-m1{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wt-m1 b{font-weight:600;}.wt-to{color:#94A3B8;}.wt-m2{font-size:12px;color:#64748B;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.wt-new{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;background:#159FB4;color:#fff;font-size:10.5px;font-weight:800;vertical-align:1px;}'
+      + '.wt-prog{height:3px;border-radius:2px;margin-top:4px;overflow:hidden;}.wt-msg.playing .wt-prog{background:#E2E8F0;}.wt-prog i{display:block;height:100%;width:0;background:#159FB4;}'
+      + '.wt-play{flex:0 0 36px;width:36px;height:36px;min-height:0;padding:0;border-radius:50%;border:0;background:#0E7490;color:#fff;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}.wt-play:hover{background:#0B5F75;}.wt-msg.playing .wt-play{background:#B91C1C;}'
+      + '.wt-back{flex:0 0 30px;width:30px;height:30px;min-height:0;padding:0;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#0E7490;font-size:15px;cursor:pointer;}.wt-back:hover{background:#F0FAFC;}.wt-back-sp{flex:0 0 30px;}'
+      + '.wt-more{flex:0 0 28px;width:28px;height:30px;min-height:0;padding:0;border:0;background:none;font-size:18px;color:#475569;cursor:pointer;border-radius:8px;}.wt-more:hover{background:#F1F5F9;}'
+      + '.wt-badge{display:inline-block;min-width:16px;padding:0 5px;border-radius:8px;background:#DC2626;color:#fff;font-size:11px;line-height:16px;}.wt-badge[hidden]{display:none;}'
+      + '.wt-seg{display:none;}'
+      + '@media (max-width:860px){.wt-wrap{display:flex;flex-direction:column;gap:8px;}.wt-right{display:contents;}.wt-talk{order:1;padding:8px 12px;}'
+      + '.wt-seg{order:2;display:flex;gap:4px;background:#EEF2F6;border-radius:10px;padding:3px;flex:0 0 auto;}.wt-seg button{flex:1;height:32px;min-height:0;border:0;border-radius:8px;background:none;font-size:13.5px;font-weight:700;color:#475569;}.wt-seg button.on{background:#fff;color:#0E7490;box-shadow:0 1px 3px rgba(15,23,42,.12);}'
+      + '.wt-list,.wt-recent{order:3;flex:1;min-height:0;}.wt-wrap:not(.show-recent) .wt-recent{display:none;}.wt-wrap.show-recent .wt-list{display:none;}'
+      + '.wt-btn{width:88px;height:88px;font-size:30px;}.wt-ptt{margin:4px 0 2px;}.wt-hint{display:none;}.wt-head h2{font-size:15px;}.wt-talk .wt-links{margin:2px 0 0;font-size:12.5px;gap:10px;}.wt-rhead .wt-rt-title{display:none;}}'
       + '.wt-sec{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;margin:16px 0 8px;}'
       + '.wt-set{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr));gap:10px;}.wt-set label{display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;}.wt-set select,.wt-set input[type=text],.wt-set input[type=number]{width:100%;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:13px;}'
       + '.wt-note{font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;margin-top:10px;}'
@@ -364,6 +388,59 @@
     load().then(function (r) { draw(main, body, r); }, function (e) { body.innerHTML = '<div class="wt-note">' + esc(T(errMsg(e))) + '</div>'; });
   }
 
+  /* THE SCREEN (redesigned 2026-11-27, Anthony: "the list of all users gets too long can you make this scrollable
+     within the view and the table with the recorded walkie talkie needs to be redesigned to look better (things need
+     to be quick and easy to use here)").
+       - The screen fits the window (fit()): nothing below the talk button pushes it away. Each list scrolls inside
+         its own panel (one scroll region each, slim bar); the page itself does not scroll.
+       - LEFT "Talk to": one search box for channels and people, then Channels, then People grouped by centre under
+         sticky headers, people on shift or with the phone listening first (green dot / 📱). Tap = select.
+       - RIGHT: the talk panel (who is selected, the 🎙 button), then "Recent talks": a message-style list grouped by
+         day, newest first; each talk = who → to whom, "2 min ago", length, a big ▶ with its own progress bar,
+         ↩ Talk back, and ⋮ for the rest (KT.openActionMenu). Chips: All · To me · Mine · This channel; "Play next".
+         New (not yet heard) talks are marked.
+       - PHONE (≤860px): the talk panel stays on top and small; under it a two-way switch, Talk to | Recent talks,
+         shows one list at a time in the space left. */
+  var HSCOPE = 'all';
+  function ago(s) {
+    s = +s || 0;
+    if (s < 45) return T('just now');
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' ' + T('min ago');
+    if (s < 86400) return Math.round(s / 3600) + ' ' + T('h ago');
+    return '';
+  }
+  function hm(s) { var m = /[ T](\d{2}):(\d{2})/.exec(s || ''); if (!m) return ''; var h = +m[1]; return (h % 12 || 12) + ':' + m[2] + ' ' + (h >= 12 ? 'PM' : 'AM'); }
+  function dayLabel(date, today) {
+    if (date === today) return T('Today');
+    var t = new Date(today + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() - 1);
+    if (date === t.toISOString().slice(0, 10)) return T('Yesterday');
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date); if (!m) return date;
+    var dd = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12));
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dd.getUTCDay()] + ', ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + (+m[3]);
+  }
+  /* The fixed bars along the bottom of the window (the phone bar, which educators also get on a computer). */
+  function bottomInset() {
+    var h = 0, H = w.innerHeight, W = w.innerWidth;
+    [].slice.call(d.body.children).forEach(function (el) {
+      [el].concat([].slice.call(el.children || [])).forEach(function (x) {
+        if (!x.getBoundingClientRect || x.id === 'kt-wt-card') return;
+        var cs = w.getComputedStyle(x); if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') return;
+        var r = x.getBoundingClientRect();
+        if (r.height > 0 && r.height < 160 && r.width > W * 0.6 && r.bottom >= H - 2) h = Math.max(h, H - r.top);
+      });
+    });
+    return h;
+  }
+  function fitWrap(wrap) {
+    if (!wrap || !d.body.contains(wrap)) return;
+    var top = wrap.getBoundingClientRect().top + (w.scrollY || 0) - (w.scrollY || 0);
+    var phone = w.innerWidth <= 860;
+    var min = phone ? 430 : 470, hgt = Math.max(min, Math.floor(w.innerHeight - Math.max(0, top) - bottomInset() - 10));
+    wrap.style.height = hgt + 'px';
+    var se = d.scrollingElement || d.documentElement, over = se.scrollHeight - w.innerHeight;
+    if (over > 0 && hgt > min) wrap.style.height = Math.max(min, hgt - over) + 'px';   // main's own bottom padding (room for the phone bar)
+  }
+
   function draw(main, body, r) {
     if (!r.enabled) {
       body.innerHTML = '<div class="wt-note">' + esc(T('The walkie-talkie is switched off for your agency.')) + (r.can_admin ? '' : ' ' + esc(T('Ask an agency admin to turn it on.'))) + '</div>'
@@ -375,35 +452,62 @@
     r.people.forEach(function (p) { all[p.key] = { key: p.key, label: p.name, person: p, can_talk: true, talking: p.talking }; });
     var first = r.channels.filter(function (c) { return c.can_talk && !c.emergency; })[0] || r.channels[0] || null;
     S.sel = all[q.ch] ? q.ch : (S.sel && all[S.sel] ? S.sel : (first ? first.key : null));
-    if (q.play) setTimeout(function () { playClip(+q.play); }, 300);
+
+    // People by centre: the agency-wide people (admins, no centre) first, then each centre; on shift / listening first.
+    var groups = {}, order = [], LEAD = T('Admins and leaders');
+    r.people.forEach(function (p) { var g = (p.centres && p.centres[0]) || LEAD; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(p); });
+    order.sort(function (a, b) { return a === LEAD ? -1 : b === LEAD ? 1 : a.localeCompare(b); });
+    function up(p) { return p.on_shift || p.listening ? 0 : 1; }
     var chRows = r.channels.map(function (c) {
-      return '<button type="button" class="wt-row" data-ch="' + esc(c.key) + '"><span class="wt-ico">' + c.icon + '</span><span><span data-no-i18n>' + esc(c.label) + '</span>'
-        + (c.can_talk ? '' : '<div class="wt-sub">' + esc(T('Listen only')) + '</div>') + '</span>' + (c.talking ? '<span class="wt-live">' + esc(c.talking) + ' ' + esc(T('is talking')) + '</span>' : '') + '</button>';
+      return '<button type="button" class="wt-row" data-ch="' + esc(c.key) + '" data-name="' + esc(String(c.label).toLowerCase()) + '"><span class="wt-ico">' + c.icon + '</span><span class="wt-rt"><span class="wt-nm" data-no-i18n>' + esc(c.label) + '</span>'
+        + (c.can_talk ? '' : '<span class="wt-sub">' + esc(T('Listen only')) + '</span>') + '</span>' + (c.talking ? '<span class="wt-live">' + esc(c.talking) + ' ' + esc(T('is talking')) + '</span>' : '') + '</button>';
     }).join('');
-    var pRows = r.people.map(function (p) {
-      return '<button type="button" class="wt-row" data-ch="' + esc(p.key) + '" data-name="' + esc(String(p.name).toLowerCase()) + '">' + avatar(p) + '<span><span data-no-i18n>' + esc(p.name) + '</span><div class="wt-sub">'
-        + esc(T(p.role || '')) + (p.centres && p.centres.length ? ' · <span data-no-i18n>' + esc(p.centres.join(', ')) + '</span>' : '') + '</div></span>' + (p.talking ? '<span class="wt-live">' + esc(T('talking')) + '</span>' : '') + '</button>';
+    var pRows = order.map(function (g) {
+      var list = groups[g].slice().sort(function (a, b) { return up(a) - up(b) || String(a.name).localeCompare(String(b.name)); });
+      var on = list.filter(function (p) { return up(p) === 0; }).length;
+      return '<div class="wt-grp" data-grp><div class="wt-gh"><span data-no-i18n>' + esc(g) + '</span><span class="wt-gn">' + (on ? on + ' ' + esc(T('on now')) + ' · ' : '') + list.length + '</span></div>'
+        + list.map(function (p) {
+          var st = p.on_shift ? T('On shift') : (p.listening ? T('Phone listening') : '');
+          return '<button type="button" class="wt-row" data-ch="' + esc(p.key) + '" data-name="' + esc(String(p.name).toLowerCase()) + '"><span class="wt-av">' + avatar(p) + (up(p) === 0 ? '<i class="wt-dot' + (p.on_shift ? '' : ' ph') + '"></i>' : '') + '</span>'
+            + '<span class="wt-rt"><span class="wt-nm" data-no-i18n>' + esc(p.name) + '</span><span class="wt-sub">' + esc(T(p.role || '')) + (st ? ' · ' + esc(st) : '') + '</span></span>'
+            + (p.talking ? '<span class="wt-live">' + esc(T('talking')) + '</span>' : '') + '</button>';
+        }).join('') + '</div>';
     }).join('');
-    var nativeNote = native() ? T('This phone listens all the time, even with the screen off, unless you turn on Do not disturb.')
+    var tipNote = native() ? T('This phone listens all the time, even with the screen off, unless you turn on Do not disturb.')
       : (/iPhone|iPad/.test(navigator.userAgent) ? T('On iPhone, talks arrive as a notification: tap it to listen.') : T('In a browser you hear talks only while a KiddieTrac tab is open. The Android app listens all the time.'));
-    body.innerHTML = '<div class="wt-wrap"><div class="wt-list"><h3>' + esc(T('Channels')) + '</h3>' + chRows
-      + '<h3>' + esc(T('People')) + '</h3><input class="wt-q" type="search" data-wtq placeholder="' + esc(T('Search names')) + '"><div class="wt-scroll">' + (pRows || '<div class="wt-sub" style="padding:10px 12px;">' + esc(T('Nobody to call yet.')) + '</div>') + '</div></div>'
-      + '<div class="wt-main"><div class="wt-head"><h2 data-wt-title data-no-i18n></h2></div>'
-      + '<div class="wt-ptt"><button type="button" class="wt-btn" data-wt-ptt aria-label="' + esc(T('Hold to talk')) + '">🎙</button><div class="wt-state" data-wt-state></div>'
+    var chip = function (k, l) { return '<button type="button" class="wt-chip" data-scope="' + k + '">' + esc(T(l)) + '</button>'; };
+    body.innerHTML = '<div class="wt-wrap" data-i18n-ctx="walkie" data-kt-nofill>'
+      + '<div class="wt-list"><div class="wt-lhead"><input class="wt-q" type="search" data-wtq placeholder="' + esc(T('Search channels and people')) + '"></div>'
+      + '<div class="wt-scroll" data-wt-lscroll><div class="wt-gh wt-ghc">' + esc(T('Channels')) + '</div>' + chRows
+      + (pRows || '<div class="wt-empty">' + esc(T('Nobody to call yet.')) + '</div>') + '<div class="wt-empty" data-wt-none hidden>' + esc(T('No match.')) + '</div></div></div>'
+      + '<div class="wt-right"><div class="wt-talk"><div class="wt-head"><h2 data-wt-title data-no-i18n></h2><span class="wt-state" data-wt-state></span></div>'
+      + '<div class="wt-ptt"><button type="button" class="wt-btn" data-wt-ptt aria-label="' + esc(T('Hold to talk')) + '">🎙</button>'
       + '<div class="wt-hint">' + esc(T('Hold to talk, let go to finish.')) + (matchMedia('(pointer:fine)').matches ? ' ' + esc(T('On a computer you can hold the spacebar.')) : '') + '</div></div>'
       + '<div class="wt-links">' + (r.prefs && r.prefs.dnd ? '<span class="wt-dndon">🔕 ' + esc(T('Do not disturb is on')) + '</span>' : '')
-      + '<a href="' + MY_LINK + '">⚙️ ' + esc(T('My walkie settings')) + '</a>' + (r.can_admin ? '<a href="' + AGENCY_LINK + '">⚙️ ' + esc(T('Agency walkie settings')) + '</a>' : '') + '</div>'
-      + '<div class="wt-note">' + esc(nativeNote) + ' ' + esc(T('The emergency channel always plays.')) + ' ' + esc(T('Talks are kept for')) + ' ' + (r.settings.retention_days || 30) + ' ' + esc(T('days, encrypted.')) + '</div>'
-      + '<div class="wt-sec">' + esc(T('History')) + '</div><div data-wt-hist></div></div></div>';
+      + '<a href="' + MY_LINK + '">⚙️ ' + esc(T('My walkie settings')) + '</a>' + (r.can_admin ? '<a href="' + AGENCY_LINK + '">⚙️ ' + esc(T('Agency walkie settings')) + '</a>' : '')
+      + '<span class="wt-tip" data-kttip="' + esc(tipNote + ' ' + T('The emergency channel always plays.') + ' ' + T('Talks are kept for') + ' ' + (r.settings.retention_days || 30) + ' ' + T('days, encrypted.')) + '">ⓘ</span></div></div>'
+      + '<div class="wt-seg" role="tablist"><button type="button" role="tab" data-seg="list">' + esc(T('Talk to')) + '</button><button type="button" role="tab" data-seg="recent">' + esc(T('Recent talks')) + ' <span class="wt-badge" data-wt-newn hidden></span></button></div>'
+      + '<div class="wt-recent"><div class="wt-rhead"><b class="wt-rt-title">' + esc(T('Recent talks')) + '</b><div class="wt-chips" data-kt-noband>' + chip('all', 'All') + chip('to_me', 'To me') + chip('mine', 'Mine') + chip('channel', 'This channel') + '</div>'
+      + '<label class="wt-auto"><input type="checkbox" data-wt-auto> ' + esc(T('Play next')) + '</label></div>'
+      + '<div class="wt-scroll" data-wt-hist></div></div></div></div>';
 
+    var wrap = body.querySelector('.wt-wrap');
     var title = body.querySelector('[data-wt-title]'), btn = body.querySelector('[data-wt-ptt]'), state = body.querySelector('[data-wt-state]');
+    var segView = 'list';
+    function seg(v) {
+      segView = v; wrap.classList.toggle('show-recent', v === 'recent');
+      body.querySelectorAll('[data-seg]').forEach(function (b) { var on = b.getAttribute('data-seg') === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    }
+    body.querySelectorAll('[data-seg]').forEach(function (b) { b.addEventListener('click', function () { seg(b.getAttribute('data-seg')); }); });
+    seg(q.play ? 'recent' : 'list');
     function select(k) {
       S.sel = k; var c = all[k];
       body.querySelectorAll('.wt-row').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-ch') === k); });
-      title.textContent = c ? ((c.icon ? c.icon + ' ' : '📻 ') + c.label) : '';
+      title.textContent = c ? ((c.icon ? c.icon + ' ' : '📻 ') + c.label) : T('Pick a channel or person');
       btn.disabled = !c || !c.can_talk;
-      state.textContent = c && !c.can_talk ? T('You can listen to this channel but not talk on it.') : (c && c.talking ? c.talking + ' ' + T('is talking') : '');
-      history();
+      state.textContent = c && !c.can_talk ? T('Listen only') : (c && c.talking ? c.talking + ' ' + T('is talking') : '');
+      var chc = body.querySelector('[data-scope="channel"]'); if (chc) chc.title = c ? c.label : '';
+      if (HSCOPE === 'channel') history();
     }
     var ui = { state: function (s, x) {
       btn.classList.toggle('on', s === 'live' || s === 'opening');
@@ -412,36 +516,122 @@
       else { clearInterval(ui._iv); state.textContent = x && x.duration_ms ? T('Sent') + ' · ' + (Math.round(x.duration_ms / 100) / 10) + 's' : ''; }
     } };
     function down(e) { if (btn.disabled || !S.sel) return; if (e) e.preventDefault(); talkStart(S.sel, ui); }
-    function up(e) { if (e) e.preventDefault(); talkEnd(); }
+    function upEv(e) { if (e) e.preventDefault(); talkEnd(); }
     btn.addEventListener('pointerdown', function (e) { try { btn.setPointerCapture(e.pointerId); } catch (x) {} down(e); });
-    btn.addEventListener('pointerup', up); btn.addEventListener('pointercancel', up);
+    btn.addEventListener('pointerup', upEv); btn.addEventListener('pointercancel', upEv);
     btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-    function kd(e) { if (e.code !== 'Space' || e.repeat || !d.body.contains(btn) || /INPUT|TEXTAREA|SELECT/.test((d.activeElement || {}).tagName || '') || (d.activeElement && d.activeElement.isContentEditable)) return; down(e); }
-    function ku(e) { if (e.code !== 'Space' || !d.body.contains(btn)) return; if (S.talk) up(e); }
+    function kd(e) { if (e.code !== 'Space' || e.repeat || !d.body.contains(btn) || /INPUT|TEXTAREA|SELECT|BUTTON/.test((d.activeElement || {}).tagName || '') || (d.activeElement && d.activeElement.isContentEditable)) return; down(e); }
+    function ku(e) { if (e.code !== 'Space' || !d.body.contains(btn)) return; if (S.talk) upEv(e); }
     if (S.keys) { d.removeEventListener('keydown', S.keys[0]); d.removeEventListener('keyup', S.keys[1]); }
     S.keys = [kd, ku]; d.addEventListener('keydown', kd); d.addEventListener('keyup', ku);
-    body.querySelectorAll('.wt-row').forEach(function (b) { b.addEventListener('click', function () { select(b.getAttribute('data-ch')); }); });
+    body.querySelectorAll('.wt-row').forEach(function (b) { b.addEventListener('click', function () { select(b.getAttribute('data-ch')); b.blur(); }); });
     var qi = body.querySelector('[data-wtq]');
-    qi.addEventListener('input', function () { var s = qi.value.trim().toLowerCase(); body.querySelectorAll('[data-name]').forEach(function (b) { b.style.display = !s || b.getAttribute('data-name').indexOf(s) >= 0 ? '' : 'none'; }); });
+    qi.addEventListener('input', function () {
+      var s = qi.value.trim().toLowerCase(), any = false;
+      body.querySelectorAll('[data-wt-lscroll] .wt-row').forEach(function (b) { var hit = !s || b.getAttribute('data-name').indexOf(s) >= 0; b.style.display = hit ? '' : 'none'; if (hit) any = true; });
+      body.querySelectorAll('[data-grp]').forEach(function (g) { g.style.display = [].some.call(g.querySelectorAll('.wt-row'), function (b) { return b.style.display !== 'none'; }) ? '' : 'none'; });
+      var cg = body.querySelector('.wt-ghc'); if (cg) cg.style.display = [].some.call(body.querySelectorAll('[data-wt-lscroll] > .wt-row'), function (b) { return b.style.display !== 'none'; }) ? '' : 'none';
+      body.querySelector('[data-wt-none]').hidden = any;
+    });
 
-    var hist = body.querySelector('[data-wt-hist]');
+    /* ---- Recent talks ---- */
+    var hist = body.querySelector('[data-wt-hist]'), auto = body.querySelector('[data-wt-auto]');
+    try { auto.checked = ls('kt_walkie_autonext') === '1'; } catch (e) {}
+    auto.addEventListener('change', function () { ls('kt_walkie_autonext', auto.checked ? '1' : null); });
+    function chips() { body.querySelectorAll('[data-scope]').forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-scope") === HSCOPE); }); /* class only: #appMain button[aria-pressed] is restyled by kt-consistency-polish */ }
+    body.querySelectorAll('[data-scope]').forEach(function (b) { b.addEventListener('click', function () { HSCOPE = b.getAttribute('data-scope'); chips(); history(); }); });
+    chips();
+    var items = [];
     function history() {
-      if (!S.sel) { hist.innerHTML = ''; return; }
-      hist.innerHTML = '<div class="wt-sub" style="font-size:13px;color:#64748B;">' + esc(T('Loading…')) + '</div>';
-      api().get('/walkie/history', { channel: S.sel }).then(function (h) {
-        var items = h.items || [];
-        if (!items.length) { hist.innerHTML = '<div class="wt-sub" style="font-size:13px;color:#64748B;">' + esc(T('Nothing said here yet.')) + '</div>'; return; }
-        hist.innerHTML = '<table class="table" data-kt-pretty style="width:100%;"><thead><tr><th>' + esc(T('When')) + '</th><th>' + esc(T('Who')) + '</th><th>' + esc(T('Length')) + '</th><th>' + esc(T('Heard')) + '</th><th></th></tr></thead><tbody>'
-          + items.map(function (it) {
-            var heard = it.mine ? (it.heard + ' / ' + it.sent + (it.busy ? ' · ' + it.busy + ' ' + T('busy') : '')) : ({ heard: T('Heard'), busy: T('Busy'), dnd: T('Do not disturb'), off_shift: T('Not on shift'), sent: T('Not played') }[it.my_status] || '');
-            return '<tr><td>' + esc(fmtWhen(it.at)) + '</td><td><span data-no-i18n>' + (it.emergency ? '🚨 ' : '') + esc(it.from) + '</span></td><td>' + it.seconds + 's</td><td>' + esc(heard) + '</td>'
-              + '<td><button type="button" class="btn" data-play="' + it.id + '">▶ ' + esc(T('Play')) + '</button></td></tr>';
-          }).join('') + '</tbody></table>';
-        hist.querySelectorAll('[data-play]').forEach(function (b) { b.addEventListener('click', function () { playClip(+b.getAttribute('data-play')); }); });
+      var params = { scope: HSCOPE === 'channel' ? 'all' : HSCOPE };
+      if (HSCOPE === 'channel') { if (!S.sel) { hist.innerHTML = ''; return; } params.channel = S.sel; }
+      if (!hist.children.length) hist.innerHTML = '<div class="wt-empty">' + esc(T('Loading…')) + '</div>';
+      api().get('/walkie/history', params).then(function (h) {
+        items = h.items || [];
+        var fresh = items.filter(function (it) { return !it.mine && !it.played; }).length, badge = body.querySelector('[data-wt-newn]');
+        if (badge) { badge.hidden = !fresh; badge.textContent = fresh; }
+        if (!items.length) { hist.innerHTML = '<div class="wt-empty">' + esc(T(HSCOPE === 'all' ? 'No talks yet. Hold the button to say something.' : 'Nothing here yet.')) + '</div>'; return; }
+        var day = null, out = '';
+        items.forEach(function (it) {
+          var dd = String(it.at || '').slice(0, 10);
+          if (dd !== day) { day = dd; out += '<div class="wt-day">' + esc(dayLabel(dd, h.today)) + '</div>'; }
+          var fresh1 = !it.mine && !it.played, a = ago(it.ago_s);
+          var meta = [a, hm(it.at), it.seconds + 's'];
+          if (it.mine) meta.push(T('Heard') + ' ' + it.heard + '/' + it.sent + (it.busy ? ' · ' + it.busy + ' ' + T('busy') : ''));
+          else if (it.my_status && it.my_status !== 'heard' && it.my_status !== 'sent') meta.push({ busy: T('Busy'), dnd: T('Do not disturb'), off_shift: T('Not on shift') }[it.my_status] || '');
+          out += '<div class="wt-msg' + (fresh1 ? ' new' : '') + (it.emergency ? ' em' : '') + '" data-id="' + it.id + '">'
+            + '<span class="wt-av">' + avatar({ name: it.from_name, photo_url: it.from_photo, sex: it.from_sex, id: it.from_id }) + '</span>'
+            + '<div class="wt-mb"><div class="wt-m1"><b data-no-i18n>' + (it.emergency ? '🚨 ' : '') + esc(it.mine ? T('You') : it.from_name) + '</b> <span class="wt-to">→</span> <span data-no-i18n>' + esc(it.to_label) + '</span>' + (fresh1 ? '<span class="wt-new">' + esc(T('New')) + '</span>' : '') + '</div>'
+            + '<div class="wt-m2">' + meta.filter(Boolean).map(esc).join(' · ') + '</div><div class="wt-prog"><i></i></div></div>'
+            + '<button type="button" class="wt-play" data-play aria-label="' + esc(T('Play', 'walkie')) + '" data-kttip="' + esc(T('Play', 'walkie')) + '">▶</button>'
+            + (it.back ? '<button type="button" class="wt-back" data-back data-kttip="' + esc(T('Talk back')) + '" aria-label="' + esc(T('Talk back')) + '">↩</button>' : '<span class="wt-back-sp"></span>')
+            + '<button type="button" class="kt-ka-kebab wt-more" data-more aria-label="' + esc(T('More')) + '">⋮</button></div>';
+        });
+        hist.innerHTML = out;
       }, function (e) { hist.innerHTML = '<div class="wt-note">' + esc(T(errMsg(e))) + '</div>'; });
+    }
+    hist.addEventListener('click', function (e) {
+      var row = e.target.closest('.wt-msg'); if (!row) return;
+      var it = items.filter(function (x) { return String(x.id) === row.getAttribute('data-id'); })[0]; if (!it) return;
+      if (e.target.closest('[data-play]')) return playRow(row, it);
+      if (e.target.closest('[data-back]')) return talkBack(it);
+      if (e.target.closest('[data-more]')) {
+        var mk = function (l, fn) { var b = d.createElement('button'); b.type = 'button'; b.textContent = l; b.addEventListener('click', fn); return b; };
+        var acts = [mk('▶ ' + T('Play', 'walkie'), function () { playRow(row, it); })];
+        if (it.back) acts.push(mk('↩ ' + T('Talk back'), function () { talkBack(it); }));
+        if (all[it.channel] && it.channel !== S.sel) acts.push(mk('📻 ' + T('Open this channel'), function () { select(it.channel); seg('list'); }));
+        if (!it.mine && !it.played) acts.push(mk('✓ ' + T('Mark as heard'), function () {
+          api().post('/walkie/tx/' + it.id + '/heard', { busy: false }, { quiet: true }).then(function () { it.played = true; row.classList.remove('new'); var n = row.querySelector('.wt-new'); if (n) n.remove(); });
+        }));
+        if (it.mine) acts.push(mk('👂 ' + T('Heard by') + ' ' + it.heard + ' / ' + it.sent + (it.busy ? ' · ' + it.busy + ' ' + T('busy') : ''), function () {}));
+        if (KT.openActionMenu) KT.openActionMenu(e.target.closest('[data-more]'), acts);
+      }
+    });
+    function talkBack(it) {
+      if (!all[it.back]) { toast('📻', 'You cannot call them from here', '', '#B45309'); return; }
+      select(it.back); seg('list');
+      var row = body.querySelector('.wt-row[data-ch="' + it.back.replace(/"/g, '') + '"]'); if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+      toast('📻', 'Hold the button to talk back', '', '#0E7490');
+    }
+    function playRow(row, it) {
+      if (S.clip && S.clip.row === row) { stopClip(); return; }
+      stopClip();
+      var c = ctx(); if (!c) return;
+      var bt = row.querySelector('[data-play]'), bar = row.querySelector('.wt-prog i');
+      var me = S.clip = { row: row, srcs: [], raf: 0 };
+      row.classList.add('playing'); bt.textContent = '■';
+      api().get('/walkie/tx/' + it.id + '/audio').then(function (a) {
+        if (S.clip !== me) return;
+        var u = unb64(a.data || ''); if (!u.length) { stopClip(); return; }
+        var t0 = sound(c, 'rx', c.currentTime + 0.05) + 0.04;
+        var buf = c.createBuffer(1, u.length, RATE), ch = buf.getChannelData(0);
+        for (var i = 0; i < u.length; i++) ch[i] = DEC[u[i]];
+        var src = c.createBufferSource(); src.buffer = buf; src.connect(c.destination); src.start(t0); me.srcs.push(src);
+        var t1 = t0 + buf.duration; sound(c, 'rxEnd', t1 + 0.03);
+        if (!it.mine && !it.played) { it.played = true; row.classList.remove('new'); var n = row.querySelector('.wt-new'); if (n) n.remove(); }
+        (function tick() {
+          if (S.clip !== me) return;
+          var p = Math.max(0, Math.min(1, (c.currentTime - t0) / (t1 - t0)));
+          bar.style.width = (p * 100) + '%';
+          if (c.currentTime < t1 + 0.1) { me.raf = requestAnimationFrame(tick); return; }
+          stopClip();
+          if (auto.checked) { var nx = row.nextElementSibling; while (nx && !nx.classList.contains('wt-msg')) nx = nx.nextElementSibling; if (nx) nx.querySelector('[data-play]').click(); }
+        })();
+      }, function (e) { stopClip(); toast('⚠️', 'Could not play it', errMsg(e), '#DC2626'); });
+    }
+    function stopClip() {
+      var m = S.clip; if (!m) return; S.clip = null;
+      cancelAnimationFrame(m.raf); m.srcs.forEach(function (s) { try { s.stop(); } catch (e) {} });
+      m.row.classList.remove('playing'); var b = m.row.querySelector('[data-play]'); if (b) b.textContent = '▶';
+      var bar = m.row.querySelector('.wt-prog i'); if (bar) bar.style.width = '0';
     }
     S.view = { history: history };
     select(S.sel);
+    history();
+    if (q.play) setTimeout(function () { var row = hist.querySelector('.wt-msg[data-id="' + (+q.play) + '"]'); var it = items.filter(function (x) { return x.id === +q.play; })[0]; if (row && it) playRow(row, it); else playClip(+q.play); }, 1200);
+    fitWrap(wrap); setTimeout(function () { fitWrap(wrap); }, 400);
+    if (S.fitter) w.removeEventListener('resize', S.fitter);
+    S.fitter = function () { fitWrap(wrap); }; w.addEventListener('resize', S.fitter);
   }
 
   function playClip(id) {

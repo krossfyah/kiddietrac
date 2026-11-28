@@ -2,6 +2,26 @@
     "updated": "2026-11-28",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📻",
+            "title": "Walkie-talkie: radio sounds and a tidier screen",
+            "body": "The walkie now sounds like a real radio: a beep when you press to talk, a roger beep when you let go, a chirp when someone starts talking to you and a soft hiss when they finish. The screen fits your window: search channels and people, people grouped by centre with who is on now first, and Recent talks with a big play button, Talk back and filters (All, To me, Mine). Do not disturb and the new Walkie sounds switch are in My settings › Notifications › Walkie-talkie; admins find the agency's walkie settings in Settings › Agency notifications.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Walkie-talkie : sons radio et écran plus clair",
+            "body_fr": "Le walkie sonne maintenant comme une vraie radio : un bip quand vous appuyez pour parler, un bip « roger » quand vous relâchez, un gazouillis quand quelqu’un commence à vous parler et un léger souffle à la fin. L’écran tient dans votre fenêtre : recherche des canaux et des personnes, personnes regroupées par centre avec les personnes présentes en premier, et les prises de parole récentes avec un grand bouton de lecture, Répondre et des filtres (Tout, À moi, Les miennes). Ne pas déranger et le nouvel interrupteur Sons du walkie sont dans Mes paramètres › Notifications › Walkie-talkie; les administrateurs trouvent les paramètres du walkie de l’agence dans Paramètres › Notifications de l’agence.",
+            "title_es": "Walkie-talkie: sonidos de radio y una pantalla más clara",
+            "body_es": "El walkie ahora suena como una radio de verdad: un pitido al pulsar para hablar, un pitido de «recibido» al soltar, un trino cuando alguien empieza a hablarle y un siseo suave al terminar. La pantalla cabe en su ventana: busque canales y personas, personas agrupadas por centro con las activas primero, y Charlas recientes con un botón grande de reproducir, Responder y filtros (Todas, Para mí, Mías). No molestar y el nuevo interruptor Sonidos del walkie están en Mis ajustes › Notificaciones › Walkie-talkie; los administradores encuentran los ajustes del walkie de la agencia en Ajustes › Notificaciones de la agencia.",
+            "title_hi": "वॉकी-टॉकी: रेडियो की आवाज़ें और साफ़ स्क्रीन",
+            "body_hi": "वॉकी अब असली रेडियो जैसा बजता है: बोलने के लिए दबाने पर बीप, छोड़ने पर रॉजर बीप, कोई आपसे बात शुरू करे तो चहचहाहट और बात खत्म होने पर धीमी सरसराहट। स्क्रीन आपकी विंडो में पूरी आती है: चैनल और लोग खोजें, केंद्र के अनुसार लोग जिनमें अभी मौजूद लोग पहले हैं, और हाल की बातें जिनमें बड़ा प्ले बटन, Talk back और फ़िल्टर (All, To me, Mine) हैं। Do not disturb और नया Walkie sounds स्विच My settings › Notifications › Walkie-talkie में है; एडमिन एजेंसी की वॉकी सेटिंग्स Settings › Agency notifications में पाते हैं।"
+        },
+        {
             "type": "new",
             "date": "2026-11-28",
             "icon": "🥕",
@@ -41,8 +61,8 @@
             "type": "improved",
             "date": "2026-11-28",
             "icon": "💬",
-            "title": "Clearer chat on phones",
-            "body": "Your own messages in team chats are now a soft, easy-to-read teal. Every message has a clear + to react and an arrow to reply (or swipe the message right on a phone). The help ? sits in the same spot on every page banner, and the quick-request + no longer floats over open chats.",
+            "title": "Clearer messages and help",
+            "body": "Messages now have a clear + to react with an emoji, and the help ? sits in the same spot on every page banner. Staff also get a reply arrow beside each message (or swipe the message right on a phone), their own messages in team chats are a soft, easy-to-read teal, and the quick-request ＋ no longer floats over open chats.",
             "roles": [
                 "agency_admin",
                 "platform_admin",
@@ -52,7 +72,13 @@
                 "guardian",
                 "sales_rep",
                 "reseller_admin"
-            ]
+            ],
+            "title_fr": "Des messages et une aide plus clairs",
+            "body_fr": "Les messages ont maintenant un + bien visible pour réagir avec un émoji, et le ? d’aide est au même endroit sur la bannière de chaque page. Le personnel a aussi une flèche de réponse à côté de chaque message (ou glissez le message vers la droite sur un téléphone), ses propres messages dans les discussions d’équipe sont d’un turquoise doux et facile à lire, et le ＋ des demandes rapides ne flotte plus au-dessus des discussions ouvertes.",
+            "title_es": "Mensajes y ayuda más claros",
+            "body_es": "Los mensajes tienen ahora un + bien visible para reaccionar con un emoji, y el ? de ayuda está en el mismo lugar en el encabezado de cada página. El personal también tiene una flecha de respuesta junto a cada mensaje (o deslice el mensaje hacia la derecha en un teléfono), sus propios mensajes en los chats del equipo son de un turquesa suave y fácil de leer, y el ＋ de solicitudes rápidas ya no flota sobre los chats abiertos.",
+            "title_hi": "साफ़ संदेश और मदद",
+            "body_hi": "अब संदेशों पर इमोजी से प्रतिक्रिया देने के लिए साफ़ दिखने वाला + है, और मदद का ? हर पेज के बैनर पर एक ही जगह रहता है। स्टाफ़ को हर संदेश के पास जवाब देने का तीर भी मिलता है (या फ़ोन पर संदेश को दाईं ओर स्वाइप करें), टीम चैट में उनके अपने संदेश हल्के, आसानी से पढ़े जाने वाले टील रंग में हैं, और जल्दी अनुरोध वाला ＋ अब खुली चैट के ऊपर नहीं तैरता।"
         },
         {
             "type": "improved",
@@ -64,6 +90,32 @@
                 "agency_admin",
                 "platform_admin",
                 "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🔍",
+            "title": "Auditors can read forms, compliance and the audit log",
+            "body": "An auditor account can now open Custom forms (the list and each form's preview), the Compliance dashboard and the Audit log for your agency, read-only. Nothing on those screens lets an auditor change anything.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🧾",
+            "title": "New payslip design",
+            "body": "Every payslip PDF now has your agency colour and logo at the top, the employee details, earnings and deductions with year to date, net pay in a large box, leave balances, your terms and conditions, and a NON-NEGOTIABLE watermark. Admins can change the terms in Payroll settings.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
             ]
         },
         {
@@ -86,20 +138,6 @@
             "body": "If your centre changes its tuition, you now get a notification and an email ahead of time showing each of your children's current and new monthly tuition.",
             "roles": [
                 "guardian"
-            ]
-        },
-        {
-            "type": "improved",
-            "date": "2026-11-28",
-            "icon": "🧾",
-            "title": "New payslip design",
-            "body": "Every payslip PDF now has your agency colour and logo at the top, the employee details, earnings and deductions with year to date, net pay in a large box, leave balances, your terms and conditions, and a NON-NEGOTIABLE watermark. Admins can change the terms in Payroll settings.",
-            "roles": [
-                "agency_admin",
-                "platform_admin",
-                "centre_director",
-                "educator",
-                "home_visitor"
             ]
         },
         {
