@@ -1,53 +1,59 @@
 ---
 title: Reconocimientos, certificados y boletines
-category: Daily Use
-order: 5
 ---
 
 # Reconocimientos, certificados y boletines
 
-Más allá de la cronología diaria, Kiddietrac celebra los hitos de su hijo y le ofrece una imagen más completa de cómo está creciendo.
+**Boletas** reúne los boletines de su hijo escritos por sus educadores. Se escribe uno cada trimestre del año escolar (sep–nov, dic–feb, mar–may, jun–ago), y puede pedir el de este trimestre en la misma pantalla. **Reconocimientos** muestra los reconocimientos que los educadores dieron a su hijo, cada uno con un certificado para imprimir.
 
-## Reconocimientos y certificados
+[[open: #report-cards | Abrir Boletas]] [[open: #awards | Abrir Reconocimientos]]
 
-Los educadores pueden reconocer a su hijo con premios — por su amabilidad, una nueva habilidad, una gran semana. Cuando su hijo obtiene uno:
+## Leer un boletín
 
-- Recibirá una **notificación**
-- El reconocimiento aparece en la sección **Reconocimientos** de su hijo
-- Puede abrir un **certificado imprimible** para guardarlo o imprimirlo y ponerlo en el refrigerador
+1. Abra **Boletas** desde el menú o con el mosaico **Boletas** (**Each quarter**).
+2. Busque la tarjeta de su hijo. Cada niño tiene la suya.
+3. En **Este trimestre**, si muestra **✓ Listo**, pulse **📑 Ver**.
+4. Para un trimestre anterior, búsquelo en **Todas las boletas** y pulse **Ver**.
 
-Los reconocimientos pueden ser diarios, semanales o mensuales. Son una forma preciosa de ver qué notaron y valoraron los educadores de su hijo — a menudo cosas que no se ven en una foto.
+El boletín se abre como PDF que puede leer, guardar o imprimir. Solo ve los boletines que el centro aprobó y envió.
 
-### Imprimir un certificado
+## Pedir el boletín de este trimestre
 
-1. Abra el reconocimiento desde la notificación o la sección Reconocimientos.
-2. Toque **Imprimir** o **Guardar**.
-3. Se abre un certificado limpio e imprimible con el nombre de su hijo y el reconocimiento.
+1. En **Este trimestre**, pulse **📨 Solicitar boletín**.
+2. Un mensaje confirma que se pidió a los educadores de su hijo el boletín de este trimestre.
+3. El botón cambia a **Requested** con la fecha. Recibirá una notificación cuando el boletín esté listo.
 
-## Boletines
+Solo puede pedirlo una vez por trimestre; la solicitud sigue activa hasta que se envía el boletín.
 
-Algunos centros comparten **boletines** periódicos o resúmenes de progreso — una mirada completa al desarrollo de su hijo en áreas como la comunicación, la motricidad, el crecimiento social y emocional, y la creatividad.
+## Ver e imprimir un certificado de reconocimiento
 
-Cuando su centro publica uno:
+1. Abra **Reconocimientos** con el mosaico **Reconocimientos** de su pantalla de inicio. El encabezado dice **Celebrating your child**.
+2. Cada reconocimiento muestra su insignia, título, el nombre de su hijo, la fecha, la nota del educador y quién lo dio.
+3. Pulse **🏆 Ver certificado**.
+4. El certificado se abre listo para imprimir o guardar como PDF. Imprímalo para el refrigerador o envíelo a los abuelos; es suyo.
 
-- Se le notificará
-- Aparece en el expediente / los documentos de su hijo
-- Puede leerlo en la aplicación y guardar una copia
+Recibirá una notificación cuando su hijo reciba un reconocimiento nuevo.
 
-Los boletines los escriben las personas que pasan el día con su hijo, a partir de las observaciones y los momentos registrados durante el periodo. Si algo en uno de ellos le genera una duda, lo mejor es conversar: escriba o pida hablar con el educador o la dirección de su hijo.
+## Quién puede hacer qué
 
-## Observaciones
+| Quién | Qué puede hacer |
+|---|---|
+| Padres y tutores | Leer boletines, pedir el del trimestre, ver e imprimir certificados |
+| Accesos para recoger (abuelos, niñeras) | Ver la vista de padres, como un padre |
+| Educadores | Escribir boletines y dar reconocimientos |
+| Dirección del centro y administradores de la agencia | Aprobar los boletines y enviarlos a las familias |
 
-A lo largo de todo esto hay **observaciones** — notas breves (a veces con una foto) que los educadores registran cuando notan algo significativo: una primera vez, un avance, un momento divertido, un paso del desarrollo. Alimentan los boletines y forman parte de la historia de su hijo con el tiempo. Muchas aparecen directamente en su cronología diaria.
+## Preguntas frecuentes y cuando algo falla
 
-## Por qué importa
+??? Dice "No report cards yet. They appear here once the centre sends them." | Aún no se ha enviado ninguno. Pida el de este trimestre con Solicitar boletín.
+??? Dice "No children on your account here". | Los boletines aparecen cuando su hijo está inscrito y vinculado a su cuenta. Pregunte al centro.
+??? Dice "That report card could not be opened. Please try again." | Revise su conexión y pulse Ver otra vez. En el teléfono, asegúrese de que se pueden abrir ventanas o el navegador.
+??? Dice "The request could not be sent. Please try again." | Inténtelo de nuevo en un momento. Si sigue fallando, escriba al educador de su hijo.
+??? No hemos recibido reconocimientos. | Los reconocimientos son opcionales y dependen del centro y de los educadores. La pantalla dice "No awards yet" hasta que se dé uno.
+??? Algo de un boletín me preocupa. | Lo mejor es conversar. Escriba al educador de su hijo o a la dirección.
 
-La cronología le cuenta lo que pasa *hoy*. Los reconocimientos, las observaciones y los boletines le cuentan sobre el *crecimiento* — el arco del aprendizaje de su hijo, fácil de pasar por alto día a día. Dedique un momento de vez en cuando a revisarlos; es una de las partes más gratificantes de la aplicación.
+## Pantallas relacionadas
 
-## Preguntas frecuentes
+[[open: #today | Hoy]] [[open: #messages | Centro de mensajes]] [[open: #my-documents | Documentos]]
 
-**«No hemos recibido ningún reconocimiento ni boletín.»**
-Ambos son opcionales y dependen de su centro y de los educadores. No todos los centros los usan, y los boletines suelen ser periódicos (p. ej., cada trimestre). Si desea más retroalimentación, pídala a su educador — a la mayoría les encanta hablar de su hijo.
-
-**«¿Puedo compartir un certificado con los abuelos?»**
-Por supuesto — guárdelo y envíelo como prefiera. Es suyo.
+Vea también: [Su vista diaria](your-daily-view), [Notificaciones y alertas](notifications-and-alerts).

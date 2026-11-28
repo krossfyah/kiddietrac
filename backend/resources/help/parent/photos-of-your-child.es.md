@@ -1,79 +1,65 @@
 ---
 title: Fotos de su hijo
-category: Daily Use
-order: 2
 ---
 
 # Fotos de su hijo
 
-La pestaña **Fotos** es una galería con todas las fotos que los educadores de su hijo han compartido. Las fotos nuevas aparecen a los pocos segundos de tomarse.
+**Fotos y vídeos** es una galería con todas las fotos y vídeos que los educadores de su hijo compartieron con usted. Las nuevas aparecen segundos después de compartirse, y el menú muestra una insignia hasta que las vea.
 
+[[open: #photos | Abrir Fotos y vídeos]]
 
-## Pasos rápidos
+## Ver fotos y vídeos
 
-1. Abra el día de su hijo y desplácese hasta las fotos.
-2. Toque una foto para verla a tamaño completo.
-3. Para guardar una, mantenga pulsada en el teléfono o haga clic derecho en el ordenador, y guárdela.
-4. Compártala con su familia si lo desea, pero lea antes la nota de abajo si hay otros niños en la imagen.
+1. Abra **Fotos y vídeos** desde el menú o con el mosaico **Fotos y vídeos** (**Shared by educators**).
+2. Si tiene más de un hijo, elija al niño arriba.
+3. Recorra la galería. Cada foto muestra su leyenda, si el educador la agregó, y la fecha. Los vídeos llevan 🎬 y se reproducen en la misma galería.
+4. Pulse una foto para abrirla en tamaño completo.
+5. En el visor, use **Anterior** y **Siguiente** (o las flechas del teclado en una computadora) para pasar de una foto a otra, y **Cerrar** para volver.
 
-Todavía no hay botón de comentar ni de me gusta, ni forma de buscar fotos por fecha.
+En la pantalla **Hoy** aparece una etiqueta como **2 new photos to see** cuando se comparte algo nuevo. Al abrir la galería desaparece.
 
-## Cómo aparecen las fotos
+## Guardar una foto
 
-Cuando un educador de su centro toma una foto con la tableta:
+1. Abra la foto en tamaño completo.
+2. Pulse **⬇️ Descargar**.
+3. En el teléfono, elija **Guardar imagen** (o **Guardar en Archivos**) en el menú de compartir. Si la aplicación abre la foto en el navegador, mantenga pulsada la foto y toque **Guardar**.
 
-- Etiqueta a los niños que salen en la foto
-- Aparece al instante en las galerías de fotos de los padres de esos niños
-- Un pie de foto (si lo añadió) aparece debajo de la foto
+Puede compartir las fotos de **su propio hijo** donde quiera. Pida permiso a los otros padres antes de publicar una foto en la que aparezcan sus hijos, y revise la política del centro sobre redes sociales antes de etiquetarlo.
 
-## Qué puede hacer con las fotos
+## Elegir quién puede fotografiar a su hijo
 
-- **Verlas** — toque para verlas a tamaño completo
-- **Guardarlas** — pulsación larga (móvil) o clic derecho (ordenador) para descargarlas en su dispositivo
-- **Compartirlas** — una vez descargadas, compártalas con abuelos, familia, amigos, pero sea respetuoso (véase abajo)
+El permiso de fotos lo decide usted, una respuesta por cada hijo.
 
-## Lo que NO puede hacer (todavía)
+1. Abra **Mis ajustes**.
+2. Pulse la pestaña **Fotos**.
+3. Elija una opción para cada niño, por ejemplo: solo su familia ve sus fotos (queda fuera de las fotos de grupo), puede aparecer en las fotos de grupo que ven las otras familias de su sala, o el personal no tomará ni compartirá fotos suyas.
+4. Pulse **Save**. Aparece **Your photo permissions are updated.**
 
-- Publicar comentarios en las fotos
-- Dar me gusta o marcar fotos como favoritas
-- Buscar por fecha o actividad
-- Exportar automáticamente a fin de año
+Lo elige el padre o la madre principal. El centro también puede preguntar si las fotos se pueden usar con fines de marketing.
 
-Estas funciones podrían añadirse más adelante.
+[[show: #settings @ Photos | Muéstreme]]
 
-## Por qué algunos días no hay fotos
+## Quién puede hacer qué
 
-Los educadores cuidan de muchos niños. Las fotos son un maravilloso «extra», pero no una parte obligatoria de cada día. Un centro típico comparte:
+| Quién | Qué puede hacer |
+|---|---|
+| Padres y tutores | Ver, descargar y compartir las fotos de su hijo; fijar el permiso de fotos (padre o madre principal) |
+| Accesos para recoger (abuelos, niñeras) | Ver y descargar fotos, como un padre |
+| Educadores y dirección | Tomar y compartir fotos, respetando el permiso de cada familia |
 
-- De 1 a 3 fotos por niño por semana
-- Más en actividades especiales (excursiones, fiestas)
-- A veces ninguna en los días de rutina normal
+Las fotos no se publican en ningún sitio público. Solo las ven las familias de los niños que aparecen y el personal del centro.
 
-Si pasan semanas sin recibir fotos, coméntelo a la dirección; quizá tenga que recordárselo al personal.
+## Preguntas frecuentes y cuando algo falla
 
-## Compartir fotos fuera de Kiddietrac
+??? Dice "Nothing shared yet". | Los educadores aún no compartieron fotos ni vídeos de su hijo. Las fotos son un extra, no parte de cada día; algunos días no hay.
+??? No recibimos fotos desde hace semanas. | Revise su permiso de fotos en Mis ajustes > Fotos. Si permite fotos, coménteselo a la dirección.
+??? Dice "Could not load photos & video". | Revise su conexión y abra la pantalla otra vez.
+??? Descargar no hace nada en mi teléfono. | Actualice la aplicación KiddieTrac. Si abre la foto en el navegador, mantenga pulsada la foto y toque Guardar.
+??? ¿Puedo comentar o dar "me gusta" a una foto? | Todavía no. Para dar las gracias, envíe un mensaje a la sala.
+??? ¿El centro puede borrar una foto? | Pregunte al centro. Las fotos forman parte del expediente de su hijo, pero el centro puede dejar de compartirle fotos si cambia su permiso.
 
-Puede compartir fotos de **su propio hijo** donde quiera (chat familiar, etc.). Pero tenga presente:
+## Pantallas relacionadas
 
-- **Fotos en las que salen otros niños** — pida permiso a los padres de esos niños antes de compartirlas públicamente (redes sociales, etc.). Kiddietrac no controla ni restringe lo que se comparte, pero es lo correcto.
-- **No etiquete públicamente al centro** sin permiso; puede tener políticas sobre la exposición en redes sociales.
-- **Evite publicar a diario** — su hijo tiene derecho a la privacidad cuando crezca. Lo que publique hoy queda en internet para siempre.
+[[open: #today | Hoy]] [[open: #settings | Mis ajustes]] [[open: #messages | Centro de mensajes]]
 
-## Portafolio de fin de año
-
-Al final del año escolar, pregunte a la dirección si puede exportar todas las fotos de su hijo. Es un recuerdo maravilloso.
-
-## ¿En qué se diferencia de un carrete de fotos normal?
-
-La tableta del educador no guarda las fotos en un carrete normal. Las fotos se suben directamente a Kiddietrac y se almacenan en nuestros servidores. Esto significa que:
-
-- Las ve de inmediato
-- Están vinculadas al niño concreto
-- Se pueden buscar por fecha
-- Se guardan de forma permanente en el expediente del niño
-
-## Privacidad
-
-- Las fotos las ven: los padres/tutores de los niños etiquetados, todos los educadores del centro y la dirección
-- Las fotos no se publican públicamente en ningún sitio
-- El centro no puede eliminar fotos a petición de los padres (son registros educativos), pero puede dejar de compartir fotos futuras si usted se lo pide
+Vea también: [Su vista diaria](your-daily-view), [Notificaciones y alertas](notifications-and-alerts).

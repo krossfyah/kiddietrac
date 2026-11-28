@@ -7,71 +7,74 @@ screens: checkin
 
 # Checking your child in and out
 
-Your child's day officially starts when they're **checked in** and ends when they're **checked out**. This record is how the centre knows who is present, keeps ratios safe, and — where it applies — how attendance-based billing is calculated. So it's worth getting right.
+Two things happen at drop-off. **Check-in** (the ☀ **Daily check-in** screen) is a quick morning survey: how your child slept, their mood, breakfast and any medication, so the educators know what to expect. **One-Tap** (the **Check in / out** tile) signs your child in and out of the centre by scanning the centre's QR code. The sign-in record is how the centre knows who is present, keeps ratios safe and, where it applies, works out attendance for billing.
 
-## The two ways it happens
+[[open: #checkin | Open Check-in]] [[open: #scan | Open Check in / out]]
 
-1. **You check in from your phone with One-Tap** (QR contactless check-in) — the preferred way. Fast, and it's clearly you.
-2. **An educator checks your child in** — a backup for when your hands are full or your phone is dead.
+## Filling in the morning check-in
 
-Both produce the same record. Wherever possible, use your own phone — it's the most accurate.
+1. Open **Check-in** from the menu.
+2. Under **Child**, choose your child if you have more than one.
+3. Under **Mood this morning**, press one: **happy 😊**, **sleepy 😴**, **fussy 😩**, **sick 🤒** or **quiet 😶**.
+4. Under **Sleep last night**, press **great 🌙**, **okay 🌒**, **restless 🌖** or **poor 🌘**.
+5. Under **Ate breakfast?**, press **Yes** or **No**.
+6. Type anything given at home in **Medication today** (for example "Tylenol at 7am for fever") and anything else in **Notes for staff**.
+7. Press **Submit check-in**. **✓ Saved. Staff will see your note today.** appears below the button.
 
-## Checking in with One-Tap
+Staff see your answers on their **Today** screen. You can open the screen again later that day to change them and submit again.
 
-At drop-off:
+> ℹ️ **Medication today** is a note for the educators. If the centre is to give your child medicine, it needs a medication record on the **Health** screen.
 
-1. Open the app and tap the **One-Tap** button in the centre of the bottom bar.
-2. Point your camera at the centre's One-Tap QR code (usually on a poster by the door or sign-in desk).
-3. The app confirms with a green screen listing each child it signed in.
+## Signing in and out with One-Tap
 
-The One-Tap code **rotates every day** for security, so an old screenshot won't work — you need to scan the live poster.
+1. Press the **Check in / out** tile (**One-Tap**) on your home screen.
+2. Allow the camera if asked, and point it at the centre's One-Tap QR code (usually a poster by the door).
+3. Under **Who are you here for?**, every child is ticked and shows **At Centre** or **Not at Centre**. Tap a child to leave them out.
+4. Press **Confirm**. **All set!** shows who scanned and lists each child signed in or out.
 
-If your child is already checked in, scanning again checks them **out** — it toggles. So one scan in the morning, one at pickup.
+Scanning when your child is in signs them out, so one scan at drop-off and one at pick-up. Press **Scan again** if you need to.
 
-### No camera or the scanner won't open?
+The QR code changes every day, so an old screenshot will not work.
 
-- Make sure you allowed camera permission (Settings → the app → Permissions).
-- On some phones the scanner falls back to a **manual code entry** box — type the `KTCHK…` code printed under the poster.
-- As a last resort, ask an educator to check your child in.
+### The camera won't open
 
-## Seeing the check-in time
+1. If the screen says **No camera on this device. Type the code instead.** or **This device can't scan QR codes here**, look under the centre's poster for the code that starts with **KTCHK**.
+2. Type it in the box under **Or enter the code shown under the centre's One-Tap QR:**.
+3. Carry on from **Who are you here for?** as usual.
 
-Once your child is in, their status card on the Home screen shows **"At centre"** with the arrival time, and the timeline records the sign-in. At pickup it flips to **"At home"** with the departure time.
-
-All times are shown in your centre's local timezone.
-
-## Multiple children at once
-
-If more than one of your children is enrolled, a single scan signs **all** of them in (or out) together. The confirmation screen lists each one so you can check.
-
-## Who else can pick up?
-
-Only guardians and the people your centre has listed as **authorised for pickup** may collect your child. You can see that list on your child's record. To add or change a pickup person, contact your director — they keep that list accurate for safety.
-
-## Common questions
-
-**"I checked in but the screen still says 'Not in yet'."**
-Pull down to refresh. If it still hasn't updated, the scan may not have registered — try once more, or ask an educator to confirm.
-
-**"I scanned twice by accident and now it says checked out."**
-Just scan once more to check back in. Or ask an educator to correct it.
-
-**"Do I have to scan, or will the educator always do it?"**
-Either works. Scanning yourself is faster and unambiguous, but the centre can always check your child in for you.
+If nothing works, an educator can sign your child in or out for you. Both give the same record.
 
 ## "Please confirm your pick-up time"
 
-If nobody signed your child out at pick-up, the centre's system signs them out automatically in the evening. That time is a placeholder, not when you actually picked up.
+If nobody signed your child out, the system signs them out automatically in the evening. That time is a placeholder. You then get a notification and an email called **Please confirm your pick-up time**.
 
-When this happens you get a notification and an email called **Please confirm your pick-up time**. It shows when your child was signed in and the automatic sign-out time.
+1. Open the email.
+2. Press **Tell us the actual pick-up time** (one button per child if several were affected).
+3. Enter the time you really picked up. The attendance record updates straight away and the centre is told.
 
-1. Read the times in the email.
-2. Let the centre know when you really picked up. The email includes the centre's phone number or email address when the centre has them on file.
+The link is for you only, so don't forward the email. Signing out at pick-up means you won't get it.
 
-Nothing is wrong, and you don't need to do anything else. The real time keeps your child's attendance record accurate for ratios, your statements and any subsidy or CWELCC claim.
+## Who can do what
 
-> **Tip:** Scan out at pick-up, or ask an educator to sign your child out, and you won't get this email.
+| Who | Check-in survey | One-Tap |
+|---|---|---|
+| Parents and guardians | Yes | Yes |
+| Pick-up logins (grandparents, nannies) | Yes | Yes |
+| Temporary pickup people | No | Only if you chose **Sign out themselves with One-Tap** |
+| Educators | See the answers | Sign children in and out for you |
 
-## Why it matters
+## FAQs and when something goes wrong
 
-Accurate check-in/out keeps your child safe (the centre always knows exactly who is present), supports correct staff-to-child ratios, and gives you an honest record of your child's hours. It only takes a second — please make it part of your routine.
+??? It says "That QR code isn't the right kind." | You scanned a different QR code. Scan the centre's One-Tap poster, or type the KTCHK code.
+??? It says "Pick at least one child". | Tap at least one child under Who are you here for?, then press Confirm.
+??? It says "Could not check in — please try again." | Check your connection and scan again. If it keeps failing, ask an educator to sign your child in.
+??? I signed out by mistake. | Scan again to sign back in, or ask an educator to correct it.
+??? The check-in survey shows another child's answers. | The answers loaded are for your first child. Choose the right child and set every answer again before you submit.
+??? It says "No children on file." | Your account is not linked to a child yet. Ask the centre.
+??? Who may collect my child? | Only parents, guardians and people your family has listed as allowed to pick up. See Family & pick-ups.
+
+## Related screens
+
+[[open: #family-contacts | Family & pick-ups]] [[open: #running-late | Running late]] [[open: #today | Today]]
+
+See also: [Pick-up logins for grandparents, nannies and other helpers](pick-up-logins), [Attendance days, holidays and absences](vacation-holds-and-absences).

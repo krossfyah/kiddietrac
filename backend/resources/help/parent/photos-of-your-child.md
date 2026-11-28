@@ -7,75 +7,62 @@ screens: photos
 
 # Photos of your child
 
-The **Photos** tab is a gallery of all photos your child's educators have shared. New photos appear within seconds of being taken.
+**Photos & video** is a gallery of every photo and video clip your child's educators have shared with you. New ones appear within seconds of being shared, and the menu shows a badge until you have seen them.
 
+[[open: #photos | Open Photos & video]]
 
-## Quick steps
+## Looking through photos and videos
 
-1. Open your child's day and scroll to the photos.
-2. Tap a photo to see it full size.
-3. To keep one, long-press on a phone or right-click on a computer, and save it.
-4. Share it with family if you wish — but see the note below first if other children are
-   in the picture.
+1. Open **Photos & video** from the menu or the **Photos & video** tile (**Shared by educators**).
+2. If you have more than one child, choose the child at the top.
+3. Scroll the gallery. Each photo shows its caption, if the educator added one, and the date. Videos are marked 🎬 and play right in the gallery.
+4. Press a photo to open it full size.
+5. In the viewer, use **Previous** and **Next** (or the arrow keys on a computer) to move through the photos, and **Close** to go back.
 
-There is no comment or like button yet, and no way to search photos by date.
+On the **Today** screen, a pill such as **2 new photos to see** appears when something new has been shared. Opening the gallery clears it.
 
-## How photos appear
+## Saving a photo
 
-When an educator at your centre takes a photo with the tablet:
+1. Open the photo full size.
+2. Press **⬇️ Download**.
+3. On a phone, choose **Save image** (or **Save to Files**) in the share sheet. If the app opens the photo in your browser instead, press and hold the photo, then tap **Save**.
 
-- They tag the children in the photo
-- It instantly appears in those children's parents' photo galleries
-- A caption (if they added one) appears below the photo
+You can share photos of **your own child** wherever you like. Please ask the other parents before posting a photo that shows their children, and check your centre's social media policy before tagging the centre.
 
-## What you can do with photos
+## Choosing who may photograph your child
 
-- **View them** — tap to see full-size
-- **Save them** — long-press (mobile) or right-click (desktop) to download to your device
-- **Share them** — once downloaded, share with grandparents, family, friends — but please be respectful (see below)
+The photo permission is yours to set, one answer for each child.
 
-## What you CANNOT do (yet)
+1. Open **My settings**.
+2. Press the **Photos** tab.
+3. Choose an option for each child, for example only your family sees photos of them (they are left out of group photos), they can appear in group photos the other families in their room see, or staff will not take or share photos of them at all.
+4. Press **Save**. **Your photo permissions are updated.** appears.
 
-- Post comments on photos
-- Like or favourite photos
-- Search by date or activity
-- Auto-export at year end
+The primary parent chooses this. The centre may also ask whether photos can be used for marketing.
 
-These features may be added later.
+[[show: #settings @ Photos | Show me]]
 
-## Why some days have no photos
+## Who can do what
 
-Educators are caring for many children. Photos are a wonderful "extra" but not a required part of every day. A typical centre shares:
+| Who | What they can do |
+|---|---|
+| Parents and guardians | See, download and share photos of their own child; set photo permissions (primary parent) |
+| Pick-up logins (grandparents, nannies) | See and download photos, like a parent |
+| Educators and directors | Take and share photos, following each family's photo permission |
 
-- 1-3 photos per child per week
-- More for special activities (field trips, holiday events)
-- Sometimes none on regular routine days
+Photos are not posted publicly anywhere. Only the families of the children in a photo and the centre's staff see it.
 
-If you're getting zero photos for weeks, mention it to the director — they may need to remind staff.
+## FAQs and when something goes wrong
 
-## Sharing photos outside Kiddietrac
+??? It says "Nothing shared yet". | The educators have not shared any photos or videos of your child yet. Photos are an extra, not part of every day; some days there are none.
+??? We haven't had a photo for weeks. | Check your photo permission in My settings > Photos. If it allows photos, mention it to the director.
+??? It says "Could not load photos & video". | Check your connection and open the screen again.
+??? Download does nothing on my phone. | Update the KiddieTrac app. If it opens the photo in your browser, press and hold the photo and tap Save.
+??? Can I comment on or like a photo? | Not yet. To say thank you, send the room a message.
+??? Can the centre delete a photo? | Ask the centre. Photos are part of your child's record, but the centre can stop sharing photos with you if your permission changes.
 
-You can share photos of **your own child** wherever you like (family chat, etc.). But please be mindful:
+## Related screens
 
-- **Photos with other children in them** — get permission from those children's parents before sharing publicly (social media, etc.). Kiddietrac doesn't track or restrict sharing, but it's the right thing to do.
-- **Don't tag the centre publicly** without permission — they may have policies about social media exposure.
-- **Avoid posting daily** — your child has a right to privacy as they grow up. What you post today is online forever.
+[[open: #today | Today]] [[open: #settings | My settings]] [[open: #messages | Message Centre]]
 
-## Year-end portfolio
-
-At the end of the school year, ask the director if they can export all your child's photos. It's a wonderful keepsake.
-
-## How is this different from a regular camera roll?
-
-The educator's tablet doesn't save photos to a regular camera roll. Photos are uploaded directly to Kiddietrac and stored on our servers. This means:
-
-- You see them immediately
-- They're tied to the specific child
-- They're searchable by date
-- They're saved permanently in the child's record
-
-## Privacy
-
-- Photos are visible to: parents/guardians of the tagged children, all educators at the centre, the director
-- Photos are not posted publicly anywhere
-- The centre may not delete photos at parent request (they're educational records) but they can stop sharing future photos if you ask
+See also: [Your daily view](your-daily-view), [Notifications and alerts](notifications-and-alerts).

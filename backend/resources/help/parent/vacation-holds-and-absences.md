@@ -1,74 +1,86 @@
 ---
-title: Vacation holds and absences
+title: Attendance days, holidays and absences
 category: Daily Use
 order: 4
 screens: attendance-pattern
 ---
 
-# Vacation holds and absences
+# Attendance days, holidays and absences
 
-Going on holiday, or is your child home sick? Letting the centre know ahead of time helps them plan staffing and meals, keeps the attendance record accurate, and — depending on your centre's policy — may affect billing.
+**Attendance** shows the days your child normally comes to the centre, and which part of each day (full day, mornings, afternoons, before or after school). The centre uses it to plan rooms, staff and meals. This guide also covers telling the centre your child is away today, and what to do about a holiday.
 
-## Telling the centre your child will be away
+[[open: #attendance-pattern | Open Attendance]]
 
-If your centre has this feature enabled, you can record an upcoming absence yourself:
+## Checking your child's usual days
 
-1. Open your child's record or the **Home** screen.
-2. Look for **Vacation hold** / **Mark away** (wording varies by centre).
-3. Choose the dates your child will be absent and, if asked, a reason (vacation, illness, personal).
-4. Submit.
+1. Open **Attendance** from the menu or the **Attendance** tile on your home screen.
+2. If you have more than one child, press your child's name in the row of tabs above the grid.
+3. Read across the week. Each day shows **Full**, **AM**, **PM**, **Before**, **After** or **B&A** (before and after school), each in its own colour. A **—** means your child is not expected that day.
+4. Today's column is highlighted and marked **(TODAY)**.
 
-Your educators and director see the hold on their side, so they know not to expect your child on those days.
+The screen opens read-only, so nothing changes by accident.
 
-## If you don't see the option
+## Changing your child's usual days
 
-Not every centre turns on self-service holds. If you can't find it:
+1. Press **✏️ Edit days**.
+2. Choose the new part of the day for each day that changes, or **—** for a day your child no longer comes. The row is marked **• unsaved**.
+3. Set **Changes apply from** to the first day the new week starts. It starts on today.
+4. Press **Save changes** (it shows how many changes, for example **Save 1 change**). A green **✓ Saved** message appears and the screen goes back to read-only.
 
-- Send a quick **Message** to your child's room, or
-- Call or email the director with the dates.
+**✓ Done** stops editing without saving. Changes you have not saved are lost when you leave the screen.
 
-Either way, giving as much notice as you can is appreciated — especially for meal counts and staffing.
+> ⚠️ Changing your child's days here does not book extra care or change your fees. Talk to your centre before you change the week, and tell them when you have.
 
-## Same-day sick days
+## Telling the centre your child is away today
 
-For an unexpected sick day, the fastest thing is a short message to the room first thing in the morning: *"Aria won't be in today — she's got a cold. Back tomorrow we hope!"* That way the educators aren't wondering, and it's on the record.
+On your home screen's **Today** view, today's photo of your child has a small **+** in the corner.
+
+1. Press your child's photo (the **+**).
+2. Choose **🤒 Sick today** or **🚫 Not attending today**.
+3. Pick a reason: **🤒 Unwell**, **🩺 Appointment**, **✈️ Holiday**, **👪 Family** or **• Other**, and add a note if you like.
+4. Press **Tell the centre**. A **Centre told** message confirms it.
+
+The next time you press the **+** that day, it says **✓ Reported away today**. If your child is only going to be late, choose **⏰ Running late** instead.
+
+## Holidays and longer breaks
+
+There is no screen for booking a vacation hold yourself. For planned days away:
+
+1. Send a message to your child's room or the office in **Message Centre** with the dates.
+2. Ask the centre whether the days affect your bill. That depends entirely on their policy.
+3. On each day your child is away, you can still mark them **🚫 Not attending today** so nobody waits for them.
+
+If the centre records a vacation hold for you, any notice you get about it links to **Billing**.
 
 ## "Has your child arrived?" messages and calls
 
-Some centres use **Safe Arrival**. If your child was expected today, hasn't been signed in a little after their usual drop-off time, and no absence was reported, you get a message asking whether they've arrived. Tap **Not attending today** in the app if they're staying home.
+If your centre uses **Safe Arrival** and your child was expected but is not signed in a little after their usual time, you are asked whether they are coming:
 
-If nobody answers, your centre may **phone** you. The automated call names your child and asks you to press a key:
+- **In the app or email** — press **Mark absent** (or **Add a reason or note**) or **Running late**. The email buttons work on the day of the email only.
+- **By text** — reply **1** if running late (then reply with a time like **9:30**) or **2** if absent today.
+- **By phone** — press **1** (absent), **2** (on the way) or **3** (already dropped off, so the centre is alerted straight away to find your child).
 
-- **1** — your child is absent today. The absence is recorded and the centre is told.
-- **2** — you're on the way and arriving late. The centre is told to expect your child.
-- **3** — you've already dropped your child off. Your child isn't signed in, so the centre is alerted straight away to find and sign them in. If you can, call the centre as well.
+> 💡 Telling the centre in advance means you won't get these messages or calls that day.
 
-Your centre may offer only some of these choices, and may word the call differently. Guardians are usually called one at a time, primary first. If you've turned off phone calls in your settings, you won't be called.
+## Who can do what
 
-**Buttons in the email.** The "Has your child arrived?" email and the "We missed your child today" email have two buttons: **Mark absent** (or **Add a reason or note**) and **Running late** (or **Running late after all**). Each opens a small page just for your child, where you pick a reason or the time you'll arrive, and add a note if you like. The centre is told straight away, the same as doing it in the app. The buttons work on the day of the email only, and you can open them again that day to change your answer. If your child has already been signed in, nothing changes.
-
-**Reply to the text.** The text asking whether your child has arrived ends with "Reply 1 if running late, 2 if absent today." Reply **1** and the centre is told your child is on the way; we then ask what time they'll arrive, so reply with a time like **9:30**. Reply **2** and your child is marked absent. If several children were asked about, the text numbers each choice (for example 1 Ava late, 2 Ava absent). You get a text back confirming it. Any other reply reaches the centre as a normal message.
-
-> **Tip:** Telling the centre about an absence in advance means you won't get these messages or calls that day.
-
-## Does an absence change my bill?
-
-That depends entirely on **your centre's policy**. Some centres charge a flat monthly fee regardless of attendance; others credit vacation days or have a set number of paid absences a year. Kiddietrac records the absence — how it's billed is up to your director. If you're unsure, ask them directly.
-
-## Coming back
-
-There's nothing you need to do to "un-hold" — once the dates pass, your child's normal schedule resumes. On the return day, just check in as usual.
-
-## Longer breaks and withdrawals
-
-- A **vacation hold** is for a temporary absence — you're keeping your spot.
-- If you're leaving the centre for good, that's a **withdrawal** — see **Withdrawing your child** (or talk to your director), because it ends enrolment, billing, and educator access on the date you choose.
-
-## Quick reference
-
-| Situation | What to do |
+| Who | What they can do |
 |---|---|
-| Planned holiday | Record a vacation hold (or message the director) with the dates |
-| Sick today | Message the room first thing |
-| Appointment, back same day | A quick message is plenty |
-| Leaving the centre | Request a withdrawal — not a hold |
+| Parents and guardians | See the usual days, edit them, report today's absence |
+| Pick-up logins (grandparents, nannies) | See the parent view; report today's absence |
+| Centre staff | See every child's week, edit it, record holds and absences |
+
+## FAQs and when something goes wrong
+
+??? I don't see Edit days. | Press it at the top of the screen, beside the date. If it is still missing, you may be signed in as staff, where the grid is always editable.
+??? The screen says "No children yet." | Your account is not linked to a child at this centre yet. Ask the centre to link you.
+??? It says "1 saved, 1 failed". | One day could not be saved. The screen stays open; press Save changes again. If it keeps failing, message the centre.
+??? I don't see the + on my child's photo. | It only shows on today's date, and Sick today and Not attending today only show while your child is not signed in.
+??? Does an absence change my bill? | That depends on your centre's policy. KiddieTrac records the absence; the centre decides how it is billed.
+??? My child is leaving the centre for good. | That is a withdrawal, not an absence. Use Withdraw from care under More on your home screen, or talk to the director.
+
+## Related screens
+
+[[open: #running-late | Running late]] [[open: #billing | Billing]] [[open: #messages | Message Centre]]
+
+See also: [Checking your child in and out](checking-your-child-in-and-out), [Your daily view](your-daily-view).

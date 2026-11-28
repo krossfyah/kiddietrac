@@ -1,79 +1,65 @@
 ---
 title: Les photos de votre enfant
-category: Daily Use
-order: 2
 ---
 
 # Les photos de votre enfant
 
-L’onglet **Photos** est une galerie de toutes les photos que les éducateurs de votre enfant ont partagées. Les nouvelles photos apparaissent quelques secondes après avoir été prises.
+**Photos et vidéos** est une galerie de toutes les photos et vidéos que les éducatrices de votre enfant ont partagées avec vous. Les nouvelles apparaissent quelques secondes après leur partage, et le menu affiche une pastille tant que vous ne les avez pas vues.
 
+[[open: #photos | Ouvrir Photos et vidéos]]
 
-## Étapes rapides
+## Parcourir les photos et les vidéos
 
-1. Ouvrez la journée de votre enfant et faites défiler jusqu’aux photos.
-2. Touchez une photo pour la voir en grand.
-3. Pour en conserver une, appuyez longuement sur un téléphone ou faites un clic droit sur un ordinateur, puis enregistrez-la.
-4. Partagez-la avec votre famille si vous le souhaitez — mais lisez d’abord la remarque ci-dessous si d’autres enfants figurent sur la photo.
+1. Ouvrez **Photos et vidéos** dans le menu ou avec la tuile **Photos et vidéos** (**Shared by educators**).
+2. Si vous avez plus d’un enfant, choisissez l’enfant en haut.
+3. Faites défiler la galerie. Chaque photo affiche sa légende, si l’éducatrice en a ajouté une, et la date. Les vidéos portent un 🎬 et jouent directement dans la galerie.
+4. Appuyez sur une photo pour l’ouvrir en grand.
+5. Dans la visionneuse, utilisez **Précédent** et **Suivant** (ou les flèches du clavier sur un ordinateur) pour passer d’une photo à l’autre, et **Fermer** pour revenir.
 
-Il n’y a pas encore de bouton pour commenter ou aimer, ni de moyen de chercher les photos par date.
+Dans l’écran **Aujourd’hui**, une pastille comme **2 new photos to see** apparaît quand quelque chose de nouveau est partagé. Ouvrir la galerie la fait disparaître.
 
-## Comment les photos apparaissent
+## Enregistrer une photo
 
-Lorsqu’un éducateur de votre centre prend une photo avec la tablette :
+1. Ouvrez la photo en grand.
+2. Appuyez sur **⬇️ Télécharger**.
+3. Sur un téléphone, choisissez **Enregistrer l’image** (ou **Enregistrer dans Fichiers**) dans le menu de partage. Si l’appli ouvre plutôt la photo dans votre navigateur, maintenez le doigt sur la photo, puis touchez **Enregistrer**.
 
-- Il identifie les enfants sur la photo
-- Elle apparaît aussitôt dans les galeries de photos des parents de ces enfants
-- Une légende (s’il en a ajouté une) apparaît sous la photo
+Vous pouvez partager les photos de **votre propre enfant** où vous voulez. Demandez la permission aux autres parents avant de publier une photo où l’on voit leurs enfants, et vérifiez la politique du centre sur les médias sociaux avant de l’identifier.
 
-## Ce que vous pouvez faire avec les photos
+## Choisir qui peut photographier votre enfant
 
-- **Les consulter** — touchez pour les voir en grand
-- **Les enregistrer** — appui long (mobile) ou clic droit (ordinateur) pour les télécharger sur votre appareil
-- **Les partager** — une fois téléchargées, partagez-les avec les grands-parents, la famille, les amis — mais soyez respectueux (voir ci-dessous)
+La permission de photo vous appartient : une réponse par enfant.
 
-## Ce que vous NE POUVEZ PAS faire (pour l’instant)
+1. Ouvrez **Mes paramètres**.
+2. Appuyez sur l’onglet **Photos**.
+3. Choisissez une option pour chaque enfant, par exemple : seule votre famille voit ses photos (il est exclu des photos de groupe), il peut paraître dans les photos de groupe que voient les autres familles de son local, ou le personnel ne prendra ni ne partagera aucune photo de lui.
+4. Appuyez sur **Save**. **Your photo permissions are updated.** apparaît.
 
-- Publier des commentaires sur les photos
-- Aimer ou mettre des photos en favoris
-- Chercher par date ou par activité
-- Exporter automatiquement en fin d’année
+C’est le parent principal qui fait ce choix. Le centre peut aussi demander si les photos peuvent servir à des fins de marketing.
 
-Ces fonctions pourraient être ajoutées plus tard.
+[[show: #settings @ Photos | Montrez-moi]]
 
-## Pourquoi certains jours n’ont pas de photos
+## Qui peut faire quoi
 
-Les éducateurs s’occupent de nombreux enfants. Les photos sont un merveilleux « extra », mais elles ne font pas obligatoirement partie de chaque journée. Un centre typique partage :
+| Qui | Ce qu’il peut faire |
+|---|---|
+| Parents et tuteurs | Voir, télécharger et partager les photos de leur enfant; régler la permission de photo (parent principal) |
+| Connexions de ramassage (grands-parents, nounous) | Voir et télécharger les photos, comme un parent |
+| Éducatrices et direction | Prendre et partager des photos, en respectant la permission de chaque famille |
 
-- 1 à 3 photos par enfant par semaine
-- Davantage pour les activités spéciales (sorties, fêtes)
-- Parfois aucune lors des journées de routine
+Les photos ne sont publiées nulle part en public. Seuls les familles des enfants qui y paraissent et le personnel du centre les voient.
 
-Si vous ne recevez aucune photo pendant des semaines, mentionnez-le à la direction — il faudra peut-être le rappeler au personnel.
+## FAQ et quand quelque chose ne va pas
 
-## Partager des photos en dehors de Kiddietrac
+??? L’écran indique « Nothing shared yet ». | Les éducatrices n’ont encore partagé aucune photo ni vidéo de votre enfant. Les photos sont un extra, pas une obligation quotidienne; certains jours, il n’y en a pas.
+??? Nous n’avons reçu aucune photo depuis des semaines. | Vérifiez votre permission de photo dans Mes paramètres > Photos. Si elle permet les photos, parlez-en à la direction.
+??? L’écran indique « Could not load photos & video ». | Vérifiez votre connexion et rouvrez l’écran.
+??? Télécharger ne fait rien sur mon téléphone. | Mettez à jour l’appli KiddieTrac. Si elle ouvre la photo dans votre navigateur, maintenez le doigt sur la photo et touchez Enregistrer.
+??? Puis-je commenter ou aimer une photo? | Pas encore. Pour dire merci, envoyez un message au local.
+??? Le centre peut-il supprimer une photo? | Demandez au centre. Les photos font partie du dossier de votre enfant, mais le centre peut cesser de vous en partager si votre permission change.
 
-Vous pouvez partager les photos de **votre propre enfant** où vous voulez (discussion familiale, etc.). Mais soyez attentif :
+## Écrans liés
 
-- **Photos où figurent d’autres enfants** — obtenez la permission des parents de ces enfants avant de les partager publiquement (médias sociaux, etc.). Kiddietrac ne suit ni ne limite le partage, mais c’est la bonne chose à faire.
-- **N’identifiez pas le centre publiquement** sans permission — il peut avoir des politiques sur l’exposition dans les médias sociaux.
-- **Évitez de publier tous les jours** — votre enfant a droit à sa vie privée en grandissant. Ce que vous publiez aujourd’hui reste en ligne pour toujours.
+[[open: #today | Aujourd’hui]] [[open: #settings | Mes paramètres]] [[open: #messages | Centre de messages]]
 
-## Portfolio de fin d’année
-
-À la fin de l’année scolaire, demandez à la direction si elle peut exporter toutes les photos de votre enfant. C’est un merveilleux souvenir.
-
-## En quoi est-ce différent d’une pellicule photo ordinaire?
-
-La tablette de l’éducateur n’enregistre pas les photos dans une pellicule ordinaire. Les photos sont téléversées directement dans Kiddietrac et stockées sur nos serveurs. Cela signifie que :
-
-- Vous les voyez immédiatement
-- Elles sont rattachées à l’enfant précis
-- On peut les chercher par date
-- Elles sont conservées en permanence dans le dossier de l’enfant
-
-## Confidentialité
-
-- Les photos sont visibles par : les parents/tuteurs des enfants identifiés, tous les éducateurs du centre, la direction
-- Les photos ne sont publiées publiquement nulle part
-- Le centre ne peut pas supprimer des photos à la demande d’un parent (ce sont des documents éducatifs), mais il peut cesser de partager de futures photos si vous le demandez
+Voir aussi : [Votre vue quotidienne](your-daily-view), [Notifications et alertes](notifications-and-alerts).

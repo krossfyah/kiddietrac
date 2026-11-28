@@ -7,82 +7,59 @@ screens: home, today
 
 # Your daily view
 
-When you open Kiddietrac, the first thing you see is **Today with [Your Child]** — a live look at what your child is doing right now.
+Two screens get you through the day. **Home** (titled **My Dashboard**) is a grid of tiles that opens everything in the parent portal. **Today** is a live look at your child's day: where they are, what they ate, naps, photos and the daily digest.
 
+[[open: #home | Open Home]] [[open: #today | Open Today]]
 
-## Quick steps
+## Finding your way from Home
 
-1. Open Kiddietrac. You land on **Today with [your child]**.
-2. Read the coloured header for where they are right now — **AT CENTRE** or **AT HOME**.
-3. Scroll to **Your Daily Digest** for the day written out in a few paragraphs.
-4. Keep scrolling for photos, meals, naps and nappy changes as they are logged.
-5. Tap any photo to see it full size.
+1. Open **Home**. The banner says **My Dashboard** and your greeting.
+2. Under **Quick access**, press a tile, for example **Today**, **Photos & video**, **Message Centre**, **Billing** or **Check in / out**.
+3. Press **➕ More** at the end of the tiles for the less-used screens: **Family directory**, **Conferences**, **Documents**, **Wellness check**, **Pickup people**, **Trends**, **Payment schedules**, **Account ledger**, **Refer a friend** and **Withdraw from care**.
+4. To sign out, press **🏃 Sign out** at the bottom of Home.
 
-The digest fills in through the day and settles around 6 PM, so it is normal for it to
-be short in the morning.
+[[show: #home @ More | Show me]]
 
-## What's on the screen
+On a computer the same screens are also in the menu on the left. Your centre decides which features it uses, so some tiles may open an empty screen.
 
-**At the top:**
+## Following your child's day on Today
 
-- Your child's name and current status (AT CENTRE / AT HOME)
-- Age, room name
-- The colour dot matches the room they're in
+1. Press the **Today** tile. The screen is titled **Today with** your child's name.
+2. If you have more than one child, press a child's name at the top to switch.
+3. Read the coloured status: **AT CENTRE**, **NOT AT CENTRE** or **OUT NOW** (out on a walk or outing).
+4. Look at the counters for the day: **MEALS & SNACKS**, **NAPS**, **DIAPER / BATHROOM**, **ACTIVITIES** and **DAYS ENROLLED**.
+5. Read **✨ YOUR DAILY DIGEST**: a few paragraphs about the day, written from what the educators logged.
+6. Scroll the **🕒 Timeline** for every sign-in, meal, nap, change, activity and sign-out, in order.
 
-**Below the header:**
+Beside the timeline (below it on a phone) you'll find **This month's billing** with **View billing →**, **👀 Recent observations**, and **🚶 Walk Watch** with **Follow live →** while a walk is under way and **View all walks →** for past ones. On a phone, Today also shows **🍽️ ON THE MENU TODAY**; press **Tap to view the weekly menu →** for the week.
 
-### Your Daily Digest
+When new photos or videos are shared, a pill such as **2 new photos to see** appears; press it to open **Photos & video**.
 
-A few paragraphs summarizing your child's day, written by AI based on what the educators logged. It updates throughout the day and is "final" around 6 PM.
+## Telling the centre about today
 
-If it says "will be ready after 4 PM" — that's normal. The system waits until enough of the day has happened to write a meaningful summary.
+1. On today's date, press your child's photo. It has a small **+** in the corner.
+2. Choose **⏰ Running late**, **🤒 Sick today** or **🚫 Not attending today** (while your child is at the centre it offers **⏰ Late pickup**).
+3. Follow the short form and press **Tell the centre**.
 
-### Stats strip
+## Who can do what
 
-Quick counts: meals, naps, diaper changes, activities. These update in real time as educators log them.
+| Who | What they see |
+|---|---|
+| Parents and guardians | Home, Today and everything the centre has turned on |
+| Pick-up logins (grandparents, nannies) | The same, without billing |
+| Staff previewing the parent view | A preview only; some parts may not load because they are not the child's parent |
 
-### Timeline
+## FAQs and when something goes wrong
 
-Every moment your child's day, in order:
+??? The digest says it will be ready after 4 PM. | That is normal. The digest is written once enough of the day has happened; check back later in the afternoon.
+??? Something I expected is missing from the timeline. | Entries appear within seconds of an educator logging them, but educators sometimes log a few at once. Pull down to refresh on a phone, or reload the page on a computer.
+??? It says "No events logged yet today. Check back soon!" | Nothing has been logged yet today, or your child is not in today.
+??? It says "Welcome to Kiddietrac" and nothing else. | Your account is not linked to a child yet. The centre links you once your child is enrolled.
+??? A tile opens an empty screen. | Your centre may not use that feature. Ask the centre if you expected something there.
+??? How do I hear about new photos and messages? | Install the phone app and allow notifications. See Notifications and alerts.
 
-- ✅ Check-in (when they arrived, who dropped them off)
-- 🍽️ Meals and snacks (what they ate, how much)
-- 😴 Naps (when they started, when they woke up)
-- 👶 Diaper changes
-- ✨ Activities (story time, sandbox, art, etc.)
-- 😊 Mood notes
-- ✅ Check-out (when they were picked up)
+## Related screens
 
-### Sidebar (right side)
+[[open: #photos | Photos & video]] [[open: #messages | Message Centre]] [[open: #billing | Billing]] [[open: #attendance-pattern | Attendance]]
 
-**This month's billing** — a quick view of what you owe. Click to see details.
-
-**Recent observations** — special moments educators recorded. Things like "asked a thoughtful question during story time" or "helped a friend who was upset." These build up over the year as a portfolio.
-
-## The four tabs
-
-At the top, you can switch between:
-
-- **Today** — what's happening right now (this view)
-- **Photos** — gallery of all photos shared by educators
-- **Messages** — your conversation with the educators
-- **Billing** — invoices and payment history
-
-## If you have multiple children
-
-You'll see tabs at the top to switch between them. Each child has their own everything.
-
-## When does data appear?
-
-Events appear within seconds of educators logging them. If your child just had lunch and you check the app, you should see it almost immediately.
-
-If something seems missing:
-
-- Hard refresh: pull down on the page (mobile) or press Ctrl+Shift+R (desktop)
-- Sometimes a few minutes lag if educators are batching their entries
-
-## Notifications
-
-Install the phone app and allow notifications, and Kiddietrac will send you a push alert for new photos, messages, invoices and important notices — even when the app is closed. See **Notifications and alerts** to set it up.
-
-If you want to know about something urgent, expect the educator to **message** you (Messages tab) or call you directly.
+See also: [Understanding the AI daily digest](understanding-the-ai-daily-digest), [Photos of your child](photos-of-your-child), [Notifications and alerts](notifications-and-alerts).

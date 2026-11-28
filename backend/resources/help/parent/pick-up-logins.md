@@ -6,56 +6,71 @@ screens: family-contacts
 ---
 # Pick-up logins for grandparents, nannies and other helpers
 
-If a grandparent, nanny or other trusted person regularly collects your children, they can have their own **pick-up login**. They sign in with their own email and password and check the children in and out from their own phone, just like you do.
-
-They see the parent view **without billing**: no invoices, payments, statements, receipts or subsidy details. The centre's system blocks billing for them, not just the menu.
-
-## Asking for one
-
-Only the centre can set up a login. You ask for it, and the centre approves it.
-
-1. Menu → **Family & pick-ups**.
-2. Find the person under **Emergency contacts & pick-ups**. If they're not there yet, add them first with **＋ Add contact**.
-3. Press **🔑 Request pick-up login**.
-4. Enter the email address their sign-in details should go to, and press **Send request**.
+**Family & pick-ups** lists the people around your child: the family's parents and guardians, your emergency contacts and the people allowed to pick up, and anyone collecting your child just for a day or two. From here you keep that list up to date, ask the centre for a **pick-up login** for someone who collects your children often, and add a **temporary pickup person** with a code.
 
 [[open: #family-contacts | Open Family & pick-ups]]
 
-The person shows **⏳ Requested — waiting for the centre**. The centre director and your agency's admins are told straight away.
+## Adding or changing a contact
 
-While you wait you can **Change email** or **Cancel** the request.
+1. Open **Family & pick-ups** from the menu.
+2. Under **Emergency contacts & pick-ups**, press **＋ Add contact** (or **Edit** on someone already there).
+3. Fill in **Full name \*** and **Phone \***, and if you like **Relationship to the child**, a **Second phone**, **Email** and **Notes for the centre**.
+4. Tick **Allowed to pick up the children** if they may collect your child. Unticked, they are an emergency contact only. The centre asks for photo ID the first time.
+5. Press **Add contact** (or **Save changes** when editing). A **Contact added — the centre has been told** (or **Saved — the centre has been told**) message appears.
 
-## What happens next
+Parents and guardians are listed under **Parents & guardians** with **Has a login** when they can sign in. To change a parent or guardian, contact the centre.
 
-- **Approved** — the person gets an email with how to sign in. If they're new to KiddieTrac it includes a temporary password, which they should change after signing in. You get a notification, and their name shows **🚸 Has a pick-up login**.
-- **Declined** — you get a notification that the centre didn't set one up. Speak to the centre if you have questions.
+## Asking for a pick-up login
 
-Giving someone a login also marks them as allowed to pick up.
+A pick-up login lets a grandparent, nanny or other helper sign in with their own email and password and check the children in and out from their own phone. They see the parent view **without billing**: no invoices, payments, statements, receipts or subsidy details. The server blocks billing for them, not just the menu.
 
-## What they can and can't do
+1. Find the person under **Emergency contacts & pick-ups**. If they are not there yet, add them first.
+2. Press **🔑 Request pick-up login**.
+3. Enter the email address their sign-in details should go to.
+4. Press **Send request**. **Request sent — the centre will let you know** appears.
 
-They can:
+The person shows **⏳ Requested — waiting for the centre**, and the centre director and your agency's admins are told. While you wait you can **Change email** or **Cancel request**.
 
-- Check the children in and out
-- See daily reports, photos and messages, like a parent
-- Report an issue to the centre (except billing questions)
+- **Approved** — the person gets an email with how to sign in (with a temporary password if they are new to KiddieTrac). You get a notification and they show **🚸 Has a pick-up login**. A login also marks them as allowed to pick up.
+- **Declined** — you get a notification that the centre won't set one up.
 
-They can't:
+## Adding a temporary pickup person
 
-- See anything about billing or payments
-- Add, change or remove contacts, or ask for logins for other people
+For someone collecting your child once, or for a few days:
 
-## Taking a login away
+1. Under **🎫 Temporary pickup people**, press **＋ Add someone**.
+2. Tick the children under **Who are they picking up? \***.
+3. Enter **Their full name \*** (as on their photo ID), **Their mobile number \*** and add **A photo of them \***.
+4. Under **How will they sign out?**, choose **Show the code to staff (a pass)** or **Sign out themselves with One-Tap (a pickup sign-in)**.
+5. Under **When?**, choose **One pickup** or **Every day in a date range**, and set the day(s).
+6. Press **Add and text them**.
 
-- **Edit** the person and untick **Allowed to pick up the children**, or
-- **Remove** them from the list.
+They get a text with a pickup code. Staff see their photo and check the code, and you are told the moment they sign your child out. A wrong or old code alerts everyone straight away. Use **Text again** to send a new code (the old one stops working) or **Cancel** then **Cancel pickup** to end it.
 
-Either way, their pick-up login stops working for your family straight away, and the centre is told. The centre can also remove a login.
+## Taking someone off the list
 
-## Questions
+1. Press **Edit** on the person and untick **Allowed to pick up the children**, or press **Remove**.
+2. Confirm. Their pick-up login stops working for your family straight away, and the centre is told.
 
-??? Does the person need an email address? | Yes. It's what they sign in with.
-??? They already use KiddieTrac at our centre. | They keep their existing account and password. The email just tells them they can now pick up your children.
+## Who can do what
+
+| Who | What they can do |
+|---|---|
+| Parents and guardians | Add, edit and remove contacts; ask for pick-up logins; add temporary pickup people |
+| Pick-up login holders | Check children in and out, see daily reports, photos and messages; no billing, no changes to contacts |
+| Centre director and agency admins | Approve or decline pick-up logins; change parents and guardians; remove a login |
+
+## FAQs and when something goes wrong
+
 ??? I don't see Request pick-up login. | Only the family's parents and guardians can ask. If you signed in with a pick-up login yourself, you won't see it.
+??? Does the person need an email address? | Yes, for a pick-up login. It is what they sign in with. A temporary pickup person needs a mobile number instead.
+??? They already use KiddieTrac at our centre. | They keep their existing account and password. The email just tells them they can now pick up your children.
+??? It says "No family is linked to your account yet." | The centre has not linked you to a family. Ask the centre.
+??? I don't see Temporary pickup people. | Your centre has not turned it on, or no children are linked to your account.
+??? It says "That email address does not look right." | Check the address for typing mistakes and send the request again.
+
+## Related screens
+
+[[open: #checkin | Check-in]] [[open: #settings | My settings]]
 
 See also: [Updating your profile and contacts](updating-your-profile-and-contacts), [Checking your child in and out](checking-your-child-in-and-out).

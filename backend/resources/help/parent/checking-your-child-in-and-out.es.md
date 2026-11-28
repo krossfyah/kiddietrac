@@ -1,76 +1,77 @@
 ---
 title: Registrar la entrada y salida de su hijo
-category: Daily Use
-order: 3
 ---
 
 # Registrar la entrada y salida de su hijo
 
-El día de su hijo comienza oficialmente cuando se **registra su entrada** y termina cuando se registra su salida. Este registro es la forma en que el centro sabe quién está presente, mantiene seguras las proporciones y — cuando corresponde — cómo se calcula la facturación basada en la asistencia. Por eso conviene hacerlo bien.
+Al dejar a su hijo pasan dos cosas. **Entrada** (la pantalla ☀ **Registro diario**) es una breve encuesta de la mañana: cómo durmió su hijo, su ánimo, el desayuno y los medicamentos, para que los educadores sepan qué esperar. **One-Tap** (el mosaico **Entrada / salida**) registra la entrada y la salida de su hijo escaneando el código QR del centro. Ese registro permite al centro saber quién está presente, mantener las proporciones seguras y, cuando corresponde, calcular la asistencia para la facturación.
 
-## Las dos formas de hacerlo
+[[open: #checkin | Abrir Entrada]] [[open: #scan | Abrir Entrada / salida]]
 
-1. **Usted registra la entrada desde su teléfono con One-Tap** (registro sin contacto con código QR) — la forma preferida. Es rápida y queda claro que fue usted.
-2. **Un educador registra la entrada de su hijo** — una alternativa para cuando tiene las manos ocupadas o su teléfono sin batería.
+## Completar la encuesta de la mañana
 
-Ambas producen el mismo registro. Siempre que sea posible, use su propio teléfono: es lo más preciso.
+1. Abra **Entrada** desde el menú.
+2. En **Child**, elija a su hijo si tiene más de uno.
+3. En **Ánimo esta mañana**, pulse una opción: **happy 😊**, **sleepy 😴**, **fussy 😩**, **sick 🤒** o **quiet 😶**.
+4. En **Sueño anoche**, pulse **great 🌙**, **okay 🌒**, **restless 🌖** o **poor 🌘**.
+5. En **¿Desayunó?**, pulse **Sí** o **No**.
+6. Escriba lo que se le dio en casa en **Medicación de hoy** (por ejemplo "Tylenol a las 7 a. m. por fiebre") y lo demás en **Notas para el personal**.
+7. Pulse **Enviar registro**. Aparece **✓ Saved. Staff will see your note today.** debajo del botón.
 
-## Registrar la entrada con One-Tap
+El personal ve sus respuestas en su pantalla **Hoy**. Puede volver a abrir la pantalla más tarde ese día para cambiarlas y enviarlas de nuevo.
 
-Al dejarlo:
+> ℹ️ **Medicación de hoy** es una nota para los educadores. Si el centro debe darle un medicamento a su hijo, se necesita un registro de medicamento en la pantalla **Salud**.
 
-1. Abra la aplicación y toque el botón **One-Tap** en el centro de la barra inferior.
-2. Apunte la cámara al código QR de One-Tap del centro (normalmente en un cartel junto a la puerta o al mostrador de registro).
-3. La aplicación lo confirma con una pantalla verde que enumera a cada niño cuya entrada se registró.
+## Entrada y salida con One-Tap
 
-El código de One-Tap **cambia cada día** por seguridad, así que una captura de pantalla antigua no sirve: debe escanear el cartel vigente.
+1. Pulse el mosaico **Entrada / salida** (**One-Tap**) en su pantalla de inicio.
+2. Permita la cámara si se lo pide y apúntela al código QR One-Tap del centro (normalmente un cartel junto a la puerta).
+3. En **Who are you here for?**, cada niño está marcado y muestra **At Centre** o **Not at Centre**. Toque a un niño para quitarlo.
+4. Pulse **Confirmar**. **All set!** muestra quién escaneó y la lista de niños con entrada o salida registrada.
 
-Si su hijo ya tiene la entrada registrada, escanear de nuevo registra su **salida**: alterna. Es decir, un escaneo por la mañana y otro a la recogida.
+Escanear cuando su hijo está en el centro registra su salida: un escaneo al dejarlo y otro al recogerlo. Pulse **Escanear de nuevo** si lo necesita.
 
-### ¿No hay cámara o no se abre el escáner?
+El código QR cambia todos los días, así que una captura de pantalla vieja no funcionará.
 
-- Asegúrese de haber permitido el acceso a la cámara (Ajustes → la aplicación → Permisos).
-- En algunos teléfonos el escáner pasa a un cuadro de **introducción manual del código**: escriba el código `KTCHK…` impreso bajo el cartel.
-- Como último recurso, pida a un educador que registre la entrada de su hijo.
+### La cámara no se abre
 
-## Ver la hora de entrada
+1. Si la pantalla dice **No camera on this device. Type the code instead.** o **This device can’t scan QR codes here**, busque debajo del cartel del centro el código que empieza con **KTCHK**.
+2. Escríbalo en el cuadro debajo de **Or enter the code shown under the centre’s One-Tap QR:**.
+3. Siga desde **Who are you here for?** como siempre.
 
-Cuando su hijo ya está dentro, su tarjeta de estado en la pantalla de inicio muestra **«En el centro»** con la hora de llegada, y la cronología registra la entrada. A la recogida cambia a **«En casa»** con la hora de salida.
+Si nada funciona, un educador puede registrar la entrada o salida de su hijo por usted. El registro es el mismo.
 
-Todas las horas se muestran en la zona horaria local de su centro.
+## "Please confirm your pick-up time"
 
-## Varios niños a la vez
+Si nadie registró la salida de su hijo, el sistema la registra automáticamente por la noche. Esa hora es provisional. Entonces recibe una notificación y un correo titulado **Please confirm your pick-up time**.
 
-Si tiene más de un hijo inscrito, un solo escaneo registra la entrada (o salida) de **todos** a la vez. La pantalla de confirmación enumera a cada uno para que pueda comprobarlo.
+1. Abra el correo.
+2. Pulse **Tell us the actual pick-up time** (un botón por niño si fueron varios).
+3. Escriba la hora real en que lo recogió. El registro de asistencia se actualiza al instante y se avisa al centro.
 
-## ¿Quién más puede recogerlo?
+El enlace es solo para usted, así que no reenvíe el correo. Si registra la salida al recogerlo, no lo recibirá.
 
-Solo los tutores y las personas que su centro ha indicado como **autorizadas para la recogida** pueden llevarse a su hijo. Puede ver esa lista en el expediente de su hijo. Para añadir o cambiar a una persona autorizada, comuníquese con su director: él mantiene esa lista al día por seguridad.
+## Quién puede hacer qué
 
-## Preguntas frecuentes
+| Quién | Encuesta de la mañana | One-Tap |
+|---|---|---|
+| Padres y tutores | Sí | Sí |
+| Accesos para recoger (abuelos, niñeras) | Sí | Sí |
+| Personas de recogida temporales | No | Solo si eligió **Sign out themselves with One-Tap** |
+| Educadores | Ven las respuestas | Registran la entrada y salida por usted |
 
-**«Registré la entrada pero la pantalla sigue diciendo "Aún no ha llegado".»**
-Deslice hacia abajo para actualizar. Si sigue sin cambiar, puede que el escaneo no se haya registrado: inténtelo una vez más o pida a un educador que lo confirme.
+## Preguntas frecuentes y cuando algo falla
 
-**«Escaneé dos veces por error y ahora dice que salió.»**
-Simplemente escanee una vez más para volver a registrar la entrada. O pida a un educador que lo corrija.
+??? Dice "That QR code isn’t the right kind." | Escaneó otro código QR. Escanee el cartel One-Tap del centro o escriba el código KTCHK.
+??? Dice "Pick at least one child". | Toque al menos un niño en Who are you here for? y pulse Confirmar.
+??? Dice "Could not check in — please try again." | Revise su conexión y escanee de nuevo. Si sigue fallando, pida a un educador que registre a su hijo.
+??? Registré la salida por error. | Escanee otra vez para registrar la entrada, o pida a un educador que lo corrija.
+??? La encuesta muestra las respuestas de otro hijo. | Las respuestas cargadas son las de su primer hijo. Elija al niño correcto y vuelva a marcar cada respuesta antes de enviar.
+??? Dice "No children on file." | Su cuenta aún no está vinculada a un niño. Pregunte al centro.
+??? ¿Quién puede recoger a mi hijo? | Solo los padres, tutores y las personas que su familia autorizó. Vea Familia y recogidas.
 
-**«¿Tengo que escanear yo, o siempre lo hará el educador?»**
-Ambas opciones sirven. Escanear usted mismo es más rápido y no deja dudas, pero el centro siempre puede registrar la entrada de su hijo por usted.
+## Pantallas relacionadas
 
-## «Confirme su hora de recogida»
+[[open: #family-contacts | Familia y recogidas]] [[open: #running-late | Running late]] [[open: #today | Hoy]]
 
-Si nadie registró la salida de su hijo a la hora de la recogida, el sistema del centro la registra automáticamente por la tarde. Esa hora es un valor provisional, no la hora en que usted realmente lo recogió.
-
-Cuando esto ocurre, recibe una notificación y un correo electrónico titulado **Confirme su hora de recogida**. Indica cuándo se registró la entrada de su hijo y la hora de salida automática.
-
-1. Lea las horas en el correo electrónico.
-2. Informe al centro de la hora en que realmente lo recogió. El correo incluye el número de teléfono o la dirección de correo electrónico del centro cuando los tiene registrados.
-
-No pasa nada malo y no necesita hacer nada más. La hora real mantiene exacto el registro de asistencia de su hijo para las proporciones, sus estados de cuenta y cualquier solicitud de subsidio o de CWELCC.
-
-> **Consejo:** Escanee a la salida cuando lo recoja, o pida a un educador que registre la salida de su hijo, y no recibirá este correo electrónico.
-
-## Por qué importa
-
-Un registro exacto de entradas y salidas mantiene seguro a su hijo (el centro siempre sabe exactamente quién está presente), respalda las proporciones correctas de personal por niño y le ofrece un registro honesto de las horas de su hijo. Solo toma un segundo: hágalo parte de su rutina.
+Vea también: [Accesos de recogida para abuelos, niñeras y otros ayudantes](pick-up-logins), [Días de asistencia, vacaciones y ausencias](vacation-holds-and-absences).

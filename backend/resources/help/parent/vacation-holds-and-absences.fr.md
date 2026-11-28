@@ -1,73 +1,83 @@
 ---
-title: Congés et absences
-category: Daily Use
-order: 4
+title: Jours de présence, vacances et absences
 ---
 
-# Congés et absences
+# Jours de présence, vacances et absences
 
-Vous partez en vacances, ou votre enfant est malade à la maison? Prévenir le centre à l’avance l’aide à planifier le personnel et les repas, garde le registre des présences exact et — selon la politique de votre centre — peut influer sur la facturation.
+**Présences** montre les jours où votre enfant vient habituellement au service de garde, et quelle partie de la journée (journée complète, matins, après-midi, avant ou après l’école). Le centre s’en sert pour planifier les locaux, le personnel et les repas. Ce guide explique aussi comment avertir le centre que votre enfant est absent aujourd’hui, et quoi faire pour des vacances.
 
-## Informer le centre que votre enfant sera absent
+[[open: #attendance-pattern | Ouvrir Présences]]
 
-Si votre centre a activé cette fonction, vous pouvez enregistrer vous-même une absence à venir :
+## Voir les jours habituels de votre enfant
 
-1. Ouvrez le dossier de votre enfant ou l’écran **Accueil**.
-2. Cherchez **Congé** / **Marquer absent** (le libellé varie selon le centre).
-3. Choisissez les dates d’absence de votre enfant et, si on vous le demande, un motif (vacances, maladie, personnel).
-4. Envoyez.
+1. Ouvrez **Présences** dans le menu ou avec la tuile **Présences** de votre écran d’accueil.
+2. Si vous avez plus d’un enfant, appuyez sur le nom de votre enfant dans la rangée d’onglets au-dessus de la grille.
+3. Lisez la semaine de gauche à droite. Chaque jour affiche **Full**, **AM**, **PM**, **Before**, **After** ou **B&A** (avant et après l’école), chacun dans sa couleur. Un **—** veut dire que votre enfant n’est pas attendu ce jour-là.
+4. La colonne d’aujourd’hui est surlignée et marquée **(TODAY)**.
 
-Vos éducateurs et votre direction voient le congé de leur côté et savent ainsi qu’ils n’attendent pas votre enfant ces jours-là.
+L’écran s’ouvre en lecture seule : rien ne change par accident.
 
-## Si vous ne voyez pas l’option
+## Modifier les jours habituels de votre enfant
 
-Tous les centres n’activent pas les congés en libre-service. Si vous ne la trouvez pas :
+1. Appuyez sur **✏️ Modifier les jours**.
+2. Choisissez la nouvelle partie de journée pour chaque jour qui change, ou **—** pour un jour où votre enfant ne vient plus. La rangée est marquée **• unsaved**.
+3. Réglez **Les changements s’appliquent à partir du** sur le premier jour de la nouvelle semaine. La date d’aujourd’hui est proposée.
+4. Appuyez sur **Enregistrer les modifications** (le bouton indique le nombre de changements, par exemple **Save 1 change**). Un message vert **✓ Saved** apparaît et l’écran revient en lecture seule.
 
-- Envoyez un bref **Message** à la salle de votre enfant, ou
-- Appelez ou écrivez à la direction avec les dates.
+**✓ Terminé** arrête la modification sans enregistrer. Les changements non enregistrés sont perdus quand vous quittez l’écran.
 
-Dans les deux cas, prévenir le plus tôt possible est apprécié — surtout pour le nombre de repas et le personnel.
+> ⚠️ Modifier les jours ici ne réserve pas de garde supplémentaire et ne change pas vos frais. Parlez-en au centre avant de changer la semaine, et avisez-le une fois que c’est fait.
 
-## Maladie le jour même
+## Avertir le centre que votre enfant est absent aujourd’hui
 
-Pour une maladie imprévue, le plus rapide est d’envoyer un court message à la salle dès le matin : *« Aria ne sera pas là aujourd’hui — elle a un rhume. De retour demain, on l’espère! »* Ainsi, les éducateurs ne se posent pas de questions, et c’est consigné.
+Dans la vue **Aujourd’hui** de votre écran d’accueil, la photo de votre enfant porte un petit **+** dans le coin.
 
-## Messages et appels « Votre enfant est-il arrivé? »
+1. Appuyez sur la photo de votre enfant (le **+**).
+2. Choisissez **🤒 Sick today** ou **🚫 Not attending today**.
+3. Choisissez un motif : **🤒 Unwell**, **🩺 Rendez-vous**, **✈️ Congé**, **👪 Famille** ou **• Autre**, et ajoutez une note si vous voulez.
+4. Appuyez sur **Aviser le centre**. Un message **Centre told** le confirme.
 
-Certains centres utilisent **Safe Arrival**. Si votre enfant était attendu aujourd’hui, n’a pas été pointé peu après son heure d’arrivée habituelle et qu’aucune absence n’a été signalée, vous recevez un message vous demandant s’il est arrivé. Touchez **Absent aujourd’hui** dans l’appli s’il reste à la maison.
+La prochaine fois que vous appuyez sur le **+** ce jour-là, il indique **✓ Reported away today**. Si votre enfant sera seulement en retard, choisissez plutôt **⏰ Running late**.
 
-Si personne ne répond, votre centre peut vous **téléphoner**. L’appel automatisé nomme votre enfant et vous demande d’appuyer sur une touche :
+## Vacances et absences plus longues
 
-- **1** — votre enfant est absent aujourd’hui. L’absence est enregistrée et le centre en est informé.
-- **2** — vous êtes en route et arrivez en retard. Le centre est informé de l’arrivée prochaine de votre enfant.
-- **3** — vous avez déjà déposé votre enfant. Il n’est pas pointé à l’arrivée; le centre est donc alerté immédiatement pour le trouver et l’enregistrer. Si vous le pouvez, appelez aussi le centre.
+Il n’y a pas d’écran pour réserver vous-même une suspension pour vacances. Pour des jours d’absence prévus :
 
-Votre centre peut n’offrir que certains de ces choix, et formuler l’appel autrement. Les tuteurs sont généralement appelés un à la fois, le tuteur principal en premier. Si vous avez désactivé les appels téléphoniques dans vos paramètres, vous ne serez pas appelé.
+1. Envoyez un message au local de votre enfant ou au bureau dans **Centre de messages**, avec les dates.
+2. Demandez au centre si ces jours changent votre facture. Cela dépend entièrement de sa politique.
+3. Chaque jour d’absence, vous pouvez quand même indiquer **🚫 Not attending today** pour que personne n’attende votre enfant.
 
-**Boutons dans le courriel.** Les courriels « Votre enfant est-il arrivé? » et « Votre enfant nous a manqué aujourd’hui » contiennent deux boutons : **Marquer absent** (ou **Ajouter une raison**) et **En retard** (ou **Finalement en retard**). Chacun ouvre une petite page réservée à votre enfant, où vous choisissez une raison ou l’heure d’arrivée et ajoutez une note si vous le souhaitez. Le centre est avisé immédiatement, comme dans l’application. Les boutons ne fonctionnent que le jour du courriel, et vous pouvez les rouvrir ce jour-là pour modifier votre réponse. Si votre enfant est déjà arrivé, rien ne change.
+Si le centre inscrit une suspension pour vacances pour vous, tout avis à ce sujet mène à **Facturation**.
 
-**Répondre au texto.** Le texto qui demande si votre enfant est arrivé se termine par « Reply 1 if running late, 2 if absent today. » Répondez **1** et le centre sait que votre enfant est en route; nous vous demandons ensuite l’heure d’arrivée, répondez par une heure comme **9:30**. Répondez **2** et votre enfant est marqué absent. Si la question porte sur plusieurs enfants, chaque choix est numéroté (par exemple 1 Ava late, 2 Ava absent). Un texto vous confirme la réponse. Toute autre réponse parvient au centre comme un message ordinaire.
+## Les messages et appels « Votre enfant est-il arrivé? »
 
-> **Astuce :** Informer le centre d’une absence à l’avance vous évite de recevoir ces messages ou appels ce jour-là.
+Si votre centre utilise **Safe Arrival** et que votre enfant était attendu mais n’est pas inscrit un peu après son heure habituelle, on vous demande s’il s’en vient :
 
-## Une absence change-t-elle ma facture?
+- **Dans l’appli ou par courriel** — appuyez sur **Mark absent** (ou **Add a reason or note**) ou sur **Running late**. Les boutons du courriel ne fonctionnent que le jour même.
+- **Par texto** — répondez **1** s’il est en retard (puis répondez avec une heure comme **9:30**) ou **2** s’il est absent aujourd’hui.
+- **Par téléphone** — faites le **1** (absent), le **2** (en route) ou le **3** (déjà déposé : le centre est alerté tout de suite pour retrouver votre enfant).
 
-Cela dépend entièrement de **la politique de votre centre**. Certains centres facturent des frais mensuels fixes quelle que soit la présence; d’autres créditent les jours de vacances ou prévoient un nombre déterminé d’absences payées par année. Kiddietrac enregistre l’absence — la façon de la facturer relève de votre direction. En cas de doute, demandez-lui directement.
+> 💡 Si vous avisez le centre d’avance, vous ne recevrez pas ces messages ni ces appels ce jour-là.
 
-## Le retour
+## Qui peut faire quoi
 
-Vous n’avez rien à faire pour « lever » le congé — une fois les dates passées, l’horaire habituel de votre enfant reprend. Le jour du retour, pointez simplement l’arrivée comme d’habitude.
-
-## Congés prolongés et départs
-
-- Un **congé** sert à une absence temporaire — vous gardez votre place.
-- Si vous quittez définitivement le centre, il s’agit d’un **retrait** — voir **Retirer votre enfant** (ou parlez-en à votre direction), car il met fin à l’inscription, à la facturation et à l’accès des éducateurs à la date que vous choisissez.
-
-## Aide-mémoire
-
-| Situation | Quoi faire |
+| Qui | Ce qu’il peut faire |
 |---|---|
-| Vacances planifiées | Enregistrez un congé (ou écrivez à la direction) avec les dates |
-| Malade aujourd’hui | Écrivez à la salle dès le matin |
-| Rendez-vous, retour le même jour | Un court message suffit |
-| Départ du centre | Demandez un retrait — pas un congé |
+| Parents et tuteurs | Voir les jours habituels, les modifier, signaler l’absence du jour |
+| Connexions de ramassage (grands-parents, nounous) | Voir la vue parent; signaler l’absence du jour |
+| Personnel du centre | Voir la semaine de chaque enfant, la modifier, inscrire les suspensions et les absences |
+
+## FAQ et quand quelque chose ne va pas
+
+??? Je ne vois pas Modifier les jours. | Le bouton est en haut de l’écran, à côté de la date. S’il manque encore, vous êtes peut-être connecté comme membre du personnel : la grille est alors toujours modifiable.
+??? L’écran indique « No children yet. » | Votre compte n’est pas encore lié à un enfant de ce centre. Demandez au centre de vous lier.
+??? L’écran indique « 1 saved, 1 failed ». | Un jour n’a pas pu être enregistré. L’écran reste ouvert; appuyez de nouveau sur Enregistrer les modifications. Si l’erreur se répète, écrivez au centre.
+??? Je ne vois pas le + sur la photo de mon enfant. | Il n’apparaît qu’à la date d’aujourd’hui, et Sick today et Not attending today ne s’affichent que si votre enfant n’est pas inscrit.
+??? Une absence change-t-elle ma facture? | Cela dépend de la politique de votre centre. KiddieTrac inscrit l’absence; le centre décide comment elle est facturée.
+??? Mon enfant quitte le centre pour de bon. | C’est un retrait, pas une absence. Utilisez Retrait de la garde sous Plus sur votre écran d’accueil, ou parlez à la direction.
+
+## Écrans liés
+
+[[open: #running-late | Running late]] [[open: #billing | Facturation]] [[open: #messages | Centre de messages]]
+
+Voir aussi : [Enregistrer l’arrivée et le départ de votre enfant](checking-your-child-in-and-out), [Votre vue quotidienne](your-daily-view).

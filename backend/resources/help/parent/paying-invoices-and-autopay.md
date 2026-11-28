@@ -7,83 +7,80 @@ screens: billing
 
 # Paying invoices and autopay
 
-This guide covers how to view what you owe, how to pay, and how to set up automatic payments so you never miss a due date. For a breakdown of *what's on* an invoice, see **Understanding your billing**.
-
-## Where to find your invoices
-
-Tap **Billing** in the bottom bar. You'll see:
-
-- Your **current balance** at the top
-- A list of invoices — each showing the amount, due date, and status (Paid, Due, or Overdue)
-
-Tap any invoice to open its full detail: the line items, the total, and payment options.
-
-## How to pay
-
-The payment methods available to you depend on what your centre has switched on.
-
-### Paying online: "Ways to pay"
+**Billing** shows what you owe, every invoice your centre has sent, what you have paid, and the ways your centre lets you pay. You can also save a card for **autopay** so each monthly invoice is paid for you. For what the lines on an invoice mean, see [Understanding your billing](understanding-your-billing).
 
 [[open: #billing | Open Billing]]
 
-If your centre takes payments online, a **Ways to pay** box appears at the top of **Billing**:
+## Seeing what you owe
 
-- [ ] Tap **💳 Add a card or bank account** to save a card, or your bank account for direct debit. Your details are entered in the payment provider's own secure form.
-- [ ] Next to each invoice with a balance, check the **amount**. It starts at the full balance, and you can lower it to **pay part** of the invoice. The screen tells you what would still be outstanding.
-- [ ] Tap how you want to pay: **Card**, **Interac** or **Direct debit**. A button stays greyed out until the method is set up. For example, **Card** needs a saved card first.
-- [ ] Confirm the amount when asked.
+1. Open **Billing** from the menu or the **Billing** tile.
+2. Read the summary at the top: the balance due (or **You are all paid up. Thank you!**), **Paid in** this year, **Last payment** and **Next due**.
+3. Look at **Your last 12 months** for what was billed and paid each month.
+4. Stay on **🧾 Invoices** for the list, or press **📒 Account ledger** for every charge and payment in order.
 
-Once you confirm, the payment is **submitted**, not yet paid. The invoice is marked paid when the money actually arrives, which for a bank payment can take a few days.
+In the invoice list, use **Search invoices…** and the sort menu (**Sort: Due soonest**, **Due date**, **Amount**, **Status**…) to find one. Upcoming invoices show here a couple of weeks before they are due. If your family splits the bill, you see **Your portion**.
 
-> **Important:** If the box shows **TEST MODE**, your centre's payment setup is still in testing. Nothing you do there moves real money, and no invoice will actually be paid. Pay your centre another way until the notice is gone.
+## Opening, printing or emailing an invoice
 
-### Paying by e-Transfer or in person
+1. Press the **⋮** (**Invoice actions**) on the invoice.
+2. Choose **👁 View invoice**, **⬇ Download invoice**, **🖨 Print** or **✉️ Email me a copy**.
+3. In the open invoice, read **Payment history**: each payment, how it was paid and **Paid so far**. A payment still clearing shows **Waiting for this to clear — not counted yet**.
 
-Many centres take payment by Interac e-Transfer, cheque or cash. Send the e-Transfer to your centre's billing email with **your invoice number in the message**. Your centre records the payment once it is received, and your invoice updates.
+On the **📒 Account ledger** tab, **🖨 Statement** prints a statement and **⬇ Statement (CSV)** downloads it as a spreadsheet.
 
-> If you don't see any online payment option, your centre may not have online payments enabled yet. Ask your director how they'd like to be paid.
+## Paying online with "Ways to pay"
 
-### Service fees
+If your centre takes online payments, a **Ways to pay** box appears on **Billing**.
 
-Some centres pass on the cost of card or e-Transfer / EFT payments. If yours does, and the centre records a payment of that kind, the fee appears on your invoice as its own line, for example **Service fee (2.9% card)**. It is also shown separately on your receipt. Cash and cheque payments never carry a service fee.
+1. Press **💳 Add a card or bank account** the first time, and enter the details on the payment provider's secure form. KiddieTrac never sees your card number.
+2. Next to each invoice with a balance, check the amount. It starts at the full balance; lower it to pay part of the invoice.
+3. Press **Card**, **Interac** or **Direct debit**. A method stays greyed out until it is set up (for example, **Direct debit** needs a saved bank account; you can type it **Or type it from a cheque**).
+4. Confirm the amount.
+
+The payment is **submitted** first and the invoice shows paid when the money arrives. A bank payment can take a few days.
+
+## Paying by Interac e-Transfer
+
+If your centre takes e-Transfers, press **💳 Pay by Interac e-Transfer** (at the top, or in an invoice's **⋮** menu).
+
+1. Copy the details shown: **Send to (e-Transfer email)**, **Recipient name**, **Amount** and, if needed, the **Security question** and **Answer**.
+2. In your own bank's app, send the e-Transfer. Type the invoice number in the message.
+3. Come back and press **I've sent it - tell** your centre, so they know to look for it.
+
+Prefer your bank to send you a ready-made request? Press **📨 Ask for an e-Transfer request**. Your invoice shows paid once the centre confirms the money arrived.
 
 ## Setting up autopay
 
-If your centre has online payments enabled, you can save a payment method so future invoices are paid automatically on their due date:
+Autopay is in your settings, not on Billing.
 
-1. Go to **Billing** (or **Settings → Payments**).
-2. Choose **Add a payment method** and enter your card or bank details.
-3. Turn on **Autopay**.
+1. Open **My settings** and press the **Payments** tab.
+2. In **💳 Autopay**, turn on the switch for your family.
+3. In **Enable autopay for** your family, enter your card and press **Save card**.
 
-From then on, each new invoice is charged automatically when it's due, and you'll get a receipt. You can turn autopay off or change the card any time from the same screen.
+The family shows **✓ Autopay on** with the card's last four digits. To stop, turn the switch off and confirm **Turn off autopay**; you go back to paying each invoice yourself. If your centre has not switched on card payments, the screen says so.
 
-## Important: we never see your card details
+## Who can do what
 
-For your security, Kiddietrac itself never stores or displays your full card or bank number. Card details go straight to the secure payment processor. If any screen ever asks you to type a full card number somewhere unexpected, stop and contact your centre.
+| Who | What they can do |
+|---|---|
+| Parents and guardians who pay | See invoices, pay, save cards, turn on autopay |
+| Parents on a split bill | See and pay their own portion |
+| Pick-up logins (grandparents, nannies) | No billing at all; the server blocks it |
+| Centre staff | Send invoices, record cash, cheque and e-Transfer payments, refund |
 
-## Receipts and history
+## FAQs and when something goes wrong
 
-- Every payment produces a **receipt** you can view or save from the invoice.
-- **Refunds**, if your centre issues one, appear as their own entry with a refund receipt.
-- Your full payment history stays in the Billing section.
+??? I don't see Ways to pay. | Your centre has not turned on online payments. Pay by e-Transfer, cheque or cash as your centre asks.
+??? I paid but it still says Due. | An e-Transfer, cheque or cash payment is marked paid by the centre when it arrives, which can take a day. An online bank payment can take a few days to clear.
+??? It says "Add a card first" or "Save a bank account first". | Press 💳 Add a card or bank account and save that method, then try again.
+??? It says "Enter an amount up to …". | The amount is more than the balance on that invoice. Lower it.
+??? There is a service fee line on my invoice. | Some centres pass on card or e-Transfer fees. It shows as its own line, for example Service fee (2.9% card). Cash and cheque never carry one.
+??? The bill looks wrong. | Billing is set by your centre. Message the director with the details; they can correct and re-send the invoice.
+??? I need a copy for my taxes or subsidy. | Download or email the invoice or receipt. For a yearly childcare receipt, ask the centre.
+??? Will I be told about new invoices? | Yes. With notifications on, you get an alert when a new invoice is issued.
 
-## Common questions
+## Related screens
 
-**"The bill looks wrong."**
-Billing is set by your centre, not by us. Message or call your director with the specifics — they can adjust the invoice and re-send it.
+[[open: #settings | My settings]] [[open: #payment-plans | Payment schedules]] [[open: #messages | Message Centre]]
 
-**"I paid but it still says Due."**
-If you paid by e-Transfer or in person, the director marks it paid manually — it can take a day. For online payments, see the next question.
-
-**"Can I pay part of an invoice?"**
-If your centre uses **Ways to pay**, yes: lower the amount next to the invoice before you tap a payment method. The rest stays outstanding. Payment schedules are set up by your centre, so ask your director about those.
-
-**"I paid online but it still shows a balance."**
-An online payment is submitted first and marked paid when the money arrives. A bank payment can take a few days. If it still shows after that, contact your centre.
-
-**"I want a copy for my taxes / subsidy."**
-Open the invoice or receipt and save it. For an annual childcare receipt, ask your director.
-
-## Staying on top of it
-
-Turn on **Notifications** so you get an alert the moment a new invoice is issued — and consider **autopay** so a busy week never turns into an overdue balance.
+See also: [Understanding your billing](understanding-your-billing), [Notifications and alerts](notifications-and-alerts).

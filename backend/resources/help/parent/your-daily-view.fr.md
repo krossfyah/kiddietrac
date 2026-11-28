@@ -1,86 +1,62 @@
 ---
 title: Votre vue quotidienne
-category: Getting Started
-order: 1
 ---
 
 # Votre vue quotidienne
 
-Quand vous ouvrez Kiddietrac, la première chose que vous voyez est **Aujourd’hui avec [votre enfant]** — un aperçu en direct de ce que fait votre enfant en ce moment.
+Deux écrans vous accompagnent pendant la journée. **Accueil** (titré **Mon tableau de bord**) est une grille de tuiles qui ouvre tout le portail parent. **Aujourd’hui** montre en direct la journée de votre enfant : où il est, ce qu’il a mangé, ses siestes, les photos et le résumé quotidien.
 
+[[open: #home | Ouvrir Accueil]] [[open: #today | Ouvrir Aujourd’hui]]
 
-## Étapes rapides
+## Vous retrouver à partir de l’Accueil
 
-1. Ouvrez Kiddietrac. Vous arrivez sur **Aujourd’hui avec [votre enfant]**.
-2. Lisez l’en-tête de couleur pour savoir où il se trouve en ce moment — **AU CENTRE** ou **À LA MAISON**.
-3. Faites défiler jusqu’à **Votre résumé quotidien** pour lire la journée en quelques paragraphes.
-4. Continuez à faire défiler pour voir les photos, les repas, les siestes et les changements de couche au fur et à mesure qu’ils sont consignés.
-5. Touchez une photo pour l’afficher en grand.
+1. Ouvrez **Accueil**. La bannière affiche **Mon tableau de bord** et vous salue.
+2. Sous **Accès rapide**, appuyez sur une tuile, par exemple **Aujourd’hui**, **Photos et vidéos**, **Centre de messages**, **Facturation** ou **Arrivée / départ**.
+3. Appuyez sur **➕ Plus** au bout des tuiles pour les écrans moins utilisés : **Répertoire des familles**, **Rencontres**, **Documents**, **Bilan de bien-être**, **Personnes autorisées**, **Tendances**, **Plans de paiement**, **Grand livre du compte**, **Parrainer un ami** et **Retrait de la garde**.
+4. Pour vous déconnecter, appuyez sur **🏃 Se déconnecter** au bas de l’Accueil.
 
-Le résumé se remplit tout au long de la journée et se stabilise vers 18 h; il est donc normal qu’il soit court le matin.
+[[show: #home @ More | Montrez-moi]]
 
-## Ce que contient l’écran
+Sur un ordinateur, les mêmes écrans sont aussi dans le menu de gauche. Votre centre choisit les fonctions qu’il utilise : certaines tuiles peuvent donc ouvrir un écran vide.
 
-**En haut :**
+## Suivre la journée de votre enfant dans Aujourd’hui
 
-- Le nom de votre enfant et son statut actuel (AU CENTRE / À LA MAISON)
-- L’âge et le nom de la salle
-- La pastille de couleur correspond à la salle où il se trouve
+1. Appuyez sur la tuile **Aujourd’hui**. L’écran s’intitule **Today with** suivi du prénom de votre enfant.
+2. Si vous avez plus d’un enfant, appuyez sur le prénom d’un enfant en haut pour changer.
+3. Lisez le statut en couleur : **AT CENTRE**, **NOT AT CENTRE** ou **OUT NOW** (en promenade ou en sortie).
+4. Regardez les compteurs du jour : **MEALS & SNACKS**, **NAPS**, **DIAPER / BATHROOM**, **ACTIVITIES** et **DAYS ENROLLED**.
+5. Lisez **✨ VOTRE RÉSUMÉ QUOTIDIEN** : quelques paragraphes sur la journée, rédigés à partir de ce que les éducatrices ont noté.
+6. Faites défiler la **🕒 Chronologie** : chaque arrivée, repas, sieste, changement, activité et départ, dans l’ordre.
 
-**Sous l’en-tête :**
+À côté de la chronologie (en dessous sur un téléphone), vous trouverez **This month's billing** avec **View billing →**, **👀 Observations récentes**, et **🚶 Walk Watch** avec **Follow live →** pendant une promenade et **View all walks →** pour les précédentes. Sur un téléphone, Aujourd’hui affiche aussi **🍽️ ON THE MENU TODAY**; appuyez sur **Tap to view the weekly menu →** pour la semaine.
 
-### Votre résumé quotidien
+Quand de nouvelles photos ou vidéos sont partagées, une pastille comme **2 new photos to see** apparaît; appuyez dessus pour ouvrir **Photos et vidéos**.
 
-Quelques paragraphes qui résument la journée de votre enfant, rédigés par une IA à partir de ce que les éducateurs ont consigné. Il se met à jour tout au long de la journée et devient « final » vers 18 h.
+## Aviser le centre pour aujourd’hui
 
-S’il indique « sera prêt après 16 h » — c’est normal. Le système attend qu’une partie suffisante de la journée soit écoulée pour rédiger un résumé utile.
+1. À la date d’aujourd’hui, appuyez sur la photo de votre enfant. Elle porte un petit **+** dans le coin.
+2. Choisissez **⏰ Running late**, **🤒 Sick today** ou **🚫 Not attending today** (quand votre enfant est au centre, on vous propose **⏰ Retard de ramassage**).
+3. Remplissez le court formulaire et appuyez sur **Aviser le centre**.
 
-### Bandeau de statistiques
+## Qui peut faire quoi
 
-Des totaux rapides : repas, siestes, changements de couche, activités. Ils se mettent à jour en temps réel au fur et à mesure que les éducateurs les consignent.
+| Qui | Ce qu’il voit |
+|---|---|
+| Parents et tuteurs | Accueil, Aujourd’hui et tout ce que le centre a activé |
+| Connexions de ramassage (grands-parents, nounous) | La même chose, sans la facturation |
+| Personnel qui prévisualise la vue parent | Un aperçu seulement; certaines parties peuvent ne pas se charger, puisqu’il n’est pas le parent de l’enfant |
 
-### Chronologie
+## FAQ et quand quelque chose ne va pas
 
-Chaque moment de la journée de votre enfant, dans l’ordre :
+??? Le résumé indique qu’il sera prêt après 16 h. | C’est normal. Le résumé est rédigé une fois qu’une bonne partie de la journée est passée; revenez plus tard dans l’après-midi.
+??? Il manque quelque chose dans la chronologie. | Les entrées apparaissent quelques secondes après que l’éducatrice les a notées, mais elle en note parfois plusieurs à la fois. Glissez vers le bas pour actualiser sur un téléphone, ou rechargez la page sur un ordinateur.
+??? L’écran indique « No events logged yet today. Check back soon! » | Rien n’a encore été noté aujourd’hui, ou votre enfant n’est pas présent aujourd’hui.
+??? L’écran indique « Welcome to Kiddietrac » et rien d’autre. | Votre compte n’est pas encore lié à un enfant. Le centre vous lie une fois votre enfant inscrit.
+??? Une tuile ouvre un écran vide. | Votre centre n’utilise peut-être pas cette fonction. Demandez au centre si vous vous attendiez à y voir quelque chose.
+??? Comment être avisé des nouvelles photos et des messages? | Installez l’appli sur votre téléphone et autorisez les notifications. Voir Notifications et alertes.
 
-- ✅ Arrivée (quand il est arrivé, qui l’a déposé)
-- 🍽️ Repas et collations (ce qu’il a mangé, en quelle quantité)
-- 😴 Siestes (heure de début, heure du réveil)
-- 👶 Changements de couche
-- ✨ Activités (heure du conte, bac à sable, bricolage, etc.)
-- 😊 Notes d’humeur
-- ✅ Départ (quand on est venu le chercher)
+## Écrans liés
 
-### Barre latérale (à droite)
+[[open: #photos | Photos et vidéos]] [[open: #messages | Centre de messages]] [[open: #billing | Facturation]] [[open: #attendance-pattern | Présences]]
 
-**Facturation du mois** — un aperçu de ce que vous devez. Cliquez pour voir les détails.
-
-**Observations récentes** — des moments spéciaux consignés par les éducateurs. Par exemple « a posé une question réfléchie pendant l’heure du conte » ou « a aidé un ami qui était contrarié ». Ils s’accumulent au fil de l’année pour former un portfolio.
-
-## Les quatre onglets
-
-En haut, vous pouvez passer d’un onglet à l’autre :
-
-- **Aujourd’hui** — ce qui se passe en ce moment (cette vue)
-- **Photos** — la galerie de toutes les photos partagées par les éducateurs
-- **Messages** — votre conversation avec les éducateurs
-- **Facturation** — les factures et l’historique des paiements
-
-## Si vous avez plusieurs enfants
-
-Vous verrez des onglets en haut pour passer de l’un à l’autre. Chaque enfant a son propre contenu.
-
-## Quand les données apparaissent-elles?
-
-Les événements apparaissent quelques secondes après que les éducateurs les ont consignés. Si votre enfant vient de dîner et que vous ouvrez l’appli, vous devriez le voir presque immédiatement.
-
-Si quelque chose semble manquer :
-
-- Actualisez complètement : tirez la page vers le bas (mobile) ou appuyez sur Ctrl+Maj+R (ordinateur)
-- Il y a parfois quelques minutes de décalage si les éducateurs saisissent leurs entrées par lots
-
-## Notifications
-
-Installez l’appli sur votre téléphone et autorisez les notifications : Kiddietrac vous enverra une alerte pour les nouvelles photos, les messages, les factures et les avis importants — même lorsque l’appli est fermée. Voir **Notifications et alertes** pour la configurer.
-
-Si vous voulez être informé d’une urgence, attendez-vous à ce que l’éducateur vous **écrive** (onglet Messages) ou vous appelle directement.
+Voir aussi : [Comprendre le résumé quotidien par IA](understanding-the-ai-daily-digest), [Les photos de votre enfant](photos-of-your-child), [Notifications et alertes](notifications-and-alerts).

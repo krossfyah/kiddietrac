@@ -1,88 +1,83 @@
 ---
 title: Pagar facturas y pago automático
-category: Billing
-order: 2
 ---
 
 # Pagar facturas y pago automático
 
-Esta guía explica cómo ver lo que debe, cómo pagar y cómo configurar pagos automáticos para no perder nunca una fecha de vencimiento. Para el desglose de *qué contiene* una factura, consulte **Entender su facturación**.
-
-## Dónde encontrar sus facturas
-
-Toque **Facturación** en la barra inferior. Verá:
-
-- Su **saldo actual** en la parte superior
-- Una lista de facturas, cada una con el importe, la fecha de vencimiento y el estado (Pagada, Pendiente o Vencida)
-
-Toque cualquier factura para abrir su detalle completo: las líneas, el total y las opciones de pago.
-
-## Cómo pagar
-
-Los métodos de pago disponibles dependen de lo que su centro haya activado.
-
-### Pagar en línea: «Formas de pago»
+**Facturación** muestra lo que debe, cada factura que envió su centro, lo que ha pagado y las formas de pago que acepta su centro. También puede guardar una tarjeta para el **pago automático**, así cada factura mensual se paga sola. Para saber qué significa cada línea de una factura, vea [Cómo entender su facturación](understanding-your-billing).
 
 [[open: #billing | Abrir Facturación]]
 
-Si su centro acepta pagos en línea, aparece un cuadro **Formas de pago** en la parte superior de **Facturación**:
+## Ver lo que debe
 
-- [ ] Toque **💳 Añadir una tarjeta o cuenta bancaria** para guardar una tarjeta, o su cuenta bancaria para débito directo. Sus datos se escriben en el formulario seguro del proveedor de pagos.
-- [ ] Junto a cada factura con saldo, compruebe el **importe**. Empieza con el saldo completo y puede reducirlo para **pagar una parte** de la factura. La pantalla le indica cuánto quedaría pendiente.
-- [ ] Toque cómo quiere pagar: **Tarjeta**, **Interac** o **Débito directo**. Un botón permanece en gris hasta que el método esté configurado. Por ejemplo, **Tarjeta** necesita primero una tarjeta guardada.
-- [ ] Confirme el importe cuando se le pida.
+1. Abra **Facturación** desde el menú o con el mosaico **Facturación**.
+2. Lea el resumen de arriba: el saldo pendiente (o **You are all paid up. Thank you!**), lo pagado este año (**Paid in**), **Last payment** y **Next due**.
+3. Mire **Your last 12 months** para ver lo facturado y pagado cada mes.
+4. Quédese en **🧾 Facturas** para la lista, o pulse **📒 Libro mayor de la cuenta** para ver cada cargo y pago en orden.
 
-Una vez que confirma, el pago queda **enviado**, aún no pagado. La factura se marca como pagada cuando el dinero llega de verdad, lo que en un pago bancario puede tardar unos días.
+En la lista, use **Search invoices…** y el menú de orden (**Sort: Due soonest**, **Due date**, **Amount**, **Status**…) para encontrar una factura. Las próximas facturas aparecen un par de semanas antes de su vencimiento. Si su familia divide la factura, verá **Your portion**.
 
-> **Importante:** Si el cuadro muestra **MODO DE PRUEBA**, la configuración de pagos de su centro aún está en pruebas. Nada de lo que haga allí mueve dinero real y ninguna factura se pagará de verdad. Pague a su centro de otra forma hasta que el aviso desaparezca.
+## Abrir, imprimir o enviar por correo una factura
 
-### Pagar por transferencia Interac o en persona
+1. Pulse el **⋮** (**Acciones de la factura**) de la factura.
+2. Elija **👁 Ver factura**, **⬇ Descargar factura**, **🖨 Imprimir** o **✉️ Enviarme una copia por correo electrónico**.
+3. En la factura abierta, lea **Payment history**: cada pago, cómo se hizo y **Paid so far**. Un pago que aún se procesa muestra **Waiting for this to clear — not counted yet**.
 
-Muchos centros aceptan pagos por transferencia Interac, cheque o efectivo. Envíe la transferencia al correo electrónico de facturación de su centro con **su número de factura en el mensaje**. Su centro registra el pago cuando lo recibe y su factura se actualiza.
+En la pestaña **📒 Libro mayor de la cuenta**, **🖨 Estado de cuenta** imprime un estado de cuenta y **⬇ Statement (CSV)** lo descarga como hoja de cálculo.
 
-> Si no ve ninguna opción de pago en línea, es posible que su centro aún no tenga activados los pagos en línea. Pregunte a su dirección cómo prefiere cobrar.
+## Pagar en línea con "Formas de pago"
 
-### Tarifas de servicio
+Si su centro acepta pagos en línea, aparece un recuadro **Formas de pago** en **Facturación**.
 
-Algunos centros trasladan el costo de los pagos con tarjeta o por transferencia electrónica. Si el suyo lo hace y el centro registra un pago de ese tipo, la tarifa aparece en su factura como una línea aparte, por ejemplo **Tarifa de servicio (2,9 % tarjeta)**. También se muestra por separado en su recibo. Los pagos en efectivo y con cheque nunca llevan tarifa de servicio.
+1. La primera vez, pulse **💳 Agregar una tarjeta o cuenta bancaria** e ingrese los datos en el formulario seguro del proveedor de pagos. KiddieTrac nunca ve el número de su tarjeta.
+2. Junto a cada factura con saldo, revise el monto. Empieza con el saldo total; bájelo para pagar una parte.
+3. Pulse **Tarjeta**, **Interac** o **Débito directo**. Un método queda en gris hasta que esté configurado (por ejemplo, **Débito directo** necesita una cuenta bancaria guardada; puede escribirla con **Or type it from a cheque**).
+4. Confirme el monto.
 
-## Configurar el pago automático
+El pago primero queda **enviado**, y la factura aparece pagada cuando llega el dinero. Un pago bancario puede tardar unos días.
 
-Si su centro tiene activados los pagos en línea, puede guardar un método de pago para que las facturas futuras se paguen automáticamente en su fecha de vencimiento:
+## Pagar con transferencia Interac e-Transfer
 
-1. Vaya a **Facturación** (o **Ajustes → Pagos**).
-2. Elija **Añadir un método de pago** e introduzca los datos de su tarjeta o cuenta bancaria.
-3. Active **Pago automático**.
+Si su centro acepta e-Transfers, pulse **💳 Pagar con transferencia Interac e-Transfer** (arriba, o en el menú **⋮** de una factura).
 
-A partir de entonces, cada factura nueva se cobra automáticamente al vencer y usted recibe un recibo. Puede desactivar el pago automático o cambiar la tarjeta en cualquier momento desde la misma pantalla.
+1. Copie los datos que aparecen: **Send to (e-Transfer email)**, **Recipient name**, **Amount** y, si hace falta, **Security question** y **Answer**.
+2. En la aplicación de su banco, envíe la transferencia. Escriba el número de factura en el mensaje.
+3. Vuelva y pulse **I’ve sent it - tell** seguido del nombre de su centro, para que sepan que deben buscarla.
 
-## Importante: nunca vemos los datos de su tarjeta
+¿Prefiere que su banco reciba una solicitud lista? Pulse **📨 Solicitar una solicitud de e-Transfer**. Su factura aparece pagada cuando el centro confirma que llegó el dinero.
 
-Por su seguridad, Kiddietrac nunca guarda ni muestra el número completo de su tarjeta o cuenta bancaria. Los datos de la tarjeta van directamente al procesador de pagos seguro. Si alguna pantalla le pide alguna vez escribir un número de tarjeta completo en un lugar inesperado, deténgase y póngase en contacto con su centro.
+## Activar el pago automático
 
-## Recibos e historial
+El pago automático está en sus ajustes, no en Facturación.
 
-- Cada pago genera un **recibo** que puede ver o guardar desde la factura.
-- Los **reembolsos**, si su centro emite alguno, aparecen como una entrada aparte con un recibo de reembolso.
-- Todo su historial de pagos permanece en la sección Facturación.
+1. Abra **Mis ajustes** y pulse la pestaña **Pagos**.
+2. En **💳 Pago automático**, active el interruptor de su familia.
+3. En **Enable autopay for** y el nombre de su familia, ingrese su tarjeta y pulse **Guardar tarjeta**.
 
-## Preguntas frecuentes
+La familia muestra **✓ Autopay on** con los últimos cuatro dígitos de la tarjeta. Para detenerlo, apague el interruptor y confirme **Turn off autopay**; volverá a pagar cada factura usted mismo. Si su centro no activó los pagos con tarjeta, la pantalla se lo indica.
 
-**«La factura parece incorrecta.»**
-La facturación la define su centro, no nosotros. Escriba o llame a su dirección con los detalles: puede ajustar la factura y volver a enviarla.
+## Quién puede hacer qué
 
-**«Pagué, pero sigue como Pendiente.»**
-Si pagó por transferencia o en persona, la dirección la marca como pagada manualmente; puede tardar un día. Para los pagos en línea, vea la pregunta siguiente.
+| Quién | Qué puede hacer |
+|---|---|
+| Padres y tutores que pagan | Ver facturas, pagar, guardar tarjetas, activar el pago automático |
+| Padres con factura dividida | Ver y pagar su propia parte |
+| Accesos para recoger (abuelos, niñeras) | Nada de facturación; el servidor lo bloquea |
+| Personal del centro | Enviar facturas, registrar pagos en efectivo, cheque y e-Transfer, reembolsar |
 
-**«¿Puedo pagar una parte de una factura?»**
-Si su centro usa **Formas de pago**, sí: reduzca el importe junto a la factura antes de tocar un método de pago. El resto queda pendiente. Los planes de pago los define su centro, así que consulte a su dirección.
+## Preguntas frecuentes y cuando algo falla
 
-**«Pagué en línea, pero aún aparece un saldo.»**
-Un pago en línea primero se envía y se marca como pagado cuando llega el dinero. Un pago bancario puede tardar unos días. Si sigue apareciendo después, póngase en contacto con su centro.
+??? No veo Formas de pago. | Su centro no activó los pagos en línea. Pague por e-Transfer, cheque o efectivo, como le pida su centro.
+??? Pagué pero todavía dice Due. | Un e-Transfer, cheque o pago en efectivo lo marca el centro cuando lo recibe, lo que puede tardar un día. Un pago bancario en línea puede tardar unos días.
+??? Dice "Add a card first" o "Save a bank account first". | Pulse 💳 Agregar una tarjeta o cuenta bancaria, guarde ese método e inténtelo de nuevo.
+??? Dice "Enter an amount up to …". | El monto supera el saldo de esa factura. Bájelo.
+??? Hay un cargo por servicio en mi factura. | Algunos centros trasladan el costo de las tarjetas o e-Transfers. Aparece en su propia línea, por ejemplo Service fee (2.9% card). El efectivo y el cheque nunca lo llevan.
+??? La factura parece incorrecta. | La facturación la define su centro. Escriba a la dirección con los detalles; pueden corregir y reenviar la factura.
+??? Necesito una copia para mis impuestos o un subsidio. | Descargue la factura o envíesela por correo. Para un recibo anual de cuidado infantil, pídalo al centro.
+??? ¿Me avisarán de facturas nuevas? | Sí. Con las notificaciones activadas, recibe un aviso cuando se emite una factura nueva.
 
-**«Quiero una copia para mis impuestos / subsidio.»**
-Abra la factura o el recibo y guárdelo. Para un recibo anual de cuidado infantil, pregunte a su dirección.
+## Pantallas relacionadas
 
-## Mantenerse al día
+[[open: #settings | Mis ajustes]] [[open: #payment-plans | Planes de pago]] [[open: #messages | Centro de mensajes]]
 
-Active las **Notificaciones** para recibir una alerta en cuanto se emita una factura nueva, y considere el **pago automático** para que una semana ajetreada nunca se convierta en un saldo vencido.
+Vea también: [Cómo entender su facturación](understanding-your-billing), [Notificaciones y alertas](notifications-and-alerts).

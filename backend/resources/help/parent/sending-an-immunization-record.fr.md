@@ -1,55 +1,65 @@
 ---
 title: Envoyer un dossier de vaccination
-category: Daily Use
-order: 6
 ---
 # Envoyer un dossier de vaccination
 
-**Vaccinations** dans le menu indique ce que votre centre a au dossier pour votre enfant et ce qui est à faire, et vous permet d’envoyer un nouveau dossier sans écrire à personne ni apporter de papier à la porte.
+**Vaccination** montre, pour chacun de vos enfants, ce qu’il reste à faire, ce que le centre a au dossier, et un endroit pour envoyer un nouveau carnet. Plus besoin d’écrire un courriel à quiconque ni d’apporter du papier. L’éducatrice de votre enfant et le centre sont avisés dès qu’un carnet arrive.
 
-## Deux onglets
+[[open: #immunizations | Ouvrir Vaccination]]
 
-- **💉 À faire** — le calendrier que suit votre centre et ce qui reste à faire pour l’âge de votre enfant.
-- **📄 Dossiers que vous avez envoyés** — les carnets que vous avez déjà envoyés et ce que le centre a relevé sur chacun.
+## Voir ce qui est dû
 
-## En envoyer un
+1. Ouvrez **Vaccination** dans le menu ou avec la tuile **Vaccination** (**Send in your records**).
+2. Trouvez la fiche de votre enfant. Chaque enfant a la sienne.
+3. Restez sur **💉 Ce qui est dû**. Chaque dose indique **Overdue**, **Due**, **Due soon**, **Not yet due**, **Recorded** ou **Exempté**.
+4. Appuyez sur **Show the rest of the schedule** pour voir les doses qui ne sont pas encore dues.
 
-1. **📷 Envoyer un dossier.**
-2. Prenez une photo du carnet ou choisissez un PDF. Jusqu’à 10 Mo — une photo de téléphone est normalement bien en deçà.
-3. Facultatif : sous **Que montre ce dossier?**, cochez chaque vaccin que vous voyez sur le carnet, avec la date si elle est lisible. Tout ce qui ne figure pas dans la liste peut être ajouté avec **+ Ajouter une dose qui ne figure pas dans la liste**.
-4. Ajoutez une note si quelque chose demande une explication, puis **Classer le dossier**.
+La liste est calculée à partir de la date de naissance de votre enfant et du calendrier que suit votre centre : elle est complète même si rien n’a encore été saisi.
 
-Une photo du carnet convient; il n’est pas nécessaire de le numériser ni de l’aplatir, il suffit qu’il soit lisible.
+## Envoyer un carnet
 
-### Ce que font vos coches
+1. Appuyez sur **📷 Envoyer un carnet** sur la fiche de votre enfant.
+2. Prenez une photo du carnet de vaccination ou choisissez un PDF. Vous pouvez choisir plusieurs fichiers à la fois (jusqu’à 10, de 10 Mo chacun). Une photo prise au téléphone convient tant qu’elle est lisible.
+3. Si vous le voulez, sous **What does this record show?**, cochez chaque vaccin que vous voyez sur le carnet, avec la date si elle est claire. Utilisez **+ Ajouter une dose non listée** pour ce qui manque à la liste.
+4. Ajoutez une note au besoin, puis appuyez sur **Classer le carnet**. **Thank you — the centre has been told.** apparaît.
 
-Cocher ce que montre le carnet aide le centre à le lire plus vite. Cela n’enregistre **pas** les doses et ne change pas ce qui s’affiche comme à faire : le personnel confirme chaque dose à partir du carnet avant qu’elle ne compte. Si vous hésitez, laissez les cases vides et envoyez simplement la photo.
+### À quoi servent vos crochets
 
-## Et ensuite?
+Cocher ce que montre le carnet aide le centre à le lire plus vite. Cela **n’inscrit pas** les doses et ne change pas ce qui est affiché comme dû. Le personnel vérifie chaque dose sur le carnet avant qu’elle compte. En cas de doute, ne cochez rien et envoyez simplement la photo.
 
-Votre centre est avisé immédiatement. **Un membre du personnel lit le carnet et en enregistre les doses** — c’est cette étape qui fait disparaître ce qui s’affiche comme à faire.
+## Ce qui se passe ensuite
 
-C’est voulu, et ce n’est pas un délai gratuit. Décider qu’une ligne précise d’un carnet correspond à une dose précise est un jugement clinique, qui revient au centre. Cela permet aussi qu’une photo peu claire soit repérée par quelqu’un qui peut vous en demander une meilleure, plutôt que d’être enregistrée de travers sans que personne le sache.
+1. Le centre est avisé immédiatement.
+2. Un membre du personnel lit le carnet et y inscrit les doses. C’est cette étape qui efface ce qui est affiché comme dû.
+3. D’ici là, le carnet affiche **Détails en attente** dans **📄 Carnets que vous avez envoyés**, et ce que vous avez coché est indiqué comme pas encore confirmé.
 
-Donc : après l’envoi d’un dossier, **votre enfant peut encore sembler avoir des doses à faire pendant un court moment**. Rien n’est perdu. Tant que le personnel ne l’a pas lu, le dossier affiche **Détails en attente** sous **Dossiers que vous avez envoyés**, et ce que vous avez coché est indiqué comme *non confirmé*. Une fois le dossier lu, le statut est mis à jour et les doses apparaissent avec le dossier.
+Votre enfant peut donc encore paraître en retard un court moment après l’envoi. Rien ne s’est perdu. Décider qu’une ligne du carnet correspond à une dose précise revient au centre, et une photo floue est repérée par quelqu’un qui peut vous en demander une meilleure.
 
 ## Exemptions
 
-Si votre enfant a une exemption religieuse, de conscience ou médicale, envoyez le formulaire d’exemption de la même façon. Votre centre enregistre l’exemption à partir de celui-ci. Les doses exemptées s’affichent comme **Exempté** sous **À faire**, avec le motif, et vous n’avez aucun rappel à leur sujet. Seul le centre peut enregistrer ou retirer une exemption.
+Si votre enfant a une exemption religieuse, de conscience ou médicale, envoyez le formulaire d’exemption de la même façon. Le centre inscrit l’exemption à partir de celui-ci. Les doses exemptées paraissent comme **Exempté** dans **💉 Ce qui est dû**, avec le motif, et on ne vous les rappelle pas. Seul le centre peut inscrire ou retirer une exemption. Dans certaines provinces et certains États, seules les exemptions médicales sont acceptées; l’écran l’indique sous le titre.
 
-## Rappels de votre centre
+## Qui peut faire quoi
 
-Votre centre peut choisir de vous envoyer un courriel — et une notification dans l’application — lorsqu’une dose est en retard ou approche, ou lorsqu’il n’a pas encore de dossier pour votre enfant. Si vous avez envoyé un dossier et que rien n’en a encore été relevé, on ne vous le redemande pas : il attend le centre. Un rappel n’énumère que ce que le centre a enregistré; s’il mentionne une dose que votre enfant a déjà reçue, envoyez le dossier à jour.
+| Qui | Ce qu’il peut faire |
+|---|---|
+| Parents et tuteurs | Voir ce qui est dû, envoyer des carnets et des formulaires d’exemption |
+| Éducatrices | Voir les carnets et ce qui est dû pour leurs enfants |
+| Direction du centre et administrateurs de l’agence | Inscrire les doses et les exemptions à partir de vos envois, régler le calendrier, envoyer des rappels |
 
-## Bon à savoir
+## FAQ et quand quelque chose ne va pas
 
-- **Envoyer deux fois le même carnet est sans conséquence.** Une dose déjà enregistrée ne l’est pas de nouveau, alors une seconde photo plus nette ne crée aucun doublon.
-- Un dossier envoyé reste au dossier — il fait partie du dossier de santé de votre enfant et vous ne pouvez donc pas le supprimer par la suite. Demandez à votre centre si quelque chose doit être retiré.
-- L’ouverture d’un dossier l’affiche dans l’application, avec un bouton **Imprimer**. Voir [Ouvrir et imprimer des documents](opening-and-printing-documents).
-- Si la liste des doses à faire semble erronée pour l’âge de votre enfant, demandez à votre centre — le calendrier relève de lui et varie selon la province et l’agence.
+??? J’ai coché une dose, mais elle paraît encore comme due. | Vos crochets sont une note pour le centre. La dose compte une fois que le personnel l’a vérifiée sur le carnet.
+??? Dois-je cocher quelque chose? | Non. Une photo lisible suffit; le centre la lit.
+??? L’écran indique « Up to 10 files at a time, please. » | Envoyez les 10 premiers, puis appuyez de nouveau sur Envoyer un carnet pour le reste.
+??? L’écran indique « Could not file the record. » | Vérifiez votre connexion et que chaque fichier fait moins de 10 Mo, puis réessayez.
+??? J’ai envoyé le même carnet deux fois. | Ce n’est pas grave. Une dose déjà inscrite ne l’est pas une deuxième fois.
+??? Puis-je supprimer un carnet envoyé? | Non. Il fait partie du dossier de santé de votre enfant. Demandez au centre si quelque chose doit être retiré.
+??? La liste ne semble pas correspondre à l’âge de mon enfant. | Le calendrier relève du centre, et il varie selon la province et l’agence. Demandez au centre.
+??? Pourquoi ai-je reçu un courriel de rappel? | Votre centre peut vous écrire, et envoyer une notification dans l’appli, quand une dose est en retard ou approche, ou quand il n’a encore aucun carnet. Si vous avez déjà envoyé un carnet qui attend d’être lu, on ne vous le redemande pas.
 
-??? J’ai coché une dose, mais mon enfant l’a toujours à faire. | Vos coches sont une note pour le centre. La dose compte une fois que le personnel l’a vérifiée à partir du carnet.
-??? Dois-je cocher quelque chose? | Non. Une photo lisible suffit; le centre fait la lecture.
+## Écrans liés
 
-Voir aussi : [Formulaires, documents et signatures](forms-documents-and-signatures),
-[Ouvrir et imprimer des documents](opening-and-printing-documents).
+[[open: #medications | Santé]] [[open: #my-documents | Documents]] [[open: #messages | Centre de messages]]
+
+Voir aussi : [Formulaires, documents et signatures](forms-documents-and-signatures), [Ouverture et impression de documents](opening-and-printing-documents).

@@ -1,88 +1,83 @@
 ---
 title: Payer vos factures et prélèvement automatique
-category: Billing
-order: 2
 ---
 
 # Payer vos factures et prélèvement automatique
 
-Ce guide explique comment voir ce que vous devez, comment payer et comment configurer des paiements automatiques pour ne jamais manquer une date d’échéance. Pour le détail de *ce que contient* une facture, voir **Comprendre votre facturation**.
-
-## Où trouver vos factures
-
-Touchez **Facturation** dans la barre du bas. Vous verrez :
-
-- Votre **solde actuel** en haut
-- Une liste de factures — chacune avec le montant, la date d’échéance et le statut (Payée, À payer ou En retard)
-
-Touchez une facture pour ouvrir son détail complet : les lignes, le total et les options de paiement.
-
-## Comment payer
-
-Les modes de paiement offerts dépendent de ce que votre centre a activé.
-
-### Payer en ligne : « Façons de payer »
+**Facturation** montre ce que vous devez, chaque facture envoyée par votre centre, ce que vous avez payé et les façons de payer que votre centre accepte. Vous pouvez aussi enregistrer une carte pour le **prélèvement automatique**, afin que chaque facture mensuelle soit payée pour vous. Pour le sens des lignes d’une facture, voir [Comprendre votre facturation](understanding-your-billing).
 
 [[open: #billing | Ouvrir Facturation]]
 
-Si votre centre accepte les paiements en ligne, un encadré **Façons de payer** s’affiche en haut de **Facturation** :
+## Voir ce que vous devez
 
-- [ ] Touchez **💳 Ajouter une carte ou un compte bancaire** pour enregistrer une carte, ou votre compte bancaire pour un prélèvement. Vos renseignements sont saisis dans le formulaire sécurisé du fournisseur de paiement.
-- [ ] À côté de chaque facture avec un solde, vérifiez le **montant**. Il correspond au départ au solde complet, et vous pouvez le réduire pour **payer une partie** de la facture. L’écran vous indique ce qui resterait à payer.
-- [ ] Touchez le mode de paiement voulu : **Carte**, **Interac** ou **Prélèvement bancaire**. Un bouton reste grisé tant que le mode n’est pas configuré. Par exemple, **Carte** exige d’abord une carte enregistrée.
-- [ ] Confirmez le montant lorsque c’est demandé.
+1. Ouvrez **Facturation** dans le menu ou avec la tuile **Facturation**.
+2. Lisez le résumé en haut : le solde dû (ou **You are all paid up. Thank you!**), le montant payé cette année (**Paid in**), **Last payment** et **Next due**.
+3. Consultez **Your last 12 months** pour ce qui a été facturé et payé chaque mois.
+4. Restez sur **🧾 Factures** pour la liste, ou appuyez sur **📒 Grand livre du compte** pour chaque frais et chaque paiement dans l’ordre.
 
-Une fois que vous avez confirmé, le paiement est **soumis**, pas encore payé. La facture est marquée payée lorsque l’argent arrive réellement, ce qui peut prendre quelques jours pour un paiement bancaire.
+Dans la liste, utilisez **Search invoices…** et le menu de tri (**Sort: Due soonest**, **Due date**, **Amount**, **Status**…) pour trouver une facture. Les factures à venir s’affichent environ deux semaines avant l’échéance. Si votre famille partage la facture, vous voyez **Your portion**.
 
-> **Important :** Si l’encadré affiche **MODE TEST**, la configuration des paiements de votre centre est encore en phase de test. Rien de ce que vous y faites ne déplace de véritable argent, et aucune facture ne sera réellement payée. Payez votre centre autrement jusqu’à ce que l’avis disparaisse.
+## Ouvrir, imprimer ou envoyer une facture par courriel
 
-### Payer par virement Interac ou en personne
+1. Appuyez sur le **⋮** (**Actions de la facture**) de la facture.
+2. Choisissez **👁 Voir la facture**, **⬇ Télécharger la facture**, **🖨 Imprimer** ou **✉️ M’envoyer une copie par courriel**.
+3. Dans la facture ouverte, consultez **Payment history** : chaque paiement, comment il a été fait et **Paid so far**. Un paiement en cours de traitement affiche **Waiting for this to clear — not counted yet**.
 
-De nombreux centres acceptent les virements Interac, les chèques ou l’argent comptant. Envoyez le virement au courriel de facturation de votre centre avec **votre numéro de facture dans le message**. Votre centre enregistre le paiement dès qu’il le reçoit, et votre facture est mise à jour.
+Dans l’onglet **📒 Grand livre du compte**, **🖨 Relevé** imprime un relevé et **⬇ Statement (CSV)** le télécharge en chiffrier.
 
-> Si vous ne voyez aucune option de paiement en ligne, votre centre n’a peut-être pas encore activé les paiements en ligne. Demandez à votre direction comment elle souhaite être payée.
+## Payer en ligne avec « Modes de paiement »
 
-### Frais de service
+Si votre centre accepte les paiements en ligne, une boîte **Modes de paiement** apparaît dans **Facturation**.
 
-Certains centres répercutent le coût des paiements par carte ou par virement Interac / virement électronique. Si c’est le cas du vôtre et que le centre enregistre un paiement de ce type, les frais apparaissent sur votre facture sur leur propre ligne, par exemple **Frais de service (2,9 % carte)**. Ils sont aussi indiqués séparément sur votre reçu. Les paiements en argent comptant et par chèque n’entraînent jamais de frais de service.
+1. La première fois, appuyez sur **💳 Ajouter une carte ou un compte bancaire** et entrez les renseignements dans le formulaire sécurisé du fournisseur de paiement. KiddieTrac ne voit jamais votre numéro de carte.
+2. À côté de chaque facture avec un solde, vérifiez le montant. Il commence au solde complet; baissez-le pour payer une partie de la facture.
+3. Appuyez sur **Carte**, **Interac** ou **Prélèvement bancaire**. Un mode reste grisé tant qu’il n’est pas configuré (par exemple, **Prélèvement bancaire** demande un compte bancaire enregistré; vous pouvez le saisir avec **Or type it from a cheque**).
+4. Confirmez le montant.
 
-## Configurer le prélèvement automatique
+Le paiement est d’abord **soumis**, et la facture s’affiche comme payée quand l’argent arrive. Un paiement bancaire peut prendre quelques jours.
 
-Si votre centre a activé les paiements en ligne, vous pouvez enregistrer un mode de paiement afin que vos prochaines factures soient payées automatiquement à leur date d’échéance :
+## Payer par virement Interac
 
-1. Allez dans **Facturation** (ou **Paramètres → Paiements**).
-2. Choisissez **Ajouter un mode de paiement** et saisissez les renseignements de votre carte ou de votre compte bancaire.
-3. Activez **Prélèvement automatique**.
+Si votre centre accepte les virements, appuyez sur **💳 Payer par virement Interac** (en haut, ou dans le menu **⋮** d’une facture).
 
-Dès lors, chaque nouvelle facture est prélevée automatiquement à son échéance, et vous recevez un reçu. Vous pouvez désactiver le prélèvement automatique ou changer de carte en tout temps depuis le même écran.
+1. Copiez les renseignements affichés : **Send to (e-Transfer email)**, **Recipient name**, **Amount** et, au besoin, **Security question** et **Answer**.
+2. Dans l’appli de votre banque, envoyez le virement. Inscrivez le numéro de facture dans le message.
+3. Revenez et appuyez sur **I’ve sent it - tell** suivi du nom de votre centre, pour qu’il sache qu’il doit le surveiller.
 
-## Important : nous ne voyons jamais les renseignements de votre carte
+Vous préférez que votre banque reçoive une demande toute prête? Appuyez sur **📨 Demander l’envoi d’une demande de virement**. Votre facture s’affiche comme payée quand le centre confirme que l’argent est arrivé.
 
-Pour votre sécurité, Kiddietrac lui-même ne conserve ni n’affiche jamais le numéro complet de votre carte ou de votre compte bancaire. Les renseignements de carte vont directement au processeur de paiement sécurisé. Si un écran vous demande un jour de saisir un numéro de carte complet à un endroit inattendu, arrêtez et communiquez avec votre centre.
+## Activer le prélèvement automatique
 
-## Reçus et historique
+Le prélèvement automatique se trouve dans vos paramètres, pas dans Facturation.
 
-- Chaque paiement produit un **reçu** que vous pouvez consulter ou enregistrer depuis la facture.
-- Les **remboursements**, si votre centre en accorde un, apparaissent comme une entrée distincte avec un reçu de remboursement.
-- L’historique complet de vos paiements reste dans la section Facturation.
+1. Ouvrez **Mes paramètres** et appuyez sur l’onglet **Paiements**.
+2. Dans **💳 Prélèvement automatique**, activez l’interrupteur de votre famille.
+3. Dans **Enable autopay for** suivi du nom de votre famille, entrez votre carte et appuyez sur **Enregistrer la carte**.
 
-## Questions courantes
+La famille affiche **✓ Autopay on** avec les quatre derniers chiffres de la carte. Pour arrêter, désactivez l’interrupteur et confirmez **Turn off autopay**; vous recommencez à payer chaque facture vous-même. Si votre centre n’a pas activé le paiement par carte, l’écran vous le dit.
 
-**« La facture semble erronée. »**
-La facturation est établie par votre centre, pas par nous. Écrivez à votre direction ou appelez-la avec les détails — elle peut ajuster la facture et la renvoyer.
+## Qui peut faire quoi
 
-**« J’ai payé, mais c’est encore indiqué À payer. »**
-Si vous avez payé par virement Interac ou en personne, la direction la marque payée manuellement — cela peut prendre une journée. Pour les paiements en ligne, voir la question suivante.
+| Qui | Ce qu’il peut faire |
+|---|---|
+| Parents et tuteurs qui paient | Voir les factures, payer, enregistrer une carte, activer le prélèvement automatique |
+| Parents qui partagent la facture | Voir et payer leur propre part |
+| Connexions de ramassage (grands-parents, nounous) | Aucun accès à la facturation; le serveur le bloque |
+| Personnel du centre | Envoyer les factures, inscrire les paiements comptant, par chèque et par virement, rembourser |
 
-**« Puis-je payer une partie d’une facture? »**
-Si votre centre utilise **Façons de payer**, oui : réduisez le montant à côté de la facture avant de toucher un mode de paiement. Le reste demeure à payer. Les échéanciers de paiement sont établis par votre centre; renseignez-vous auprès de votre direction.
+## FAQ et quand quelque chose ne va pas
 
-**« J’ai payé en ligne, mais un solde s’affiche encore. »**
-Un paiement en ligne est d’abord soumis, puis marqué payé à l’arrivée de l’argent. Un paiement bancaire peut prendre quelques jours. Si le solde s’affiche encore après, communiquez avec votre centre.
+??? Je ne vois pas Modes de paiement. | Votre centre n’a pas activé les paiements en ligne. Payez par virement, par chèque ou comptant, comme votre centre le demande.
+??? J’ai payé, mais la facture indique encore Due. | Un virement, un chèque ou un paiement comptant est marqué payé par le centre à sa réception, ce qui peut prendre une journée. Un paiement bancaire en ligne peut prendre quelques jours.
+??? L’écran indique « Add a card first » ou « Save a bank account first ». | Appuyez sur 💳 Ajouter une carte ou un compte bancaire, enregistrez ce mode, puis réessayez.
+??? L’écran indique « Enter an amount up to … ». | Le montant dépasse le solde de la facture. Baissez-le.
+??? Il y a des frais de service sur ma facture. | Certains centres refilent les frais de carte ou de virement. Ils paraissent sur leur propre ligne, par exemple Service fee (2.9% card). Le comptant et le chèque n’en ont jamais.
+??? La facture me semble erronée. | La facturation relève de votre centre. Écrivez à la direction avec les détails; elle peut corriger et renvoyer la facture.
+??? Il me faut une copie pour mes impôts ou une subvention. | Téléchargez la facture ou envoyez-la-vous par courriel. Pour un reçu annuel de frais de garde, demandez au centre.
+??? Serai-je avisé des nouvelles factures? | Oui. Avec les notifications activées, vous recevez une alerte quand une nouvelle facture est émise.
 
-**« Je veux une copie pour mes impôts / ma subvention. »**
-Ouvrez la facture ou le reçu et enregistrez-le. Pour un reçu annuel de garde d’enfants, demandez à votre direction.
+## Écrans liés
 
-## Rester à jour
+[[open: #settings | Mes paramètres]] [[open: #payment-plans | Plans de paiement]] [[open: #messages | Centre de messages]]
 
-Activez les **Notifications** pour recevoir une alerte dès qu’une nouvelle facture est émise — et pensez au **prélèvement automatique** pour qu’une semaine chargée ne devienne jamais un solde en retard.
+Voir aussi : [Comprendre votre facturation](understanding-your-billing), [Notifications et alertes](notifications-and-alerts).

@@ -1,73 +1,83 @@
 ---
-title: Pausas por vacaciones y ausencias
-category: Daily Use
-order: 4
+title: Días de asistencia, vacaciones y ausencias
 ---
 
-# Pausas por vacaciones y ausencias
+# Días de asistencia, vacaciones y ausencias
 
-¿Se va de vacaciones o su hijo está enfermo en casa? Avisar al centro con anticipación le ayuda a planificar el personal y las comidas, mantiene exacto el registro de asistencia y — según la política de su centro — puede afectar la facturación.
+**Asistencia** muestra los días en que su hijo o hija viene normalmente al centro, y qué parte del día (día completo, mañanas, tardes, antes o después de la escuela). El centro lo usa para planificar salas, personal y comidas. Esta guía también explica cómo avisar al centro que su hijo no vendrá hoy y qué hacer con unas vacaciones.
 
-## Avisar al centro de que su hijo estará ausente
+[[open: #attendance-pattern | Abrir Asistencia]]
 
-Si su centro tiene esta función activada, puede registrar usted mismo una ausencia próxima:
+## Ver los días habituales de su hijo
 
-1. Abra el registro de su hijo o la pantalla **Inicio**.
-2. Busque **Pausa por vacaciones** / **Marcar ausente** (el texto varía según el centro).
-3. Elija las fechas en que su hijo estará ausente y, si se lo piden, un motivo (vacaciones, enfermedad, personal).
-4. Envíe.
+1. Abra **Asistencia** desde el menú o con el mosaico **Asistencia** de su pantalla de inicio.
+2. Si tiene más de un hijo, pulse el nombre de su hijo en la fila de pestañas sobre la cuadrícula.
+3. Lea la semana de izquierda a derecha. Cada día muestra **Full**, **AM**, **PM**, **Before**, **After** o **B&A** (antes y después de la escuela), cada uno con su color. Un **—** significa que no se espera a su hijo ese día.
+4. La columna de hoy aparece resaltada y marcada **(TODAY)**.
 
-Sus educadores y la dirección ven la pausa de su lado, así que saben que no deben esperar a su hijo esos días.
+La pantalla se abre en modo de solo lectura, así que nada cambia por accidente.
 
-## Si no ve la opción
+## Cambiar los días habituales de su hijo
 
-No todos los centros activan las pausas de autoservicio. Si no la encuentra:
+1. Pulse **✏️ Editar días**.
+2. Elija la nueva parte del día para cada día que cambia, o **—** para un día en que su hijo ya no viene. La fila se marca **• unsaved**.
+3. Ponga en **Los cambios se aplican desde** el primer día de la nueva semana. Empieza en la fecha de hoy.
+4. Pulse **Guardar cambios** (indica cuántos cambios hay, por ejemplo **Save 1 change**). Aparece un mensaje verde **✓ Saved** y la pantalla vuelve a solo lectura.
 
-- Envíe un breve **Mensaje** a la sala de su hijo, o
-- Llame o escriba a la dirección con las fechas.
+**✓ Hecho** deja de editar sin guardar. Los cambios que no guardó se pierden al salir de la pantalla.
 
-En cualquier caso, se agradece avisar con la mayor anticipación posible, sobre todo por el recuento de comidas y el personal.
+> ⚠️ Cambiar los días aquí no reserva cuidado adicional ni cambia sus cuotas. Hable con el centro antes de cambiar la semana y avíseles cuando lo haya hecho.
 
-## Enfermedad el mismo día
+## Avisar al centro que su hijo no vendrá hoy
 
-Si su hijo se enferma de improviso, lo más rápido es enviar un mensaje breve a la sala a primera hora: *«Aria no vendrá hoy: tiene un resfriado. ¡Esperamos que vuelva mañana!»* Así los educadores no se quedan preguntándose y queda registrado.
+En la vista **Hoy** de su pantalla de inicio, la foto de su hijo tiene un pequeño **+** en la esquina.
 
-## Mensajes y llamadas «¿Ha llegado su hijo?»
+1. Pulse la foto de su hijo (el **+**).
+2. Elija **🤒 Sick today** o **🚫 Not attending today**.
+3. Elija un motivo: **🤒 Unwell**, **🩺 Cita**, **✈️ Feriado**, **👪 Familia** u **• Otro**, y agregue una nota si quiere.
+4. Pulse **Avisar al centro**. Un mensaje **Centre told** lo confirma.
 
-Algunos centros usan **Safe Arrival**. Si se esperaba a su hijo hoy, no se ha registrado su entrada poco después de su hora habitual de llegada y no se informó ninguna ausencia, recibirá un mensaje preguntando si ya llegó. Toque **No asiste hoy** en la app si se queda en casa.
+La próxima vez que pulse el **+** ese día, dirá **✓ Reported away today**. Si su hijo solo llegará tarde, elija **⏰ Running late**.
 
-Si nadie responde, su centro puede **llamarle por teléfono**. La llamada automática menciona a su hijo y le pide pulsar una tecla:
+## Vacaciones y ausencias más largas
 
-- **1** — su hijo está ausente hoy. Se registra la ausencia y se avisa al centro.
-- **2** — va en camino y llegará tarde. Se avisa al centro de que espere a su hijo.
-- **3** — ya dejó a su hijo. Su hijo no figura como registrado, por lo que se alerta de inmediato al centro para que lo busque y registre su entrada. Si puede, llame también al centro.
+No hay una pantalla para que usted reserve una pausa por vacaciones. Para días de ausencia planificados:
 
-Es posible que su centro ofrezca solo algunas de estas opciones y redacte la llamada de otra forma. A los tutores se les suele llamar de uno en uno, empezando por el principal. Si desactivó las llamadas telefónicas en sus ajustes, no se le llamará.
+1. Envíe un mensaje a la sala de su hijo o a la oficina en **Centro de mensajes** con las fechas.
+2. Pregunte al centro si esos días cambian su factura. Depende totalmente de su política.
+3. Cada día de ausencia puede marcar igualmente **🚫 Not attending today** para que nadie espere a su hijo.
 
-**Botones en el correo.** Los correos "¿Ya llegó su hijo?" y "Hoy echamos de menos a su hijo" tienen dos botones: **Marcar ausente** (o **Añadir un motivo**) y **Llega tarde** (o **Al final llega tarde**). Cada uno abre una pequeña página solo para su hijo, donde elige un motivo o la hora de llegada y añade una nota si quiere. Se avisa al centro de inmediato, igual que en la aplicación. Los botones solo funcionan el día del correo, y puede abrirlos de nuevo ese día para cambiar su respuesta. Si su hijo ya registró su entrada, no cambia nada.
+Si el centro registra una pausa por vacaciones para usted, cualquier aviso al respecto lleva a **Facturación**.
 
-**Responder al mensaje de texto.** El mensaje que pregunta si su hijo ya llegó termina con "Reply 1 if running late, 2 if absent today." Responda **1** y el centro sabrá que su hijo va en camino; luego le preguntamos la hora de llegada, responda con una hora como **9:30**. Responda **2** y su hijo queda marcado como ausente. Si se pregunta por varios hijos, cada opción va numerada (por ejemplo 1 Ava late, 2 Ava absent). Recibirá un mensaje de confirmación. Cualquier otra respuesta llega al centro como un mensaje normal.
+## Mensajes y llamadas de "¿Llegó su hijo?"
 
-> **Consejo:** Avisar al centro de una ausencia con anticipación evita que reciba estos mensajes o llamadas ese día.
+Si su centro usa **Safe Arrival** y se esperaba a su hijo pero no tiene registrada la entrada un poco después de su hora habitual, le preguntarán si viene:
 
-## ¿Una ausencia cambia mi factura?
+- **En la aplicación o por correo** — pulse **Mark absent** (o **Add a reason or note**) o **Running late**. Los botones del correo solo funcionan el mismo día.
+- **Por mensaje de texto** — responda **1** si llegará tarde (y luego responda con una hora como **9:30**) o **2** si está ausente hoy.
+- **Por teléfono** — marque **1** (ausente), **2** (en camino) o **3** (ya lo dejó: se alerta al centro de inmediato para encontrar a su hijo).
 
-Depende por completo de **la política de su centro**. Algunos centros cobran una cuota mensual fija sin importar la asistencia; otros abonan los días de vacaciones o tienen un número determinado de ausencias pagadas al año. Kiddietrac registra la ausencia; cómo se factura depende de su director. Si no está seguro, pregúntele directamente.
+> 💡 Si avisa al centro con anticipación, no recibirá estos mensajes ni llamadas ese día.
 
-## El regreso
+## Quién puede hacer qué
 
-No necesita hacer nada para «quitar» la pausa: cuando pasan las fechas, se reanuda el horario normal de su hijo. El día del regreso, simplemente registre la entrada como de costumbre.
-
-## Pausas largas y bajas
-
-- Una **pausa por vacaciones** es para una ausencia temporal: usted conserva su lugar.
-- Si deja el centro definitivamente, se trata de una **baja**: vea **Dar de baja a su hijo** (o hable con su director), porque termina la inscripción, la facturación y el acceso de los educadores en la fecha que usted elija.
-
-## Referencia rápida
-
-| Situación | Qué hacer |
+| Quién | Qué puede hacer |
 |---|---|
-| Vacaciones planificadas | Registre una pausa por vacaciones (o escriba a la dirección) con las fechas |
-| Enfermo hoy | Envíe un mensaje a la sala a primera hora |
-| Cita, vuelve el mismo día | Basta un mensaje breve |
-| Deja el centro | Solicite una baja, no una pausa |
+| Padres y tutores | Ver los días habituales, cambiarlos, avisar la ausencia de hoy |
+| Accesos para recoger (abuelos, niñeras) | Ver la vista de padres; avisar la ausencia de hoy |
+| Personal del centro | Ver la semana de cada niño, cambiarla, registrar pausas y ausencias |
+
+## Preguntas frecuentes y cuando algo falla
+
+??? No veo Editar días. | Está arriba en la pantalla, junto a la fecha. Si sigue sin aparecer, tal vez entró como personal, donde la cuadrícula siempre se puede editar.
+??? La pantalla dice "No children yet." | Su cuenta aún no está vinculada a un niño de este centro. Pida al centro que la vincule.
+??? Dice "1 saved, 1 failed". | Un día no se pudo guardar. La pantalla queda abierta; pulse otra vez Guardar cambios. Si sigue fallando, escriba al centro.
+??? No veo el + en la foto de mi hijo. | Solo aparece en la fecha de hoy, y Sick today y Not attending today solo se muestran mientras su hijo no tiene registrada la entrada.
+??? ¿Una ausencia cambia mi factura? | Depende de la política de su centro. KiddieTrac registra la ausencia; el centro decide cómo se factura.
+??? Mi hijo deja el centro definitivamente. | Eso es una baja, no una ausencia. Use Baja del servicio de cuidado en Más, en su pantalla de inicio, o hable con la dirección.
+
+## Pantallas relacionadas
+
+[[open: #running-late | Running late]] [[open: #billing | Facturación]] [[open: #messages | Centro de mensajes]]
+
+Vea también: [Registrar la entrada y salida de su hijo](checking-your-child-in-and-out), [Su vista diaria](your-daily-view).

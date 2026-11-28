@@ -7,48 +7,56 @@ screens: report-cards
 
 # Awards, certificates and report cards
 
-Beyond the day-to-day timeline, Kiddietrac celebrates your child's milestones and gives you a fuller picture of how they're growing.
+**Report cards** holds your child's report cards from their educators. One is written each quarter of the school year (Sep–Nov, Dec–Feb, Mar–May, Jun–Aug), and you can ask for this quarter's from the same screen. **Awards** shows the awards educators have given your child, each with a certificate you can print.
 
-## Awards and certificates
+[[open: #report-cards | Open Report cards]] [[open: #awards | Open Awards]]
 
-Educators can recognise your child with awards — for kindness, for a new skill, for a great week. When your child earns one:
+## Reading a report card
 
-- You'll get a **notification**
-- The award appears in your child's **Awards** section
-- You can open a **printable certificate** to save or print for the fridge
+1. Open **Report cards** from the menu or the **Report cards** tile (**Each quarter**).
+2. Find your child's card. Each child has their own.
+3. Under **This quarter**, if it shows **✓ Ready**, press **📑 View**.
+4. For an earlier quarter, find it under **All report cards** and press **View**.
 
-Awards might be daily, weekly, or monthly. They're a lovely way to see what your child's educators noticed and valued — often things that don't show up in a photo.
+The report card opens as a PDF you can read, save or print. You only ever see report cards the centre has approved and sent.
 
-### Printing a certificate
+## Asking for this quarter's report card
 
-1. Open the award from the notification or the Awards section.
-2. Tap **Print** or **Save**.
-3. It opens a clean, printable certificate with your child's name and the award.
+1. Under **This quarter**, press **📨 Request report card**.
+2. A message confirms that your child's educators have been asked for this quarter's report card.
+3. The button changes to **Requested** with the date. You get a notification when the report card is ready.
 
-## Report cards
+You can only ask once a quarter; the request stays until the report card is sent.
 
-Some centres share periodic **report cards** or progress summaries — a rounded look at your child's development across areas like communication, motor skills, social and emotional growth, and creativity.
+## Viewing and printing an award certificate
 
-When your centre publishes one:
+1. Open **Awards** from the **Awards** tile on your home screen. The banner reads **Celebrating your child**.
+2. Each award shows its badge, title, your child's name, the date, the educator's note and who gave it.
+3. Press **🏆 View certificate**.
+4. The certificate opens ready to print or save as a PDF. Print it for the fridge or send it to the grandparents; it's yours.
 
-- You'll be notified
-- It appears in your child's record / documents
-- You can read it in the app and save a copy
+You get a notification when your child receives a new award.
 
-Report cards are written by the people who spend the day with your child, drawing on the observations and moments logged over the period. If anything in one raises a question, the best next step is a conversation — message or ask to chat with your child's educator or director.
+## Who can do what
 
-## Observations
+| Who | What they can do |
+|---|---|
+| Parents and guardians | Read report cards, ask for this quarter's, view and print award certificates |
+| Pick-up logins (grandparents, nannies) | See the parent view, like a parent |
+| Educators | Write report cards and give awards |
+| Centre director and agency admins | Approve and send report cards to families |
 
-Woven through all of this are **observations** — short notes (sometimes with a photo) that educators record when they notice something meaningful: a first, a breakthrough, a funny moment, a developmental step. These feed into report cards and are part of your child's story over time. Many appear right in your daily timeline.
+## FAQs and when something goes wrong
 
-## Why this matters
+??? It says "No report cards yet. They appear here once the centre sends them." | None has been sent yet. Ask for this quarter's with Request report card.
+??? It says "No children on your account here". | Report cards appear once your child is enrolled and linked to your account. Ask the centre.
+??? It says "That report card could not be opened. Please try again." | Check your connection and press View again. On a phone, make sure pop-ups or the browser are allowed to open.
+??? It says "The request could not be sent. Please try again." | Try again in a moment. If it keeps failing, message your child's educator.
+??? We haven't received any awards. | Awards are optional and depend on your centre and educators. The screen says "No awards yet" until one is given.
+??? Something in a report card worries me. | The best next step is a conversation. Message your child's educator or the director.
 
-The timeline tells you about *today*. Awards, observations, and report cards tell you about *growth* — the arc of your child's learning that's easy to miss day to day. Take a moment now and then to look back through them; it's one of the most rewarding parts of the app.
+## Related screens
 
-## Common questions
+[[open: #today | Today]] [[open: #messages | Message Centre]] [[open: #my-documents | Documents]]
 
-**"We haven't received any awards or report cards."**
-Both are optional and depend on your centre and educators. Not every centre uses them, and report cards are usually periodic (e.g. each term). If you'd like more feedback, just ask your educator — most love talking about your child.
-
-**"Can I share a certificate with grandparents?"**
-Absolutely — save it and send it however you like. It's yours.
+See also: [Your daily view](your-daily-view), [Notifications and alerts](notifications-and-alerts).
