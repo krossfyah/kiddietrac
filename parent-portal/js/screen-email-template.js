@@ -179,7 +179,7 @@
     var s = d.createElement('style');
     s.id = 'kt-et2-css';
     s.textContent = ''
-      + '.kt-et2-page{padding:18px 24px 44px;max-width:1000px;margin:0 auto;color:#0F172A;}'
+      + '.kt-et2-page{padding:18px 24px 44px;color:#0F172A;}'
       + '.kt-et2-gh{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#64748B;margin:22px 0 8px;}'
       + '.kt-et2-badge{font-size:10.5px;font-weight:800;letter-spacing:.03em;border:1px solid;border-radius:99px;padding:1px 8px;white-space:nowrap;}'
       + '.kt-et2-act{height:30px;padding:0 11px;margin:2px;border:1px solid #CBD5E1;background:#fff;border-radius:8px;font-size:12.5px;font-weight:700;color:#1F6080;cursor:pointer;}'

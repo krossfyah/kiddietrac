@@ -26,7 +26,7 @@
   var lbl = 'font-size:12.5px;font-weight:700;color:#334155;display:block;margin-top:14px;';
 
   function render(container) {
-    container.innerHTML = '<div style="padding:24px;max-width:760px;margin:0 auto;color:#0F172A;"><div style="color:#64748B;">Loading email settings…</div></div>';
+    container.innerHTML = '<div style="padding:24px;color:#0F172A;"><div style="color:#64748B;">Loading email settings…</div></div>';
     mapi('/platform/mail-settings').then(function (d) { paint(container, d); })
       .catch(function (e) { container.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message) + '</div>'; });
   }
@@ -68,7 +68,7 @@
       + '.ms-sec{font-weight:800;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#64748B;margin:4px 0 14px;}'
       + '.ms-card{background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(15,23,42,.05);}'
       + '</style>'
-      + '<div style="padding:24px;max-width:720px;margin:0 auto;color:#0F172A;">'
+      + '<div style="padding:24px;color:#0F172A;">'
       + '<h2 style="margin:0 0 4px;font-size:21px;font-weight:800;">📬 Mail settings</h2>'
       + '<div style="color:#64748B;font-size:13px;margin-bottom:18px;line-height:1.55;">How KiddieTrac sends outbound email. Microsoft Graph gives inbox delivery (SPF/DKIM/DMARC) + speed; sendmail is the automatic fallback so email never goes down.</div>'
 
