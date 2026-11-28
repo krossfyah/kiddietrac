@@ -44,6 +44,12 @@ La tarjeta de abajo lista las copias más recientes con la hora de cada una, su 
 
 > ℹ️ **Las copias no se pueden descargar desde el portal, a propósito.** Un solo archivo contiene a todos los niños, tutores, direcciones y notas médicas de la plataforma. Se guardan fuera del sitio web y las restaura una persona con acceso al servidor y a la llave fuera de línea, nunca desde un navegador.
 
+## Restaurar una copia, y la copia externa
+
+Cada copia se cifra con la clave de Anthony antes de escribirse, así que solo quien tiene esa clave privada puede leerla. La restaura una persona con acceso al servidor: `gpg --decrypt <copia>.sql.gz.gpg | gunzip | mysql <base>`. La clave privada nunca se guarda en el servidor.
+
+La línea de estado también dice si hay una **copia externa** confirmada: Cloudways hace su propia copia de todo el servidor (cada 3 horas, guardada 29 días) y la pantalla muestra cuándo se hizo la última. Si dice **Off-site copy not confirmed**, conecte Cloudways en **Server health** para que el portal pueda comprobarlo. La misma línea aparece en el mosaico de copias de **Compliance evidence**.
+
 ## Quién puede hacer qué
 
 | Rol | Acceso |

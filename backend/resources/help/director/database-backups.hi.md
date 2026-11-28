@@ -44,6 +44,12 @@ title: डेटाबेस बैकअप
 
 > ℹ️ **Copies portal से download नहीं की जा सकतीं, जानबूझकर।** एक ही file में platform के हर बच्चे, अभिभावक, पते और medical note होते हैं। ये website के बाहर रखी जाती हैं और server access और offline key वाला कोई व्यक्ति ही इन्हें restore करता है, browser से कभी नहीं।
 
+## Copy को restore करना, और off-site copy
+
+हर copy लिखे जाने से पहले Anthony की key से encrypt की जाती है, इसलिए उसे सिर्फ़ उस private key वाला ही पढ़ सकता है। इसे server access वाला व्यक्ति restore करता है: `gpg --decrypt <copy>.sql.gz.gpg | gunzip | mysql <database>`। Private key कभी server पर नहीं रखी जाती।
+
+Status line यह भी बताती है कि **off-site copy** confirm है या नहीं: Cloudways पूरे server का अपना backup लेता है (हर 3 घंटे, 29 दिन तक रखा जाता है) और screen दिखाती है कि आख़िरी कब लिया गया। अगर **Off-site copy not confirmed** लिखा हो, तो **Server health** पर Cloudways जोड़ें ताकि portal जाँच सके। यही line **Compliance evidence** के backups tile पर भी दिखती है।
+
 ## कौन क्या कर सकता है
 
 | भूमिका | पहुँच |

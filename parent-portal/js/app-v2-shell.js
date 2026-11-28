@@ -911,6 +911,7 @@
           { hash: 'sales-email',     label: 'Sales email',     icon: '📮' },   // the shared sales@ mailbox (2026-10-26)
           { hash: 'sales-bookings',  label: 'Bookings',        icon: '📌' },   // website meeting requests (2026-10-23)
           { hash: 'sales-calendar',  label: 'Calendar',        icon: '📆' },   // bookings, hours, time off, whereabouts (2026-10-23)
+          { hash: 'sales-plans',     label: 'Plans & pricing', icon: '💲' },   // reps had the Home tile but no menu entry; /sales/products is open to them (2026-11-27)
           { hash: 'prospect-ndas',   label: 'Prospect NDAs',   icon: '🤝' },   // 2026-10-09
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
         ]},
@@ -1454,7 +1455,13 @@
       'my-schedule': '📅', 'children': '🧒', 'menu': '🍽️', 'support': '🛟', 'scan': '📷', 'pickup-auth': '🔐',
       'ledger': '📒', 'trends': '📈', 'conferences': '🪑', 'directory': '📇', 'payment-plans': '🏧', 'wellness': '🩺',
       // HR nav (2026-11-27): tabs and HR-only twins of the Human Resources entries.
-      'educator-award-settings': '🏅', 'hr-time-off': '🌴', 'hr-rota': '🗒️', 'hr-timesheets': '🕘', 'hr-payroll': '💼' };
+      'educator-award-settings': '🏅', 'hr-time-off': '🌴', 'hr-rota': '🗒️', 'hr-timesheets': '🕘', 'hr-payroll': '💼',
+      /* The Platform section (agency-switcher.js) draws these into the sidebar after a fetch, and no role list names
+         them, so on a phone or before that section arrives the banner fell back to each screen's own emoji, which
+         disagreed with the sidebar (Careers and Sales reports both 💼). Same icons as agency-switcher.js (2026-11-27). */
+      'licences': '🔑', 'platform-careers': '📨', 'sales-invoices': '🏦', 'admin-mrr': '💰', 'platform-sales': '💹',
+      'admin-features': '🚩', 'admin-branding': '🎨', 'maintenance': '🛠️', 'mail-settings': '📬', 'digest-status': '📰',
+      'backups': '🗄️', 'compliance-evidence': '🛡️', 'social-settings': '🔏', 'security-alerts': '🚨' };
 
     /* And a NAME, where the hash is not one. The fallback below turns "my-hours"
        into "My Hours" — which is where the banner title came from, so renaming the
@@ -1476,7 +1483,7 @@
     /* Names the title-case fallback gets wrong ("Prospect Ndas"), for every role. */
     /* Website (2026-10-23): it moved into the Platform section, which this list does not read,
        so its banner fell back to "Marketing Site" with the default ✨ (Anthony: "not unique"). */
-    var EXTRA_NAMES = { 'prospect-ndas': 'Prospect NDAs', 'marketing-site': 'Website', 'walk': 'Walk Watch', 'walks': 'Walk Watch', 'play-spark': 'Play Spark',
+    var EXTRA_NAMES = { 'prospect-ndas': 'Prospect NDAs', 'marketing-site': 'Website', 'platform-sales': 'Sales reports', 'platform-careers': 'Careers', 'sales-invoices': 'Accounting AR/AP', 'social-settings': 'Sign-in methods', 'walk': 'Walk Watch', 'walks': 'Walk Watch', 'play-spark': 'Play Spark',
       'ai-usage': 'AI usage', 'usage-spend': 'Usage & spend', 'ask': 'Ask KiddieTrac' };   // were "Ai Usage" / "Usage Spend" (2026-10-28)
     var override = (EXTRA_LABELS[role] || {})[base] || EXTRA_NAMES[base];
     // 🗂️, not 📄: "My documents" already has 📄 in the same sidebar (2026-10-28 sweep).

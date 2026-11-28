@@ -92,10 +92,10 @@
     + '@media (max-width:640px){.sh-v{font-size:20px}}';
 
 
-  /* ── Cloudways: the new server, through Cloudways' own API (2026-10-22) ──
+  /* ── Cloudways: the live server, through Cloudways' own API (2026-10-22) ──
      Anthony: "did you wire up the cloudways as this is more important that godaddy".
-     Until DNS moves, this page runs on GoDaddy, so the new server is read through the
-     Cloudways API v2 with a read-only access token (stored encrypted on the server,
+     Since the move (2026-10-26) this page runs ON the Cloudways server; this tab shows Cloudways'
+     own graphs of it, read through the Cloudways API v2 with a read-only access token (stored encrypted on the server,
      never sent back). Fetched separately so the rest of the page never waits on it,
      and kept between the 30-second refreshes (Cloudways is re-read every 5 minutes). */
   var cw = { html: '', duration: '1 Day', at: 0, busy: false };
@@ -123,7 +123,7 @@
 
   function cwConnectForm(msg) {
     return '<div class="sh-panel">'
-      + '<div style="font-size:13.5px;color:#334155;line-height:1.55;">Connect your Cloudways account to see the new server here — its processor, memory, disk and bandwidth graphs — before and after the move. '
+      + '<div style="font-size:13.5px;color:#334155;line-height:1.55;">Connect your Cloudways account to see the live server here — its processor, memory, disk and bandwidth graphs, as Cloudways measures them. '
       + 'In Cloudways open <a href="https://platform.cloudways.com/api" target="_blank" rel="noopener" style="color:#1F6080;font-weight:800;">API Integration</a> (top-right profile menu → <b>API Integration</b>; only the account’s primary owner sees it), then under <b>Access Token Details</b> click <b>Create Access Token</b>: name it e.g. “KiddieTrac monitoring”, Scope <b>Read-Only Access</b>, choose an expiry, and copy the token (Cloudways shows it once). Paste it below. It is checked with Cloudways, stored encrypted, and never shown again.</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'
       + '<input id="cw-token" type="password" autocomplete="off" placeholder="Cloudways access token" style="flex:1 1 280px;min-width:0;height:38px;border:1px solid #CBD5E1;border-radius:10px;padding:0 12px;font-size:14px;">'
@@ -205,16 +205,16 @@
 
   /* SUBTABS, one per platform (Anthony, 2026-10-22: "subtab the two platforms cloudways
      and godaddy to make this cleaner"). Cloudways first and by default — it is where the
-     site is going. Per CONVENTIONS.md the strip is drawn once per visit and a tab click
+     site runs since 2026-10-26; the second tab is the same server read from inside it. Per CONVENTIONS.md the strip is drawn once per visit and a tab click
      re-renders only #sh-pane, never the screen (so the banner stays put). */
-  var tab = 'cloudways', localLabel = '🖥️ GoDaddy · live site';
+  var tab = 'cloudways', localLabel = '🖥️ This server';
   try { tab = sessionStorage.getItem('kt_sh_tab') || 'cloudways'; } catch (e) {}
 
   function paintTabs(main) {
     var bar = main.querySelector('#sh-tabs');
     if (!bar) return;
     bar.setAttribute('role', 'tablist');   // the portal's standard tab band (kt-tab-band.js)
-    bar.innerHTML = [['cloudways', '☁️ Cloudways · new server'], ['local', localLabel]].map(function (t) {
+    bar.innerHTML = [['cloudways', '☁️ Cloudways · live server'], ['local', localLabel]].map(function (t) {
       var on = tab === t[0];
       return '<button type="button" role="tab" aria-selected="' + (on ? 'true' : 'false') + '" data-sh-tab="' + t[0] + '" data-kt-iconized="1" style="background:none;border:0;border-bottom:2px solid '
         + (on ? '#1F6FB2' : 'transparent') + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:' + (on ? '#0F172A' : '#64748B')
@@ -265,7 +265,7 @@
     renderPane(main);
   }
 
-  /* The server this API runs on (GoDaddy until the move). */
+  /* The server this API runs on (the Cloudways server since 2026-10-26), read from inside. */
   async function renderLocal(main) {
     var root = main.querySelector('#sh-pane');
     if (!root) return;

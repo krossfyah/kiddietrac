@@ -15,7 +15,9 @@ use Throwable;
  *
  *   php artisan db:backup [--keep=14]
  *
- * Restore:  gunzip < backups/kiddietrac-YYYY-MM-DD-HHMMSS.sql.gz | mysql -u<user> -p <db>
+ * Restore (unencrypted dump, only kept when encryption failed):
+ *   gunzip < kiddietrac-YYYY-MM-DD-HHMMSS.sql.gz | mysql -u<user> -p <db>
+ * Normal restore is the .gpg one below. Folder: App\Support\BackupPaths::dir() (KT_BACKUP_DIR).
  *
  * ENCRYPTED BACKUPS (2026-10-21): when Platform setting backup.gpg_recipient holds a key
  * fingerprint, each verified dump is encrypted to that PUBLIC key (keyring ~/.kt-backup-gnupg)

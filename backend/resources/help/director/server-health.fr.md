@@ -7,7 +7,7 @@ title: État du serveur et garde anti-fuite
 
 [[open: #server-health | Ouvrir Server health]]
 
-La page s'actualise d'elle-même toutes les 30 secondes tant qu'elle est ouverte. Elle a deux onglets : **🖥️ This server** (les chiffres du portail lui-même) et **☁️ Cloudways · new server** (les graphiques du compte d'hébergement).
+La page s'actualise d'elle-même toutes les 30 secondes tant qu'elle est ouverte. Elle a deux onglets : **🖥️ This server** (les chiffres du portail lui-même) et **☁️ Cloudways · live server** (les graphiques du compte d'hébergement).
 
 ## Faire la vérification quotidienne
 
@@ -36,7 +36,7 @@ La carte **Leak guard** montre les vérifications automatiques qui garantissent 
 1. Lisez **Connections (devices, last …)** : **Sessions measured**, **On a slow connection** (pourcentage en 2G/3G ou avec plus de 2 s d'attente), **Typical wait per request** et **Requests that failed**. Un tableau liste les agences aux sessions les plus lentes.
 2. Lisez **Where problems happened (24 h)** : chaque requête **Server error**, **Slow** ou **Never arrived**, l'écran ou la requête touché, et le nombre de **Times**.
 3. Vérifiez la section **Database** pour les requêtes lentes et les plus grosses tables.
-4. Appuyez sur **☁️ Cloudways · new server**, choisissez une période et regardez les graphiques d'hébergement (processeur, mémoire, disque, bande passante, espace disque par application). Appuyez sur **↻ Cloudways** pour les relire.
+4. Appuyez sur **☁️ Cloudways · live server**, choisissez une période et regardez les graphiques d'hébergement (processeur, mémoire, disque, bande passante, espace disque par application). Appuyez sur **↻ Cloudways** pour les relire.
 
 ## Autres sections
 
@@ -45,7 +45,7 @@ La carte **Leak guard** montre les vérifications automatiques qui garantissent 
 
 ## Relier le compte d'hébergement
 
-1. Appuyez sur **☁️ Cloudways · new server**.
+1. Appuyez sur **☁️ Cloudways · live server**.
 2. Suivez les instructions de l'onglet pour créer un jeton d'accès dans le compte d'hébergement.
 3. Collez-le dans la case et appuyez sur **Connect Cloudways**.
 4. Pour le retirer, appuyez sur **Disconnect** et confirmez. Le jeton est supprimé de KiddieTrac; vous pouvez le relier de nouveau en tout temps.

@@ -112,29 +112,6 @@
      how a customer is parked without throwing away their pricing. */
   var INTERVAL_LABEL = { weekly: 'Weekly', biweekly: 'Every 2 weeks', monthly: 'Monthly', quarterly: 'Quarterly', semiannual: 'Semi-annual', annual: 'Yearly' };
 
-  /* AUTOMATIC RAISING (2026-09-29). The nightly platform:billing-run (06:00) raises every
-     agency whose next invoice date has arrived, as drafts, then moves the date on by the
-     agency's cadence. The switch was only on the Billing settings screen, so from here it
-     looked as if nothing was automated. Auto-EMAIL stays on Billing settings: sending to a
-     customer is a separate, deliberate choice and is never turned on from here. */
-  function autoRow(box) {
-    if (!box) { return; }
-    api('/platform/billing-automation').then(function (a) {
-      box.innerHTML = '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">'
-        + '<input type="checkbox" data-auto' + (a.auto_raise ? ' checked' : '') + ' style="margin-top:3px;">'
-        + '<span><strong style="color:#0F172A;">Raise invoices automatically</strong><br>'
-        + 'Every morning at 6:00, each agency whose next invoice date has arrived gets a draft invoice, and its next date moves on by its cadence (weekly, every 2 weeks, monthly, quarterly or yearly). '
-        + (a.auto_email ? 'Drafts are also emailed (set on Billing settings).' : 'Nothing is emailed: you review and send the drafts.') + '</span></label>';
-      var cb = box.querySelector('[data-auto]');
-      cb.addEventListener('change', function () {
-        cb.disabled = true;
-        api('/platform/billing-automation', 'PUT', { auto_raise: cb.checked, auto_email: !!a.auto_email && cb.checked })
-          .then(function (r) { a.auto_raise = r.auto_raise; a.auto_email = r.auto_email; cb.disabled = false; if (KT.toast) { KT.toast('✓', 'Saved', cb.checked ? 'Invoices will be raised automatically.' : 'Automatic raising is off.', '#16A34A'); } })
-          .catch(function (e) { cb.checked = !cb.checked; cb.disabled = false; window.alert(e.message); });
-      });
-    }).catch(function () { box.textContent = 'Could not load the automation setting.'; });
-  }
-
   /* REVIEW BEFORE RAISING (2026-09-29). Replaces a window.confirm that listed names and
      totals: each agency due is shown with where the invoice goes and the period it covers,
      and the price, tax, due date and a note can be changed (optionally saved as the
@@ -462,7 +439,7 @@
     });
   }
   function heroHtml() {
-    return '<div class="kt-hero"><h2>\uD83E\uDDFE Accounting AR/AP</h2><p>KiddieTrac\'s invoices, payments and fees: what agencies owe for the platform, and what KiddieTrac spends.</p></div>';
+    return '<div class="kt-hero"><h2>\uD83C\uDFE6 Accounting AR/AP</h2><p>KiddieTrac\'s invoices, payments and fees: what agencies owe for the platform, and what KiddieTrac spends.</p></div>';
   }
   function renderSection(main) {
     main.innerHTML = '<div class="kt-section">' + heroHtml() + sectionBar() + '<div id="kt-sec-host"></div></div><span data-pinv-root data-kt-self-live hidden></span>';
@@ -493,6 +470,13 @@
   }
 
   function render(main) {
+    /* #sales-invoices?section=fees opens a section directly (2026-11-27): Settings > Billing links to the Recurring
+       invoices card here, the one place automatic platform invoicing is switched. The query is dropped once read. */
+    var deep = /[?&]section=([a-z]+)/.exec(location.hash || '');
+    if (deep && SECTIONS.some(function (x) { return x[0] === deep[1]; })) {
+      SECTION = deep[1];
+      try { history.replaceState(null, '', location.pathname + location.search + '#sales-invoices'); } catch (e) {}
+    }
     if (SECTION !== 'invoices') { renderSection(main); return; }
     if (!main.querySelector('[data-pinv-root]')) {
       main.innerHTML = '<div style="padding:22px;color:#64748B;">Loading invoices…</div>';

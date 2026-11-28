@@ -1717,9 +1717,9 @@
           '</div>' +
           '<div class="kt-card" style="max-width:none;margin-top:16px;">' +
             '<div style="font-weight:700;color:#0F172A;margin-bottom:8px;">📧 Heads-up email</div>' +
-            '<p style="color:#64748B;font-size:13px;margin:0 0 10px;">Email the maintenance notice. Send yourself a test first, then notify everyone when ready.</p>' +
+            '<p style="color:#64748B;font-size:13px;margin:0 0 10px;">Email the maintenance notice. Send yourself a test first, then notify everyone when ready. Everyone means active people at live agencies: test agencies, closed homes and deactivated accounts are left out, and each agency\'s email switches still apply.</p>' +
             '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' +
-              '<input type="email" id="mw-test-email" value="mr.anthonyhosein@gmail.com" style="' + inp + 'max-width:300px;">' +
+              '<input type="email" id="mw-test-email" value="" placeholder="Your email for the test" autocomplete="email" style="' + inp + 'max-width:300px;">' +
               '<button id="mw-test" style="background:#F1F5F9;color:#1F2937;border:none;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;">Send test</button>' +
               '<button id="mw-notify" style="background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;">Email all users</button>' +
             '</div>' +
@@ -1738,12 +1738,30 @@
       container.querySelector('#mw-test').onclick = function () {
         var em = (container.querySelector('#mw-test-email').value || '').trim(); if (!em) { mailOut.style.color = '#B91C1C'; mailOut.textContent = 'Enter an email.'; return; }
         mailOut.style.color = '#64748B'; mailOut.textContent = 'Sending test…';
-        mapi('/platform/maintenance/test', 'POST', { email: em }).then(function (r) { mailOut.style.color = '#047857'; mailOut.textContent = '✓ ' + r.message; }).catch(function (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; });
+        mapi('/platform/maintenance/test', 'POST', { email: em }).then(function (r) { mailOut.style.color = r.sent === false ? '#B45309' : '#047857'; mailOut.textContent = (r.sent === false ? '⚠ ' : '✓ ') + r.message; }).catch(function (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; });
       };
+      /* EMAIL ALL USERS = PREVIEW FIRST, THEN A TYPED CONFIRMATION (2026-11-27, help sweep P0). The server counts who
+         it would reach (active people at live, non-test agencies; closed homes and deactivated accounts left out), by
+         agency, and only sends when "EMAIL <that count>" is typed back. Each message still goes through the mail gate. */
       container.querySelector('#mw-notify').onclick = async function () {
-        if (window.KT && KT.confirm && !(await KT.confirm('Email the maintenance notice to ALL users right now?'))) return;
-        mailOut.style.color = '#64748B'; mailOut.textContent = 'Emailing all users…';
-        mapi('/platform/maintenance/notify-all', 'POST', {}).then(function (r) { mailOut.style.color = '#047857'; mailOut.textContent = '✓ ' + r.message; }).catch(function (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; });
+        mailOut.style.color = '#64748B'; mailOut.textContent = 'Counting who would be emailed…';
+        var pv;
+        try { pv = await mapi('/platform/maintenance/notify-preview'); } catch (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; return; }
+        mailOut.textContent = '';
+        if (!pv.total) { mailOut.style.color = '#B91C1C'; mailOut.textContent = 'Nobody to email: no active people at a live agency.'; return; }
+        var ex = pv.excluded || {};
+        var parts = (pv.by_agency || []).map(function (a) { return a.name + ' ' + a.people + (a.held ? ' (' + a.held + ' held)' : ''); });
+        var left = [['not_active', 'not active'], ['test_only', 'test agencies only'], ['no_live_link', 'no open centre or live family'], ['no_mailbox', 'no mailbox'], ['same_address', 'same address']]
+          .filter(function (k) { return ex[k[0]]; }).map(function (k) { return ex[k[0]] + ' ' + k[1]; });
+        var desc = pv.total + ' ' + (pv.total === 1 ? 'person' : 'people') + ' by agency: ' + parts.join(' · ') + '.'
+          + (pv.held ? ' ' + pv.held + ' will be held because email is switched off for them.' : '')
+          + (left.length ? ' Left out: ' + left.join(', ') + '.' : '')
+          + ' Type ' + pv.confirm_phrase + ' to send.';
+        var typed = window.KT && KT.prompt ? await KT.prompt({ title: 'Email the maintenance notice?', description: desc, label: 'Type ' + pv.confirm_phrase, placeholder: pv.confirm_phrase, okLabel: 'Send to ' + pv.total }) : null;
+        if (typed == null) return;
+        if (String(typed).trim().toUpperCase().replace(/\s+/g, ' ') !== pv.confirm_phrase) { mailOut.style.color = '#B91C1C'; mailOut.textContent = 'Not sent: type ' + pv.confirm_phrase + ' exactly to confirm.'; return; }
+        mailOut.style.color = '#64748B'; mailOut.textContent = 'Emailing ' + pv.total + ' people… this can take a minute.';
+        mapi('/platform/maintenance/notify-all', 'POST', { confirm: typed }).then(function (r) { mailOut.style.color = r.failed ? '#B45309' : '#047857'; mailOut.textContent = '✓ ' + r.message; }).catch(function (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; });
       };
       appVersionsCard(container.firstElementChild, mapi);   // Mobile app updates (2026-10-30)
     }).catch(function (e) {

@@ -44,6 +44,12 @@ La carte du bas liste les copies les plus récentes, avec l'heure de chacune, so
 
 > ℹ️ **Les copies ne peuvent pas être téléchargées depuis le portail, et c'est voulu.** Un seul fichier contient tous les enfants, tuteurs, adresses et notes médicales de la plateforme. Elles sont gardées hors du site Web et restaurées par une personne qui a accès au serveur et à la clé hors ligne, jamais à partir d'un navigateur.
 
+## Restaurer une copie, et la copie hors site
+
+Chaque copie est chiffrée avec la clé d’Anthony avant d’être écrite : seul le détenteur de cette clé privée peut la lire. Elle est restaurée par une personne qui a accès au serveur : `gpg --decrypt <copie>.sql.gz.gpg | gunzip | mysql <base>`. La clé privée n’est jamais conservée sur le serveur.
+
+La ligne d’état indique aussi si une **copie hors site** est confirmée : Cloudways fait sa propre sauvegarde de tout le serveur (toutes les 3 heures, conservée 29 jours) et l’écran montre l’heure de la dernière. S’il est écrit **Off-site copy not confirmed**, connectez Cloudways dans **Server health** pour que le portail puisse vérifier. La même ligne figure sur la tuile des sauvegardes de **Compliance evidence**.
+
 ## Qui peut faire quoi
 
 | Rôle | Accès |

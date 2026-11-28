@@ -24,11 +24,12 @@ screens: maintenance
 ## Emailing the heads-up
 
 1. Save the window first: the email uses its dates and message.
-2. Under **📧 Heads-up email**, check the address in the box (it should be yours) and press **Send test**. Read the test email.
-3. When it reads well, press **Email all users** and confirm **Email the maintenance notice to ALL users right now?**
-4. The line under the buttons says how many addresses it was sent to. **All-user notice last sent …** shows the date afterwards.
+2. Under **📧 Heads-up email**, type your own address in the box (it starts empty) and press **Send test**. A copy marked [TEST] arrives; read it. If the line says the mail gate held it, the Email log says why.
+3. When it reads well, press **Email all users**. A popup counts who it would reach right now, by agency, and who is left out.
+4. Type the phrase it shows (for example **EMAIL 34**) and press **Send to 34**. The number is how many people will be emailed, so a wrong or old count is refused.
+5. The line under the buttons says how many were sent, and how many the mail gate held. **All-user notice last sent …** shows the date afterwards.
 
-> ⚠️ **Email all users** goes to every user with an email address on the platform, in every agency, and ignores agency email settings, because a downtime notice is operational. Send it once.
+> ⚠️ **Email all users** reaches active people at live agencies only: staff with an active role at an open centre, parents of a family still enrolled at an open centre, and platform admins. Test agencies, closed homes, and deactivated, suspended or invited accounts are left out. Each person gets their own message through the normal mail gate, so an agency or centre with email switched off is held. Who sent it and how many went out is recorded in the audit log. Send it once.
 
 ## Ending maintenance
 
@@ -68,7 +69,8 @@ iPhones are only prompted for a version the App Store really lists.
 ## FAQs and when something goes wrong
 
 ??? "Set up the maintenance window first." | Save a window (dates and message) before pressing Email all users.
-??? "Enter an email." | Type an address in the box before pressing Send test.
+??? "Enter an email." | Type an address in the box before pressing Send test. The box is empty on purpose: nothing is ever sent to an address you did not type.
+??? "Type EMAIL … to confirm." | The number changed since the popup counted, or the phrase was not typed exactly. Press Email all users again and type the new phrase.
 ??? "The minimum build cannot be newer than the latest build." | Lower Minimum build or raise Latest build so the minimum is not above the latest.
 ??? People are still blocked after the work is done. | Switch Maintenance mode off and press Save, or check the Ends time.
 ??? "Could not load maintenance settings". | The screen could not read its settings. Refresh; only platform admins can open it.

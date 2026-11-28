@@ -336,6 +336,11 @@ final class MrrDashboardController extends Controller
         $sort   = $request->query('sort', 'mrr');   // mrr | name | created
         $limit  = (int) $request->query('limit', 50);
         $limit  = max(1, min($limit, 200));
+        /* PAGES + SEARCH (2026-11-27, help sweep): the Feature flags picker asked for limit=200 and anything past
+           the 200th agency was silently missing. ?offset= pages through, ?q= searches the name or #id, and `total`
+           says how many match so a caller knows whether there is more. */
+        $offset = max(0, (int) $request->query('offset', 0));
+        $search = trim((string) $request->query('q', ''));
 
         $q = DB::table('agencies')
             ->select(
@@ -344,6 +349,16 @@ final class MrrDashboardController extends Controller
             );
 
         if ($status) $q->where('billing_status', $status);
+        if ($search !== '') {
+            $term = ltrim($search, '#');
+            $q->where(function ($w) use ($search, $term) {
+                $w->where('name', 'like', '%' . addcslashes($search, '%_\\') . '%');
+                if (ctype_digit($term)) {
+                    $w->orWhere('id', (int) $term);
+                }
+            });
+        }
+        $total = (clone $q)->count();
 
         match ($sort) {
             'name'    => $q->orderBy('name'),
@@ -351,7 +366,7 @@ final class MrrDashboardController extends Controller
             default   => $q->orderByDesc('plan_amount_cents'),
         };
 
-        $rows = $q->limit($limit)->get()->map(fn ($a) => [
+        $rows = $q->orderBy('id')->offset($offset)->limit($limit)->get()->map(fn ($a) => [
             'id'                => (int) $a->id,
             'name'              => $a->name,
             'plan_code'         => $a->plan_code ?? 'free',
@@ -364,6 +379,8 @@ final class MrrDashboardController extends Controller
 
         return response()->json([
             'count'    => $rows->count(),
+            'total'    => $total,
+            'offset'   => $offset,
             'agencies' => $rows,
         ]);
     }

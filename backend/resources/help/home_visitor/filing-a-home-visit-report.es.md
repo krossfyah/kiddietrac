@@ -11,7 +11,7 @@ inquietudes y los próximos pasos. Solo tres datos son obligatorios (**Centro**,
 
 ## Llenar los datos de la visita
 
-1. Abra **📝 Nuevo informe de visita** desde el menú, o pulse **New visit** en **Inicio**. El formulario se llama
+1. Abra **📝 Nuevo informe de visita** desde el menú, o pulse **New visit report** en **Inicio**. El formulario se llama
    **Nuevo informe de visita domiciliaria**.
 2. En **Detalles de la visita**, elija el **Centro** *(obligatorio)*: el centro de su agencia al que pertenece la
    familia.

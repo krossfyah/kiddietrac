@@ -24,19 +24,19 @@ el punto de partida: arriba están sus cifras de visitas y debajo un mosaico par
 
 ## Llenar su primer informe de visita
 
-1. En **Inicio**, en **Acceso rápido**, pulse **📝 New visit**.
+1. En **Inicio**, en **Acceso rápido**, pulse **📝 New visit report**.
 2. Elija el **Centro** y la **Fecha de la visita**, escriba el **Resumen de la visita** y complete todo lo demás que
    sepa.
 3. Pulse **Enviar informe** (o **💾 Guardar como borrador** para terminarlo después).
 4. Llega a **Mis informes**, donde su nuevo informe aparece arriba.
 
-[[show: #home @ New visit | Muéstreme]]
+[[show: #home @ New visit report | Muéstreme]]
 
 El formulario completo se explica en [Llenar un informe de visita a domicilio](filing-a-home-visit-report).
 
 ## Moverse por el portal
 
-1. Use los mosaicos de **Acceso rápido** en **Inicio**: **New visit**, **Play Spark**, **Mis informes**,
+1. Use los mosaicos de **Acceso rápido** en **Inicio**: **New visit report**, **Play Spark**, **Mis informes**,
    **Mis tareas**, **Informar de un riesgo**, **Formularios de inspección**, **Formularios por firmar**,
    **Centro de mensajes**, **Documentos**, **Mi pago**, **Tiempo libre**, **Noticias**, **Bandeja de entrada**,
    **Ajustes** y **Ayuda**.

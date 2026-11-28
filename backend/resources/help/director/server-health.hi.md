@@ -7,7 +7,7 @@ title: Server health और leak guard
 
 [[open: #server-health | Server health खोलें]]
 
-खुला रहने पर page हर 30 सेकंड में अपने आप refresh होता है। इसमें दो tabs हैं: **🖥️ This server** (portal के अपने आँकड़े) और **☁️ Cloudways · new server** (hosting account के graphs)।
+खुला रहने पर page हर 30 सेकंड में अपने आप refresh होता है। इसमें दो tabs हैं: **🖥️ This server** (portal के अपने आँकड़े) और **☁️ Cloudways · live server** (hosting account के graphs)।
 
 ## रोज़ की जाँच करना
 
@@ -36,7 +36,7 @@ title: Server health और leak guard
 1. **Connections (devices, last …)** पढ़ें: **Sessions measured**, **On a slow connection** (2G/3G पर या 2 सेकंड से ज़्यादा प्रतीक्षा वाले प्रतिशत), **Typical wait per request** और **Requests that failed**। एक table सबसे धीमे sessions वाली agencies दिखाती है।
 2. **Where problems happened (24 h)** पढ़ें: हर **Server error**, **Slow** या **Never arrived** request, किस screen या request पर हुआ, और कितनी **Times**।
 3. धीमी queries और सबसे बड़ी tables के लिए **Database** section देखें।
-4. **☁️ Cloudways · new server** दबाएँ, अवधि चुनें और hosting graphs देखें (processor, memory, disk, bandwidth, हर app का disk उपयोग)। फिर से पढ़ने के लिए **↻ Cloudways** दबाएँ।
+4. **☁️ Cloudways · live server** दबाएँ, अवधि चुनें और hosting graphs देखें (processor, memory, disk, bandwidth, हर app का disk उपयोग)। फिर से पढ़ने के लिए **↻ Cloudways** दबाएँ।
 
 ## अन्य sections
 
@@ -45,7 +45,7 @@ title: Server health और leak guard
 
 ## Hosting account जोड़ना
 
-1. **☁️ Cloudways · new server** दबाएँ।
+1. **☁️ Cloudways · live server** दबाएँ।
 2. hosting account में access token बनाने के लिए tab पर दिए निर्देशों का पालन करें।
 3. उसे box में paste करें और **Connect Cloudways** दबाएँ।
 4. हटाने के लिए **Disconnect** दबाएँ और पुष्टि करें। token KiddieTrac से मिट जाता है; आप कभी भी फिर से जोड़ सकते हैं।

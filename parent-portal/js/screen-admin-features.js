@@ -36,9 +36,19 @@
     return catalog;
   }
   async function loadAgencies() {
+    /* EVERY AGENCY, NOT THE FIRST 200 (2026-11-27, help sweep): the list is paged 200 at a time (by name) until
+       `total` is reached, and the search box above the picker narrows it. */
     try {
-      const r = await api('GET', '/admin/mrr/agencies?limit=200');
-      agencies = r.agencies || [];
+      let all = [], offset = 0, total = Infinity;
+      while (all.length < total && offset < 20000) {
+        const r = await api('GET', '/admin/mrr/agencies?sort=name&limit=200&offset=' + offset);
+        const page = r.agencies || [];
+        all = all.concat(page);
+        total = typeof r.total === 'number' ? r.total : all.length;
+        if (!page.length) break;
+        offset += page.length;
+      }
+      agencies = all;
     } catch (e) {
       // Fall back: ask for a single agency by ID
       agencies = [];
@@ -79,7 +89,8 @@
         <p style="color:#6B7280;font-size:13px;margin:0 0 18px;">Per-agency overrides. Plan sets the default tier; flags override individual features. Default behaviour when a flag is unset = allow.</p>
 
         <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">
-          <label style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Agency</label>
+          <label for="kt-agency" style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:1px;">Agency</label>
+          ${ags.length > 8 ? '<input id="kt-agency-q" type="search" placeholder="Search ' + ags.length + ' agencies by name or #id" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:13.5px;margin-top:6px;box-sizing:border-box;">' : ''}
           <select id="kt-agency" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-top:6px;">
             ${ags.length === 0 ? '<option value="">No agencies found</option>' : ags.map(a => `<option value="${a.id}" ${a.id == preselectId ? 'selected' : ''}>${esc(a.name || ('Agency #' + a.id))}</option>`).join('')}
           </select>
@@ -90,6 +101,16 @@
     `;
 
     if (preselectId) await loadAndRenderAgency(container, preselectId);
+
+    const qBox = $('#kt-agency-q', container);
+    if (qBox) qBox.addEventListener('input', () => {
+      const t = qBox.value.trim().toLowerCase().replace(/^#/, '');
+      const sel = $('#kt-agency', container);
+      const cur = sel.value;
+      const hits = ags.filter(a => !t || String(a.id) === t || String(a.name || '').toLowerCase().indexOf(t) > -1);
+      sel.innerHTML = hits.length ? hits.map(a => `<option value="${a.id}" ${String(a.id) === cur ? 'selected' : ''}>${esc(a.name || ('Agency #' + a.id))}</option>`).join('') : '<option value="">No agency matches</option>';
+      if (hits.length && !hits.some(a => String(a.id) === cur)) sel.dispatchEvent(new Event('change'));
+    });
 
     $('#kt-agency', container).addEventListener('change', async (e) => {
       const id = parseInt(e.target.value, 10);

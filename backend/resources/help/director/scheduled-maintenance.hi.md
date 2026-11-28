@@ -17,14 +17,15 @@ title: Scheduled maintenance और app updates
 
 > ⚠️ जब **Maintenance mode** चालू हो **और** समय अवधि के भीतर हो, तो platform admins के अलावा सबका sign-in रुक जाता है। उस दौरान इस screen के ऊपर लाल banner **● Maintenance is ACTIVE right now** दिखता है।
 
-## पहले से सूचना का email भेजना
+## चेतावनी ईमेल भेजना
 
-1. पहले अवधि सहेजें: email उसी की तारीख़ें और संदेश उपयोग करता है।
-2. **📧 Heads-up email** में box का पता जाँचें (यह आपका होना चाहिए) और **Send test** दबाएँ। test email पढ़ें।
-3. ठीक लगे तो **Email all users** दबाएँ और **Email the maintenance notice to ALL users right now?** की पुष्टि करें।
-4. buttons के नीचे की line बताती है कि कितने पतों पर भेजा गया। बाद में **All-user notice last sent …** तारीख़ दिखाता है।
+1. पहले अवधि सहेजें: ईमेल में उसी की तारीख़ें और संदेश जाते हैं।
+2. **📧 Heads-up email** में box में अपना पता लिखें (box ख़ाली रहता है) और **Send test** दबाएँ। [TEST] लिखी एक copy आती है; उसे पढ़ें। अगर line कहे कि mail gate ने उसे रोका, तो Email log में कारण दिखता है।
+3. ठीक लगे तो **Email all users** दबाएँ। एक popup गिनता है कि अभी यह agency के हिसाब से किन लोगों तक जाएगा, और कौन छूटेंगे।
+4. दिखाया गया वाक्य लिखें (जैसे **EMAIL 34**) और **Send to 34** दबाएँ। संख्या बताती है कि कितने लोगों को ईमेल जाएगा; ग़लत या पुरानी संख्या स्वीकार नहीं होती।
+5. buttons के नीचे की line बताती है कि कितने भेजे गए और mail gate ने कितने रोके। बाद में **All-user notice last sent …** तारीख़ दिखाता है।
 
-> ⚠️ **Email all users** platform पर email वाले हर user को जाता है, हर agency में, और agency की email settings को नहीं मानता, क्योंकि downtime notice operational है। इसे सिर्फ़ एक बार भेजें।
+> ⚠️ **Email all users** सिर्फ़ चालू agencies के सक्रिय लोगों तक जाता है: खुले केंद्र में सक्रिय भूमिका वाला स्टाफ़, खुले केंद्र में अब भी नामांकित परिवार के माता-पिता, और platform admins। Test agencies, बंद homes, और deactivated, suspended या सिर्फ़ invited accounts छोड़ दिए जाते हैं। हर व्यक्ति को सामान्य mail gate से अपना अलग संदेश मिलता है, इसलिए जिस agency या केंद्र का ईमेल बंद है वह रुक जाता है। किसने भेजा और कितने गए, यह audit log में दर्ज होता है। इसे एक ही बार भेजें।
 
 ## Maintenance ख़त्म करना
 
@@ -64,6 +65,7 @@ iPhones को सिर्फ़ उसी version के लिए कहा �
 ## अक्सर पूछे जाने वाले सवाल और समस्याएँ
 
 ??? "Set up the maintenance window first." | Email all users दबाने से पहले एक अवधि (तारीख़ें और संदेश) सहेजें।
+??? "Type EMAIL … to confirm." | popup के गिनने के बाद संख्या बदल गई, या वाक्य ठीक वैसा नहीं लिखा गया। Email all users फिर से दबाएँ और नया वाक्य लिखें।
 ??? "Enter an email." | Send test दबाने से पहले box में पता लिखें।
 ??? "The minimum build cannot be newer than the latest build." | Minimum build घटाएँ या Latest build बढ़ाएँ ताकि minimum, latest से ऊपर न हो।
 ??? काम ख़त्म होने के बाद भी लोग रुके हुए हैं। | Maintenance mode बंद करके Save दबाएँ, या Ends समय जाँचें।

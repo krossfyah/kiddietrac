@@ -12,7 +12,7 @@ terminer plus tard.
 
 ## Remplir les détails de la visite
 
-1. Ouvrez **📝 Nouveau rapport de visite** dans le menu, ou appuyez sur **New visit** dans l'**Accueil**. Le formulaire
+1. Ouvrez **📝 Nouveau rapport de visite** dans le menu, ou appuyez sur **New visit report** dans l'**Accueil**. Le formulaire
    s'intitule **Nouveau rapport de visite à domicile**.
 2. Sous **Détails de la visite**, choisissez le **Centre** *(obligatoire)* : le centre de votre agence auquel la
    famille est rattachée.

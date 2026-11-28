@@ -809,7 +809,7 @@
     await whoReady();
     if (!isSuper()) return locked(c, 'KiddieTrac sales reports are for superadmins.');
     css(); clear(c);
-    c.appendChild(hero('KiddieTrac sales', 'What KiddieTrac has sold and billed — by part number, plan, add-on, service and customer. Platform figures only; no agency sees this.', '💼'));
+    c.appendChild(hero('Sales reports', 'What KiddieTrac has sold and billed — by part number, plan, add-on, service and customer. Platform figures only; no agency sees this.', '💹'));
     var P = presets(), range = { from: P[0][2], to: today(), p: 'ytd' };
     var seg = el('div', { class: 'ki-seg', 'data-kt-noband': '1' });
     var fromI = el('input', { type: 'date', value: range.from }), toI = el('input', { type: 'date', value: range.to });

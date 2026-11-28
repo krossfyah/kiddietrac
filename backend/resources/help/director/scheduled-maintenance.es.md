@@ -19,12 +19,13 @@ title: Mantenimiento programado y actualizaciones de las apps
 
 ## Enviar el aviso por correo
 
-1. Primero guarde el periodo: el correo usa sus fechas y su mensaje.
-2. En **📧 Heads-up email**, revise la dirección en la casilla (debe ser la suya) y pulse **Send test**. Lea el correo de prueba.
-3. Cuando esté bien, pulse **Email all users** y confirme **Email the maintenance notice to ALL users right now?**
-4. La línea bajo los botones dice a cuántas direcciones se envió. Después, **All-user notice last sent …** muestra la fecha.
+1. Guarde primero el periodo: el correo usa sus fechas y su mensaje.
+2. En **📧 Heads-up email**, escriba su propia dirección en la casilla (empieza vacía) y pulse **Send test**. Llega una copia marcada [TEST]; léala. Si la línea dice que el filtro de correo la retuvo, el registro de correos explica por qué.
+3. Cuando esté bien, pulse **Email all users**. Una ventana cuenta a quién llegaría ahora, por agencia, y a quién deja fuera.
+4. Escriba la frase que aparece (por ejemplo **EMAIL 34**) y pulse **Send to 34**. El número es cuántas personas recibirán el correo; un número erróneo o antiguo se rechaza.
+5. La línea bajo los botones dice cuántos se enviaron y cuántos retuvo el filtro. Después, **All-user notice last sent …** muestra la fecha.
 
-> ⚠️ **Email all users** llega a cada usuario con correo en la plataforma, en todas las agencias, sin importar la configuración de correo de cada agencia, porque un aviso de interrupción es operativo. Envíelo una sola vez.
+> ⚠️ **Email all users** solo llega a personas activas de agencias en funcionamiento: personal con un rol activo en un centro abierto, padres de una familia todavía inscrita en un centro abierto y administradores de la plataforma. Quedan fuera las agencias de prueba, los hogares cerrados y las cuentas desactivadas, suspendidas o solo invitadas. Cada persona recibe su propio mensaje a través del filtro de correo habitual, así que una agencia o centro con el correo desactivado queda retenido. Quién lo envió y cuántos salieron queda en el registro de auditoría. Envíelo una sola vez.
 
 ## Terminar el mantenimiento
 
@@ -64,6 +65,7 @@ A los iPhone solo se les avisa de una versión que la App Store realmente public
 ## Preguntas frecuentes y problemas
 
 ??? "Set up the maintenance window first." | Guarde un periodo (fechas y mensaje) antes de pulsar Email all users.
+??? "Type EMAIL … to confirm." | El número cambió desde que se contó, o la frase no se escribió exactamente. Pulse Email all users otra vez y escriba la nueva frase.
 ??? "Enter an email." | Escriba una dirección en la casilla antes de pulsar Send test.
 ??? "The minimum build cannot be newer than the latest build." | Baje Minimum build o suba Latest build para que el mínimo no supere la última versión.
 ??? La gente sigue bloqueada después de terminar el trabajo. | Desactive Maintenance mode y pulse Save, o revise la hora de Ends.

@@ -39,10 +39,10 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>🛡️ Security alerts</h2><p>Loading…</p></div></div>';
+    main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>🚨 Security alerts</h2><p>Loading…</p></div></div>';
     var data = await Api.get('/platform/security-alerts').catch(function (e) { return { __err: e && e.message }; });
     if (data.__err) {
-      main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🛡️ Security alerts</h2></div>'
+      main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🚨 Security alerts</h2></div>'
         + '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:12px;padding:18px;max-width:640px;">This page is available to <b>platform administrators</b> only.</div></div>';
       return;
     }
@@ -63,7 +63,7 @@
     }).join('') : '<tr><td colspan="6" style="padding:34px;text-align:center;color:#64748B;">✅ No security alerts — no anomalous authentication activity detected.</td></tr>';
 
     main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;">'
-      + '<div class="kt-page-hero"><h2>🛡️ Security alerts</h2><p>Anomalous authentication activity flagged automatically every 15 minutes from the audit log — brute-force attempts, MFA hammering, and credential stuffing.</p></div>'
+      + '<div class="kt-page-hero"><h2>🚨 Security alerts</h2><p>Anomalous authentication activity flagged automatically every 15 minutes from the audit log — brute-force attempts, MFA hammering, and credential stuffing.</p></div>'
       + '<div style="display:flex;gap:14px;margin:0 0 18px;">'
       +   '<div style="background:#fff;border:1px solid #E7EBF0;--kt-edge:' + (data.open ? '#BE4038' : '#1E8E60') + ';border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:' + (data.open ? '#BE4038' : '#1E8E60') + ';">' + data.open + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Open alerts</div></div>'
       +   '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:#0F2540;">' + data.total + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Total recorded</div></div>'

@@ -15,6 +15,7 @@ screens: admin-features
 
 1. Open **Platform › 🚩 Feature flags**. The screen opens on the agency you are standing in (the one in the agency switcher), not the first one in the list.
 2. Check the **Agency** list at the top. If it shows a different agency, pick the right one before you change anything: **Save changes** always writes to the agency selected here.
+   Every agency is in the list, however many there are. To find one quickly, type part of its name or its number (for example **#18**) in the search box under the list.
 3. Wait for **Loading agency settings…** to finish. The plan, the region banner and every feature card for that agency appear.
 
 > ⚠️ Look at the **Agency** name before every save. Flags and plans are per agency, and a change takes effect for everyone at that agency straight away.

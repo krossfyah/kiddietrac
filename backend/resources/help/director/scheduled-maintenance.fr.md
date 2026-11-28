@@ -17,14 +17,15 @@ title: Maintenance planifiée et mises à jour des applis
 
 > ⚠️ Quand **Maintenance mode** est activé **et** que l'heure est dans la période, la connexion est bloquée pour tous sauf les administrateurs de la plateforme. Une bannière rouge, **● Maintenance is ACTIVE right now**, s'affiche en haut de cet écran pendant ce temps.
 
-## Envoyer l'avis par courriel
+## Envoyer le courriel d’avertissement
 
-1. Enregistrez d'abord la période : le courriel utilise ses dates et son message.
-2. Sous **📧 Heads-up email**, vérifiez l'adresse dans la case (ce doit être la vôtre) et appuyez sur **Send test**. Lisez le courriel de test.
-3. Quand il est correct, appuyez sur **Email all users** et confirmez **Email the maintenance notice to ALL users right now?**
-4. La ligne sous les boutons indique à combien d'adresses il a été envoyé. **All-user notice last sent …** affiche la date ensuite.
+1. Enregistrez d’abord la période : le courriel reprend ses dates et son message.
+2. Sous **📧 Heads-up email**, tapez votre propre adresse dans la case (elle est vide au départ) et appuyez sur **Send test**. Une copie marquée [TEST] arrive; lisez-la. Si la ligne indique que la passerelle de courriel l’a retenue, le journal des courriels dit pourquoi.
+3. Quand tout est bon, appuyez sur **Email all users**. Une fenêtre compte qui serait joint maintenant, par agence, et qui est laissé de côté.
+4. Tapez la phrase affichée (par exemple **EMAIL 34**) et appuyez sur **Send to 34**. Le nombre est celui des personnes qui recevront le courriel; un nombre erroné ou périmé est refusé.
+5. La ligne sous les boutons indique combien de courriels sont partis et combien la passerelle a retenus. **All-user notice last sent …** affiche ensuite la date.
 
-> ⚠️ **Email all users** va à chaque utilisateur qui a une adresse courriel sur la plateforme, dans toutes les agences, sans tenir compte des réglages de courriel des agences, parce qu'un avis d'interruption est opérationnel. Envoyez-le une seule fois.
+> ⚠️ **Email all users** ne joint que les personnes actives des agences en activité : le personnel ayant un rôle actif dans un centre ouvert, les parents d’une famille encore inscrite dans un centre ouvert, et les administrateurs de la plateforme. Les agences de test, les services de garde fermés et les comptes désactivés, suspendus ou seulement invités sont exclus. Chaque personne reçoit son propre message par la passerelle de courriel habituelle : une agence ou un centre dont le courriel est désactivé est donc retenu. L’auteur de l’envoi et le nombre de courriels sont consignés dans le journal d’audit. Envoyez-le une seule fois.
 
 ## Terminer la maintenance
 
@@ -64,6 +65,7 @@ Les iPhone ne reçoivent une invitation que pour une version que l'App Store aff
 ## Questions fréquentes et problèmes
 
 ??? « Set up the maintenance window first. » | Enregistrez une période (dates et message) avant d'appuyer sur Email all users.
+??? « Type EMAIL … to confirm. » | Le nombre a changé depuis le décompte, ou la phrase n’a pas été tapée exactement. Appuyez de nouveau sur Email all users et tapez la nouvelle phrase.
 ??? « Enter an email. » | Tapez une adresse dans la case avant d'appuyer sur Send test.
 ??? « The minimum build cannot be newer than the latest build. » | Baissez Minimum build ou augmentez Latest build pour que le minimum ne dépasse pas la dernière version.
 ??? Les gens sont encore bloqués une fois le travail fini. | Désactivez Maintenance mode et appuyez sur Save, ou vérifiez l'heure Ends.

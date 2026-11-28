@@ -473,7 +473,7 @@
     main.setAttribute('data-kt-pretty', '1');
     var tab = ssGet('kt_pc_tab', 'insights');
     if (tab !== 'insights' && tab !== 'list') tab = 'insights';
-    main.innerHTML = '<div class="kt-section"><div class="kt-hero kt-hero-auto kt-banner-fx"><h1>💼 Careers</h1><div class="kt-hero-sub">Job applications from the website: CVs, cover letters, where each one stands, and how hiring is going.</div></div>'
+    main.innerHTML = '<div class="kt-section"><div class="kt-hero kt-hero-auto kt-banner-fx"><h1>📨 Careers</h1><div class="kt-hero-sub">Job applications from the website: CVs, cover letters, where each one stands, and how hiring is going.</div></div>'
       + '<div role="tablist" aria-label="Careers views" id="pc-tabs" style="display:flex;gap:4px;margin:0 0 12px;">'
       + [['insights', '📊 Insights'], ['list', '📋 Applications']].map(function (t) { return '<button type="button" role="tab" data-v="' + t[0] + '" aria-selected="' + (t[0] === tab ? 'true' : 'false') + '">' + t[1] + '</button>'; }).join('')
       + '</div><div id="pc-root"></div></div>';

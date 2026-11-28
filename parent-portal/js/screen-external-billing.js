@@ -1843,7 +1843,7 @@
     container.innerHTML =
       // Left-aligned like every other billing screen; `margin:0 auto` centred it.
       '<div style="padding:24px;max-width:1400px;">'
-      + '<div class="kt-page-hero"><h2>🧾 Accounting</h2><p>Invoices and balances for the agency. Read-only — payments and balances update automatically as they change at the source.</p></div>'
+      + '<div class="kt-page-hero"><h2>🗃️ Accounting</h2><p>Invoices and balances for the agency. Read-only — payments and balances update automatically as they change at the source.</p></div>'
       + '<div id="xb-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;"></div>'
       // Voided invoices are excluded from the default list on purpose — they are not
       // part of what is outstanding — so they need a tab of their own to be reachable.

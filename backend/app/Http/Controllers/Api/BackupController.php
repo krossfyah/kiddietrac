@@ -87,6 +87,8 @@ class BackupController extends Controller
                 /* Said out loud: the whole schedule depends on one crontab line, and if it
                    stops nothing else will notice. */
                 'scheduler_seen_at' => $this->schedulerLastRan(),
+                // Cloudways' off-server backup of the whole server (null = not confirmed). 2026-11-27.
+                'offsite' => \App\Support\BackupPaths::offsite(),
             ],
             'backups' => array_slice($list, 0, 30),
         ]);

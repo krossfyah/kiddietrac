@@ -143,9 +143,16 @@
       + '<div style="margin-top:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;'
       +   'padding:10px 12px;font-size:12px;color:#475569;line-height:1.55;">'
       +   '<b>These cannot be downloaded from the portal, on purpose.</b> One file is every '
-      +   'child, guardian, address and medical note on the platform. They are stored outside '
-      +   'the web root and restored over SSH:<br>'
-      +   '<code style="font-size:11.5px;color:#334155;">gunzip &lt; backups/kiddietrac-….sql.gz | mysql -u&lt;user&gt; -p &lt;db&gt;</code>'
+      +   'child, guardian, address and medical note on the platform. Each copy is encrypted (.sql.gz.gpg) '
+      +   'to the backup key, stored outside the web root, and restored over SSH on a computer that holds the '
+      +   'private key (Anthony keeps it; it is never on the server):<br>'
+      +   '<code style="font-size:11.5px;color:#334155;">gpg --decrypt kiddietrac-….sql.gz.gpg | gunzip | mysql -u&lt;user&gt; -p &lt;db&gt;</code>'
+      /* Truthful about where else a copy lives (2026-11-27): Cloudways backs up the whole server off-site. */
+      +   '<div style="margin-top:8px;">' + (st.offsite
+            ? 'Off-site: ' + esc(st.offsite.provider) + ' backs up the whole server (these encrypted files included) every '
+              + esc(st.offsite.every) + (st.offsite.keep_days ? ', kept ' + st.offsite.keep_days + ' days' : '')
+              + (st.offsite.local_copy_at ? '; latest local copy ' + esc(st.offsite.local_copy_at) : '') + '.'
+            : '<span style="color:#B45309;">Off-site copy not confirmed: connect Cloudways on Server health to check it.</span>') + '</div>'
       + '</div></div>';
 
     wire(main, body);

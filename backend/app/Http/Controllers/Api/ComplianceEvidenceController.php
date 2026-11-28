@@ -59,7 +59,8 @@ class ComplianceEvidenceController extends Controller
                 'latest' => $files ? date('Y-m-d H:i', (int) filemtime($files[0])) : null,
                 'last_ok_at' => PlatformSettings::get('backup.last_ok_at') ?: null,
                 'last_error' => PlatformSettings::get('backup.last_error') ?: null,
-                'offsite' => false,
+                // Cloudways' own off-server backup of the whole server, as its API reports it (null = not confirmed).
+                'offsite' => \App\Support\BackupPaths::offsite(),
             ],
             'tls' => [
                 'app' => $this->certExpiry('app.kiddietrac.com'),

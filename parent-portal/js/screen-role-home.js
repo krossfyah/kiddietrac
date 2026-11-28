@@ -183,7 +183,7 @@
       sub: 'Log a visit or review your reports',
       emoji: '🏡',
       primary: [
-        { hash: 'new-home-visit',   icon: '📝', label: 'New visit',      sub: 'Log a home visit' },
+        { hash: 'new-home-visit',   icon: '📝', label: 'New visit report', sub: 'Log a home visit' },   // = the menu's name (2026-11-27)
         { hash: 'play-spark',       icon: '<img src="/img/play-spark.svg?v=2" alt="" style="width:1em;height:1em;display:block;border-radius:24%;">', label: 'Play Spark',     sub: 'A play idea, right now' },
         { hash: 'home-visits',      icon: '📋', label: 'My reports',     sub: 'Past visits' },
         { hash: 'my-tasks',         icon: '✅', label: 'My tasks' },

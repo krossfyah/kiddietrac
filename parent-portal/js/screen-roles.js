@@ -175,7 +175,7 @@
     wrap.appendChild(Dom.el('h1', { style: 'font-size:24px;margin:0 0 6px;' }, '🛡 Roles & permissions'));
     wrap.appendChild(Dom.el('p', {
       style: 'color:#6B7280;font-size:14px;margin:0 0 20px;line-height:1.5;',
-    }, 'Configure what each role can do in your agency. System roles (agency_admin, centre_director, etc.) can have their permissions tuned but not renamed or deleted. Create custom roles to model your real-world staff structure — e.g. Lead Educator, Floater, Centre Manager. Phase A: these permissions are recorded but not yet enforced; the v22p8 Phase B rollout will switch existing role checks to consult this matrix.'));
+    }, 'Configure what each role can do in your agency. System roles (agency_admin, centre_director, etc.) can have their permissions tuned but not renamed or deleted. Create custom roles to model your real-world staff structure — e.g. Lead Educator, Floater, Centre Manager. Not enforced yet: the portal only watches where this matrix would disagree with the role checks in use today (see Permission check) and blocks nothing, except Ask KiddieTrac, which already uses it to decide which data it may read. Custom roles can be set up here but cannot be given to a person yet: user management offers the built-in roles only.'));
 
     var loading = Dom.el('div', { style: 'padding:40px;text-align:center;color:#6B7280;' }, 'Loading…');
     wrap.appendChild(loading);

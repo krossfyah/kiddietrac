@@ -191,18 +191,41 @@
       : '<div class="kt-page-hero"><h2>🎨 Branding</h2><p>' + who + 'The logos, colours and name your agencies show.</p></div>';
   }
 
+  function isPlatformUser() {
+    try { var u = (KT.Auth && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || '{}'); return (u.roles || []).indexOf('platform_admin') !== -1; } catch (e) { return false; }
+  }
+
+  /* PLATFORM ADMINS OPEN THESE TOO (2026-11-27, help sweep): /reseller/brand allows platform_admin, but these two
+     screens were registered for reseller_admin only, so a super admin following a link got "screen not found". A
+     platform admin has no reseller of their own: they work on the one picked in the reseller hub (kt_rh_reseller,
+     the same choice the hub's Overview / Billing / Support use), with a picker here, and saves carry reseller_id. */
   async function renderOwn(main, tab) {
     main.innerHTML = CSS + '<div class="rs-wrap kt-section">' + ownHero(tab, null) + '<div class="rs-card" style="margin-top:14px;">Loading…</div></div>';
-    var r;
-    try { r = (await Api.get('/reseller/brand')).reseller; } catch (e) {
+    var r, plat = isPlatformUser(), rid = null, all = [];
+    if (plat) {
+      try { rid = sessionStorage.getItem('kt_rh_reseller'); } catch (e) {}
+      try { all = (await Api.get('/platform/resellers')).resellers || []; } catch (e) { all = []; }
+      if (!all.some(function (x) { return String(x.id) === String(rid); })) { rid = all.length ? String(all[0].id) : null; }
+      if (!rid) {
+        main.innerHTML = CSS + '<div class="rs-wrap kt-section">' + ownHero(tab, null) + '<div class="rs-card" style="margin-top:14px;">No resellers yet. Add one on <a href="#resellers">Resellers</a>.</div></div>';
+        return;
+      }
+    }
+    try { r = (await Api.get('/reseller/brand' + (plat ? '?reseller_id=' + encodeURIComponent(rid) : ''))).reseller; } catch (e) {
       main.innerHTML = CSS + '<div class="rs-wrap kt-section">' + ownHero(tab, null) + '<div class="rs-card" style="margin-top:14px;">' + esc((e && e.message) || 'Could not load your reseller.') + '</div></div>';
       return;
     }
     if (!main.isConnected) { return; }
-    main.innerHTML = CSS + '<div class="rs-wrap kt-section">' + ownHero(tab, r) + '<div data-body style="margin-top:14px;"></div></div>';
+    var picker = plat && all.length > 1
+      ? '<div class="rs-card" style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><label for="rs-own-pick" style="font-weight:700;color:#334155;">Reseller</label>'
+        + '<select id="rs-own-pick" class="rs-in" style="max-width:320px;">' + all.map(function (x) { return '<option value="' + x.id + '"' + (String(x.id) === String(rid) ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></div>'
+      : '';
+    main.innerHTML = CSS + '<div class="rs-wrap kt-section">' + ownHero(tab, r) + picker + '<div data-body style="margin-top:14px;"></div></div>';
+    var pk = main.querySelector('#rs-own-pick');
+    if (pk) pk.onchange = function () { try { sessionStorage.setItem('kt_rh_reseller', pk.value); } catch (e) {} renderOwn(main, tab); };
     var body = main.querySelector('[data-body]');
-    if (tab === 'agencies') { body.innerHTML = '<div class="rs-card"><h3>Your agencies</h3><p class="rs-sub">They show your brand.</p>' + agencyList(r) + '</div>'; return; }
-    brandEditor(body, r, {});
+    if (tab === 'agencies') { body.innerHTML = '<div class="rs-card"><h3>' + (plat ? 'Its agencies' : 'Your agencies') + '</h3><p class="rs-sub">They show ' + (plat ? esc(r.name) + '\'s' : 'your') + ' brand.</p>' + agencyList(r) + '</div>'; return; }
+    brandEditor(body, r, plat ? { platform: true } : {});
   }
 
   /* ── The reseller's own app: settings, checklist, build kit (phase 5) ─────── */
@@ -366,7 +389,11 @@
   }
 
   Shell.registerScreen('reseller_admin:home', function (main) { return renderOwn(main, 'brand'); });
-  Shell.registerScreen('reseller_admin:reseller-brand', function (main) { return renderOwn(main, 'brand'); });
-  Shell.registerScreen('reseller_admin:reseller-agencies', function (main) { return renderOwn(main, 'agencies'); });
+  // Platform admins resolve to the agency_admin shell, so both register (as the reseller hub does); renderOwn
+  // only treats someone as platform when they hold platform_admin (an agency admin gets the 403 "no reseller").
+  ['reseller_admin', 'agency_admin', 'platform_admin'].forEach(function (role) {
+    Shell.registerScreen(role + ':reseller-brand', function (main) { return renderOwn(main, 'brand'); });
+    Shell.registerScreen(role + ':reseller-agencies', function (main) { return renderOwn(main, 'agencies'); });
+  });
   ['agency_admin', 'platform_admin'].forEach(function (role) { Shell.registerScreen(role + ':resellers', renderPlatform); });
 })(window);

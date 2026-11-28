@@ -11,6 +11,7 @@ title: Indicateurs de fonctionnalités et forfaits
 
 1. Ouvrez **Platform › 🚩 Feature flags**. L'écran s'ouvre sur l'agence où vous vous trouvez (celle du sélecteur d'agence), pas sur la première de la liste.
 2. Vérifiez la liste **Agency** en haut. Si elle affiche une autre agence, choisissez la bonne avant de changer quoi que ce soit : **Save changes** enregistre toujours pour l'agence choisie ici.
+   Toutes les agences figurent dans la liste, quel que soit leur nombre. Pour en trouver une vite, tapez une partie de son nom ou son numéro (par exemple **#18**) dans la case de recherche sous la liste.
 3. Attendez la fin de **Loading agency settings…**. Le forfait, la bannière de région et toutes les cartes de fonctionnalités de l'agence s'affichent.
 
 > ⚠️ Regardez le nom dans **Agency** avant chaque enregistrement. Les indicateurs et les forfaits sont propres à chaque agence, et un changement s'applique tout de suite à tout le monde dans cette agence.

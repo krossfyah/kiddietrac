@@ -59,6 +59,6 @@ If your director sends parents a notice about a hazard, or tells them it is reso
 
 ## Related screens
 
-[[open: #new-home-visit | New visit]]
+[[open: #new-home-visit | New visit report]]
 [[open: #chat | Message Centre]]
 [[filing-a-home-visit-report]]

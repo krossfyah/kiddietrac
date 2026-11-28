@@ -14,7 +14,7 @@ any point and finish it later.
 
 ## Filling in the visit details
 
-1. Open **📝 New visit report** from the menu, or press **New visit** on **Home**. The form is titled
+1. Open **📝 New visit report** from the menu, or press **New visit report** on **Home**. The form is titled
    **New home visit report**.
 2. Under **Visit details**, choose the **Centre** *(required)*: the centre in your agency this family belongs to.
 3. Check the **Visit date** *(required)*. It starts on today.

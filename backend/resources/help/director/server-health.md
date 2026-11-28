@@ -11,7 +11,7 @@ screens: server-health
 
 [[open: #server-health | Open Server health]]
 
-The page refreshes itself every 30 seconds while it is open. It has two tabs: **🖥️ This server** (the portal's own figures) and **☁️ Cloudways · new server** (the hosting account's graphs).
+The page refreshes itself every 30 seconds while it is open. It has two tabs: **🖥️ This server** (the portal's own figures) and **☁️ Cloudways · live server** (the hosting account's graphs).
 
 ## Doing a daily health check
 
@@ -40,7 +40,7 @@ The **Leak guard** card shows the automatic checks that make sure no agency can 
 1. Read **Connections (devices, last …)**: **Sessions measured**, **On a slow connection** (percentage on 2G/3G or waiting over 2 s), **Typical wait per request** and **Requests that failed**. A table lists the agencies with the slowest sessions.
 2. Read **Where problems happened (24 h)**: each **Server error**, **Slow** or **Never arrived** request, the screen or request it hit, and how many **Times**.
 3. Check the **Database** section for slow queries and the largest tables.
-4. Press **☁️ Cloudways · new server**, pick a period, and look at the hosting graphs (processor, memory, disk, bandwidth, disk use by app). Press **↻ Cloudways** to read them again.
+4. Press **☁️ Cloudways · live server**, pick a period, and look at the hosting graphs (processor, memory, disk, bandwidth, disk use by app). Press **↻ Cloudways** to read them again.
 
 ## Other sections
 
@@ -49,7 +49,7 @@ The **Leak guard** card shows the automatic checks that make sure no agency can 
 
 ## Connecting the hosting account
 
-1. Press **☁️ Cloudways · new server**.
+1. Press **☁️ Cloudways · live server**.
 2. Follow the instructions on the tab to create an access token in the hosting account.
 3. Paste it into the box and press **Connect Cloudways**.
 4. To remove it, press **Disconnect** and confirm. The token is deleted from KiddieTrac; you can connect again any time.

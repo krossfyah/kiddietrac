@@ -24,19 +24,19 @@ Votre écran **Accueil** est votre point de départ : vos chiffres de visites en
 
 ## Remplir votre premier rapport de visite
 
-1. Dans l'**Accueil**, sous **Accès rapide**, appuyez sur **📝 New visit**.
+1. Dans l'**Accueil**, sous **Accès rapide**, appuyez sur **📝 New visit report**.
 2. Choisissez le **Centre** et la **Date de la visite**, rédigez le **Résumé de la visite** et remplissez tout ce que
    vous savez d'autre.
 3. Appuyez sur **Soumettre le rapport** (ou sur **💾 Enregistrer comme brouillon** pour le terminer plus tard).
 4. Vous arrivez à **Mes rapports**, où votre nouveau rapport est en haut de la liste.
 
-[[show: #home @ New visit | Me montrer]]
+[[show: #home @ New visit report | Me montrer]]
 
 Le formulaire complet est expliqué dans [Remplir un rapport de visite à domicile](filing-a-home-visit-report).
 
 ## Vous y retrouver
 
-1. Utilisez les tuiles sous **Accès rapide** de l'**Accueil** : **New visit**, **Play Spark**, **Mes rapports**,
+1. Utilisez les tuiles sous **Accès rapide** de l'**Accueil** : **New visit report**, **Play Spark**, **Mes rapports**,
    **Mes tâches**, **Signaler un danger**, **Formulaires d'inspection**, **Formulaires à signer**,
    **Centre de messages**, **Documents**, **Ma paie**, **Congés**, **Nouvelles**, **Boîte de réception**,
    **Paramètres** et **Aide**.

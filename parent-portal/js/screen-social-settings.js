@@ -89,10 +89,10 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🔐 Sign-in methods</h2><p>Loading…</p></div></div>';
+    main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🔏 Sign-in methods</h2><p>Loading…</p></div></div>';
     var data = await Api.get('/platform/social-config').catch(function (e) { return { __err: e && e.message }; });
     if (data.__err) {
-      main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🔐 Sign-in methods</h2></div>' +
+      main.innerHTML = '<div style="padding:14px 24px;"><div class="kt-page-hero"><h2>🔏 Sign-in methods</h2></div>' +
         '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:12px;padding:18px;max-width:640px;">This page is available to <b>platform administrators</b> only.</div></div>';
       return;
     }
@@ -101,7 +101,7 @@
 
     main.innerHTML =
       '<div style="padding:14px 24px;max-width:920px;">' +
-        '<div class="kt-page-hero"><h2>🔐 Sign-in methods</h2><p>Let staff and families sign in with Google, Microsoft or Facebook. Each stays hidden on the login page until you enter its credentials. Social sign-in only ever <b>links to an existing invited account</b> by verified email — it never creates new accounts.</p></div>' +
+        '<div class="kt-page-hero"><h2>🔏 Sign-in methods</h2><p>Let staff and families sign in with Google, Microsoft or Facebook. Each stays hidden on the login page until you enter its credentials. Social sign-in only ever <b>links to an existing invited account</b> by verified email — it never creates new accounts.</p></div>' +
         '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13px;color:#1E3A5F;">' +
           '<div style="font-weight:700;margin-bottom:4px;">Redirect / callback URL</div>' +
           'When creating each provider app, register this exact URL (swap <code>{provider}</code> for google / microsoft / facebook):' +
@@ -121,6 +121,8 @@
 
     main.querySelectorAll('.kt-social-card').forEach(function (card) {
       var provider = card.getAttribute('data-provider');
+      // What people read: "Google sign-in saved", never the internal key ("Saved google"). 2026-11-27.
+      var pname = (META[provider] && META[provider].name) || provider;
       var save = function (clear) {
         var body = { provider: provider };
         if (clear) { body.clear = true; }
@@ -133,7 +135,7 @@
         var btn = card.querySelector(clear ? '.ss-clear' : '.ss-save');
         var lbl = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
         Api.post('/platform/social-config', body).then(function () {
-          if (KT.Dom && KT.Dom.toast) KT.Dom.toast((clear ? 'Disabled ' : 'Saved ') + provider, 'success');
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast(pname + (clear ? ' sign-in turned off' : ' sign-in saved'), 'success');
           render(main);
         }).catch(function (e) {
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Save failed: ' + (e.message || 'error'), 'error');
@@ -141,7 +143,7 @@
         });
       };
       var sv = card.querySelector('.ss-save'); if (sv) sv.onclick = function () { save(false); };
-      var cl = card.querySelector('.ss-clear'); if (cl) cl.onclick = async function () { if (await KT.confirm('Disable ' + provider + ' sign-in? Its credentials will be cleared.')) save(true); };
+      var cl = card.querySelector('.ss-clear'); if (cl) cl.onclick = async function () { if (await KT.confirm('Disable ' + pname + ' sign-in? Its credentials will be cleared.')) save(true); };
     });
   }
 

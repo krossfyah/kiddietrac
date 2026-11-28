@@ -48,6 +48,12 @@ The bottom card lists the most recent copies with the time each was taken, its f
 
 > ℹ️ **Copies cannot be downloaded from the portal, on purpose.** One file holds every child, guardian, address and medical note on the platform. They are stored outside the web site and restored by a person with server access and the offline key, never from a browser.
 
+## Restoring a copy, and the off-site copy
+
+Each copy is encrypted to Anthony's key before it is written, so only the holder of that private key can read it. It is restored by a person with server access: `gpg --decrypt <copy>.sql.gz.gpg | gunzip | mysql <database>`. The private key is never kept on the server.
+
+The status line also says whether an **off-site copy** is confirmed: Cloudways takes its own backup of the whole server (every 3 hours, kept 29 days) and the screen shows when the last one was taken. If it says **Off-site copy not confirmed**, connect Cloudways on **Server health** so the portal can check. The same line appears on the **Compliance evidence** backups tile.
+
 ## Who can do what
 
 | Role | Access |

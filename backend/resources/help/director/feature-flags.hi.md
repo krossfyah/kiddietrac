@@ -11,6 +11,7 @@ title: Feature flags और plans
 
 1. **Platform › 🚩 Feature flags** खोलें। screen उसी agency पर खुलती है जिसमें आप अभी हैं (agency switcher वाली), सूची की पहली agency पर नहीं।
 2. ऊपर **Agency** सूची देखें। अगर कोई और agency दिख रही है, तो कुछ भी बदलने से पहले सही agency चुनें: **Save changes** हमेशा यहाँ चुनी गई agency में ही सहेजता है।
+   सूची में हर agency है, चाहे कितनी भी हों। जल्दी ढूँढने के लिए, सूची के नीचे search box में उसके नाम का हिस्सा या उसका नंबर (जैसे **#18**) लिखें।
 3. **Loading agency settings…** पूरा होने दें। उस agency का plan, region banner और सभी feature cards दिखते हैं।
 
 > ⚠️ हर बार सहेजने से पहले **Agency** का नाम देखें। Flags और plans हर agency के अलग होते हैं, और बदलाव उस agency के सभी लोगों पर तुरंत लागू होता है।

@@ -567,6 +567,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Mobile app updates: the latest / minimum Google Play build (2026-10-30).
             Route::get ('/app-versions',           [\App\Http\Controllers\Api\AppVersionController::class, 'settings']);
             Route::put ('/app-versions',           [\App\Http\Controllers\Api\AppVersionController::class, 'save']);
+            // Who "Email all users" would reach, by agency, before anything is sent (2026-11-27).
+            Route::get ('/maintenance/notify-preview', [\App\Http\Controllers\Api\MaintenanceController::class, 'notifyPreview']);
             Route::post('/maintenance/notify-all', [\App\Http\Controllers\Api\MaintenanceController::class, 'notifyAll']);
             Route::get('/directory', [\App\Http\Controllers\Api\ImpersonationController::class, 'directory']);
             Route::post('/impersonate/{user}', [\App\Http\Controllers\Api\ImpersonationController::class, 'start'])->where('user', '[0-9]+');

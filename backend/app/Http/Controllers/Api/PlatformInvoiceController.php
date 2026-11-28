@@ -625,8 +625,10 @@ class PlatformInvoiceController extends Controller
     public function saveAutomation(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'auto_raise' => ['required', 'boolean'],
-            'auto_email' => ['required', 'boolean'],
+            /* The switches are optional (2026-11-27): Settings > Billing now saves only the business details, and
+               Accounting AR/AP > Settings > Recurring invoices is the one place they are switched. */
+            'auto_raise' => ['sometimes', 'boolean'],
+            'auto_email' => ['sometimes', 'boolean'],
             'issuer_address' => ['sometimes', 'nullable', 'string', 'max:400'],
             'issuer_tax_id' => ['sometimes', 'nullable', 'string', 'max:80'],
         ]);
@@ -645,13 +647,18 @@ class PlatformInvoiceController extends Controller
             $put('invoice.issuer.tax_id', (string) $data['issuer_tax_id']);
         }
 
-        /* auto_email without auto_raise cannot do anything — there would be nothing
-           raised to send — so enabling it implies raising. */
-        $raise = $data['auto_raise'] || $data['auto_email'];
-        $put('billing.auto_raise', $raise ? 'true' : 'false');
-        $put('billing.auto_email', $data['auto_email'] ? 'true' : 'false');
+        $on = fn (string $k) => in_array(strtolower((string) DB::table('platform_settings')->where('key', $k)->value('value')), ['1', 'true', 'yes', 'on'], true);
+        if (array_key_exists('auto_raise', $data) || array_key_exists('auto_email', $data)) {
+            /* auto_email without auto_raise cannot do anything — there would be nothing
+               raised to send — so enabling it implies raising. */
+            $email = array_key_exists('auto_email', $data) ? (bool) $data['auto_email'] : $on('billing.auto_email');
+            $raise = (array_key_exists('auto_raise', $data) ? (bool) $data['auto_raise'] : $on('billing.auto_raise')) || $email;
+            $put('billing.auto_raise', $raise ? 'true' : 'false');
+            $put('billing.auto_email', $email ? 'true' : 'false');
+        }
+        \Illuminate\Support\Facades\Cache::forget('platform_settings.all');
 
-        return response()->json(['ok' => true, 'auto_raise' => $raise, 'auto_email' => (bool) $data['auto_email']]);
+        return response()->json(['ok' => true, 'auto_raise' => $on('billing.auto_raise'), 'auto_email' => $on('billing.auto_email')]);
     }
 
     /** Mark a draft as issued. Records the date; sends nothing. */

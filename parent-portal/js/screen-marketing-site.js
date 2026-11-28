@@ -197,28 +197,6 @@
         + '<button class="leadDel" title="Delete subscriber" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:15px">🗑</button></td></tr>';
   }
 
-  function tabSubscribers(leads) {
-    var addForm = '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;padding:16px;margin-bottom:16px">'
-      + '<div style="font-size:13px;font-weight:800;color:#0a1e2c;margin-bottom:10px">➕ Add a subscriber manually</div>'
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-      + '<div style="flex:2;min-width:180px"><input id="addEmail" type="email" placeholder="email@agency.com" style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'
-      + '<div style="flex:1;min-width:120px"><input id="addName" placeholder="Name (optional)" style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'
-      + '<div style="flex:1;min-width:120px"><input id="addAgency" placeholder="Agency (optional)" style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;box-sizing:border-box"></div>'
-      + '<button id="addLeadBtn" style="background:' + TEAL + ';color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer">Add</button>'
-      + '<span id="addLeadMsg" style="font-size:12px;font-weight:700"></span></div></div>';
-    var head = '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">'
-      + '<input id="leadSearch" placeholder="Search email, agency, source…" style="flex:1;min-width:200px;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box">'
-      + '<span style="font-size:13px;color:#6b7280;font-weight:700"><span id="leadCount">' + leads.length + '</span> subscribers</span>'
-      + '<button id="leadCsv" style="background:#fff;border:1px solid ' + TEAL + ';color:' + TEAL + ';border-radius:8px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer">⬇ Export CSV</button></div>';
-    var rows = leads.length ? leads.map(leadRowHtml).join('')
-      : '<tr id="leadEmpty"><td colspan="6" style="padding:30px;text-align:center;color:#64748B;font-size:14px">No subscribers yet. They appear here as visitors download the checklist or sign up — or add one above.</td></tr>';
-    return card('', addForm + head
-      + '<div style="overflow-x:auto"><table data-kt-filtered="1" style="width:100%;border-collapse:collapse">'
-      + '<thead><tr style="text-align:left">'
-      + ['Date', 'Email', 'Name', 'Agency / centre', 'Source', ''].map(function (h) { return '<th style="padding:6px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#64748B">' + h + '</th>'; }).join('')
-      + '</tr></thead><tbody id="leadBody">' + rows + '</tbody></table></div>');
-  }
-
   function twoCol(a, b) { return '<div style="display:flex;gap:14px;flex-wrap:wrap"><div style="flex:1;min-width:180px">' + a + '</div><div style="flex:1;min-width:180px">' + b + '</div></div>'; }
   function tabContent(c) {
     return card('Contact details', ''

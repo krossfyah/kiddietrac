@@ -27,18 +27,18 @@ visit numbers at the top, then a tile for each thing you do.
 
 ## Filing your first visit report
 
-1. On **Home**, under **Quick access**, press **📝 New visit**.
+1. On **Home**, under **Quick access**, press **📝 New visit report**.
 2. Choose the **Centre** and the **Visit date**, write the **Visit summary**, and fill in anything else you know.
 3. Press **Submit report** (or **💾 Save as draft** to finish later).
 4. You land on **My reports**, where your new report is at the top.
 
-[[show: #home @ New visit | Show me]]
+[[show: #home @ New visit report | Show me]]
 
 The full form is explained in [Filing a home visit report](filing-a-home-visit-report).
 
 ## Finding your way around
 
-1. Use the tiles under **Quick access** on **Home**: **New visit**, **Play Spark**, **My reports**, **My tasks**,
+1. Use the tiles under **Quick access** on **Home**: **New visit report**, **Play Spark**, **My reports**, **My tasks**,
    **Report a hazard**, **Inspection forms**, **Forms to sign**, **Message Centre**, **Documents**, **My pay**,
    **Time off**, **News**, **Inbox**, **Settings** and **Help**.
 2. On a computer, the menu on the left has the same screens plus **My documents**, **My HR**, **My training**,

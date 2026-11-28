@@ -11,6 +11,7 @@ title: Indicadores de funciones y planes
 
 1. Abra **Platform › 🚩 Feature flags**. La pantalla se abre en la agencia en la que usted está (la del selector de agencias), no en la primera de la lista.
 2. Revise la lista **Agency** arriba. Si muestra otra agencia, elija la correcta antes de cambiar nada: **Save changes** siempre guarda en la agencia elegida aquí.
+   Todas las agencias están en la lista, sean cuantas sean. Para encontrar una rápido, escriba parte de su nombre o su número (por ejemplo **#18**) en la casilla de búsqueda bajo la lista.
 3. Espere a que termine **Loading agency settings…**. Aparecen el plan, el aviso de región y todas las tarjetas de funciones de esa agencia.
 
 > ⚠️ Mire el nombre en **Agency** antes de cada guardado. Los indicadores y los planes son por agencia, y un cambio se aplica de inmediato a todos en esa agencia.

@@ -7,7 +7,7 @@ title: Estado del servidor y protección contra fugas
 
 [[open: #server-health | Abrir Server health]]
 
-La página se actualiza sola cada 30 segundos mientras está abierta. Tiene dos pestañas: **🖥️ This server** (las cifras del propio portal) y **☁️ Cloudways · new server** (las gráficas de la cuenta de alojamiento).
+La página se actualiza sola cada 30 segundos mientras está abierta. Tiene dos pestañas: **🖥️ This server** (las cifras del propio portal) y **☁️ Cloudways · live server** (las gráficas de la cuenta de alojamiento).
 
 ## Hacer la revisión diaria
 
@@ -36,7 +36,7 @@ La tarjeta **Leak guard** muestra las comprobaciones automáticas que aseguran q
 1. Lea **Connections (devices, last …)**: **Sessions measured**, **On a slow connection** (porcentaje en 2G/3G o con esperas de más de 2 s), **Typical wait per request** y **Requests that failed**. Una tabla lista las agencias con las sesiones más lentas.
 2. Lea **Where problems happened (24 h)**: cada solicitud **Server error**, **Slow** o **Never arrived**, la pantalla o solicitud afectada y cuántas **Times**.
 3. Revise la sección **Database** para ver consultas lentas y las tablas más grandes.
-4. Pulse **☁️ Cloudways · new server**, elija un periodo y mire las gráficas del alojamiento (procesador, memoria, disco, ancho de banda, uso de disco por aplicación). Pulse **↻ Cloudways** para volver a leerlas.
+4. Pulse **☁️ Cloudways · live server**, elija un periodo y mire las gráficas del alojamiento (procesador, memoria, disco, ancho de banda, uso de disco por aplicación). Pulse **↻ Cloudways** para volver a leerlas.
 
 ## Otras secciones
 
@@ -45,7 +45,7 @@ La tarjeta **Leak guard** muestra las comprobaciones automáticas que aseguran q
 
 ## Conectar la cuenta de alojamiento
 
-1. Pulse **☁️ Cloudways · new server**.
+1. Pulse **☁️ Cloudways · live server**.
 2. Siga las instrucciones de la pestaña para crear un token de acceso en la cuenta de alojamiento.
 3. Péguelo en la casilla y pulse **Connect Cloudways**.
 4. Para quitarlo, pulse **Disconnect** y confirme. El token se borra de KiddieTrac; puede volver a conectarlo cuando quiera.

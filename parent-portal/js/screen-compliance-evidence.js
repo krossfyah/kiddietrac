@@ -55,7 +55,7 @@
       + tile('All users with two-factor', m.users_with_mfa + ' of ' + m.users, 'warn')
       + tile('Admins never signed in', s.admins_never_signed_in, s.admins_never_signed_in ? 'warn' : 'good', 'Remove unused access in the review')
       + tile('Sign-ins, last 30 days', (a30.login || 0) + ' ok · ' + (a30.login_failed || 0) + ' failed', '', (a30.mfa_failed || 0) + ' two-factor failures')
-      + tile('Latest backup', b.latest || 'none', b.last_error ? 'bad' : (b.latest ? 'good' : 'bad'), b.on_disk + ' kept · same host, no off-site copy')
+      + tile('Latest backup', b.latest || 'none', b.last_error ? 'bad' : (b.latest ? 'good' : 'bad'), b.on_disk + ' encrypted on this server · ' + (b.offsite ? 'off-site: ' + b.offsite.provider + ' server backup every ' + b.offsite.every + (b.offsite.keep_days ? ', kept ' + b.offsite.keep_days + ' days' : '') : 'off-site copy not confirmed'))
       + tile('TLS certificate (app / api)', tls(s.tls.app) + ' / ' + tls(s.tls.api), tlsTone(s.tls.app) === 'good' && tlsTone(s.tls.api) === 'good' ? 'good' : 'warn', 'Auto-renewed daily')
       + tile('Audit log', Number(s.audit_log.rows).toLocaleString() + ' events', 'good', 'since ' + String(s.audit_log.since || '').slice(0, 10))
       + tile('Access review', rv.last ? String(rv.last.reviewed_at).slice(0, 10) : 'never', rv.due ? 'bad' : 'good', rv.due ? 'Due now (quarterly)' : 'by ' + rv.last.reviewer)

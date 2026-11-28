@@ -125,23 +125,15 @@
     var blocked = !d.issuer_ready;
     main.innerHTML =
       '<div style="max-width:640px;">'
+      /* ONE PLACE TO SWITCH AUTOMATIC INVOICING (2026-11-27, help sweep). The two switches used to sit here AND on
+         Accounting AR/AP > Settings > Recurring invoices, both writing billing.auto_raise / billing.auto_email, so
+         either screen could quietly undo the other. Accounting AR/AP is the source of truth (it also holds the
+         time, which agencies, the due-date rule and BCC); this shows what is set and links there. */
       + '<div style="font-weight:600;margin-bottom:2px;">Automatic billing</div>'
-      + '<div style="color:#64748B;font-size:12.5px;margin-bottom:14px;">'
-      + 'Runs nightly at 06:00. With both off, nothing happens on its own and you raise '
-      + 'invoices by hand from Reseller → Invoices.</div>'
-
-      + '<label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;cursor:pointer;">'
-      + '<input type="checkbox" id="pb-raise"' + (d.auto_raise ? ' checked' : '') + ' style="margin-top:3px;">'
-      + '<span><strong>Raise invoices automatically</strong>'
-      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">'
-      + 'Creates drafts for any agency whose billing date has arrived. Nothing is sent.</span></span></label>'
-
-      + '<label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;cursor:pointer;">'
-      + '<input type="checkbox" id="pb-email"' + (d.auto_email ? ' checked' : '') + ' style="margin-top:3px;">'
-      + '<span><strong>Email them to the agency automatically</strong>'
-      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">'
-      + 'Issues each invoice and emails it to the agency contact with the PDF attached, '
-      + 'unattended. An agency with no usable contact address is left as a draft.</span></span></label>'
+      + '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:11px 13px;font-size:13px;color:#334155;margin:6px 0 6px;">'
+      + 'Automatic invoices are <b>' + (d.auto_raise ? 'on' : 'off') + '</b>'
+      + (d.auto_raise ? (d.auto_email ? ', and they are emailed to each agency automatically.' : ', raised as drafts for you to review and send.') : ': you raise invoices by hand.')
+      + '<div style="margin-top:6px;"><a href="#sales-invoices?section=fees" style="color:#1F6080;font-weight:700;">Change in Accounting AR/AP → Settings → Recurring invoices</a></div></div>'
 
       /* Stated, not hidden — the server enforces this whatever the switch says. */
       + (blocked
@@ -175,9 +167,8 @@
       var btn = this;
       var msg = main.querySelector('#pb-msg');
       btn.disabled = true; msg.style.color = '#166534'; msg.textContent = '';
+      // Business details only: the switches are saved on Accounting AR/AP (the server leaves them alone when absent).
       Api.put('/platform/billing-automation', {
-        auto_raise: main.querySelector('#pb-raise').checked,
-        auto_email: main.querySelector('#pb-email').checked,
         issuer_address: main.querySelector('#pb-addr').value.trim(),
         issuer_tax_id: main.querySelector('#pb-tax').value.trim(),
       }).then(function () {
