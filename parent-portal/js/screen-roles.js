@@ -27,6 +27,8 @@
     if (onClick) b.addEventListener('click', onClick);
     return b;
   }
+  // "an Educator", "a Centre director" (2026-11-28).
+  function an(w) { w = String(w || ''); return (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w; }
   function primary() { return 'background:#1F6080;color:white;'; }
   function ghost()   { return 'background:white;color:#374151;border:1px solid #D1D5DB!important;'; }
 
@@ -141,8 +143,8 @@
     var goneN = 0;
     secs.forEach(function (s) { goneN += s.gone.length; });
     box.appendChild(Dom.el('div', { style: 'color:#475569;margin:0 0 8px;' }, goneN
-      ? goneN + ' menu item' + (goneN === 1 ? '' : 's') + ' hidden (struck through) compared with a ' + (meta.base_labels[base] || base) + '.'
-      : 'The same menu as a ' + (meta.base_labels[base] || base) + '.'));
+      ? goneN + ' menu item' + (goneN === 1 ? '' : 's') + ' hidden (struck through) compared with ' + an(meta.base_labels[base] || base) + '.'
+      : 'The same menu as ' + an(meta.base_labels[base] || base) + '.'));
     secs.forEach(function (s) {
       box.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:.6px;text-transform:uppercase;margin:10px 0 4px;' }, s.label || 'Menu'));
       var ul = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;' });
@@ -334,7 +336,7 @@
       async function duplicate(r) {
         var name = await KT.prompt({
           title: r.is_system ? 'New custom role based on ' + r.name : 'Duplicate ' + r.name,
-          description: r.is_system ? 'It starts with everything a ' + r.name + ' has. Turn off what this job should not do.' : 'The copy starts with the same permissions.',
+          description: r.is_system ? 'It starts with everything ' + an(r.name) + ' has. Turn off what this job should not do.' : 'The copy starts with the same permissions.',
           okLabel: 'Create',
           fields: [{ key: 'value', label: 'Role name', placeholder: 'e.g. Lead educator', value: r.is_system ? '' : 'Copy of ' + r.name }],
         });
@@ -358,7 +360,7 @@
       }
 
       function previewRole(r) {
-        Shell.Modal.open({ title: '👁 What a ' + r.name + ' sees', body: menuPreview(r.base_role, r.permissions, meta), large: true,
+        Shell.Modal.open({ title: '👁 What ' + an(r.name) + ' sees', body: menuPreview(r.base_role, r.permissions, meta), large: true,
           actions: [{ label: 'Close' }, { label: 'Edit role', primary: true, handler: function () { editRole(r, null); } }] });
       }
 
@@ -410,7 +412,7 @@
           var k = pg ? pg.kept() : kept;
           var total = (meta.offered[base] || []).length;
           var off = total - k.length;
-          countEl.textContent = off ? off + ' of ' + total + ' turned off. Unticked = refused and hidden from the menu.' : 'Everything a ' + (meta.base_labels[base] || base) + ' can do. Untick what this job should not do.';
+          countEl.textContent = off ? off + ' of ' + total + ' turned off. Unticked = refused and hidden from the menu.' : 'Everything ' + an(meta.base_labels[base] || base) + ' can do. Untick what this job should not do.';
           Dom.clear(prevHost);
           prevHost.appendChild(menuPreview(base, k, meta));
         }
