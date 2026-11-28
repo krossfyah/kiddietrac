@@ -139,7 +139,7 @@ class SafeArrivalAbsentMail
             'date' => (string) $c->check_date, 'expected' => $c->expected_time ? Carbon::parse($c->check_date . ' ' . $c->expected_time, $tz)->format('g:i A') : '',
             'tried' => $tried, 'marked_at' => now($tz)->format('g:i A'), 'phone' => $phone, 'email' => (string) ($agency->contact_email ?? ''),
             // Signed by the agency: a home centre is often named after its provider, and staff last names never go in email.
-            'team' => FamilyFacingName::agency($agencyId)];
+            'team' => FamilyFacingName::sender($agencyId)];   // the brand families see (2026-11-27)
         $line = $first . ': marked absent (' . $when . '), family ' . count($to) . ' address(es), ' . count($bcc) . ' staff BCC';
         if ($dry) return '[dry] ' . $line;
 

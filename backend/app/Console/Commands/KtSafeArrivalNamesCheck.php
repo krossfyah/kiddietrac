@@ -199,7 +199,7 @@ class KtSafeArrivalNamesCheck extends Command
             $mail = SafeArrivalAbsentMail::build($agencyId, ['child' => 'Ava', 'guardian' => 'Sam', 'centre' => FamilyFacingName::place($cid),
                 'date' => now()->toDateString(), 'expected' => '9:00 AM', 'marked_at' => '10:45 AM', 'phone' => '', 'email' => '',
                 'tried' => [['at' => '9:15 AM', 'what' => 'We sent you a check-in message'], ['at' => '9:35 AM', 'what' => ucfirst($team) . ' was alerted']],
-                'team' => FamilyFacingName::agency($agencyId)]);
+                'team' => FamilyFacingName::sender($agencyId)]);
             $texts['Email: we missed Ava today'] = $mail['subject'] . "\n" . self::plain($mail['html']);
             $texts['Email From name'] = SafeArrivalFamilyText::fromName($agencyId);
             $texts['Attendance-reply page centre + footer'] = FamilyFacingName::place($cid, '') . ' | ' . (string) (\App\Support\AttendanceReply::brand($agencyId)['from'] ?? '');

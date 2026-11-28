@@ -18,7 +18,7 @@ registrada. Ábralo desde la barra lateral: **Operaciones** → **Safe Arrival**
 
 1. Cada 5 minutos, KiddieTrac revisa a cada niño que está **programado hoy** en un centro que está **abierto hoy**.
 2. Cuando pasa la **hora prevista de llegada + el umbral de llegada** del niño, y no tiene entrada registrada ni se informó una ausencia, se pregunta una vez a los padres: *«¿Ya llegó Maya?»*, por los canales que eligió cada padre (aplicación, correo electrónico, texto). Pueden tocar **Not attending today** en la aplicación.
-   Cada mensaje a una familia llega **con el nombre de su agencia** (un texto empieza *«Sunny Days Child Care: Maya debía llegar a...»*, el correo es de su agencia, la llamada dice *«una llamada de Safe Arrival de Sunny Days Child Care»*), y a una educadora solo se la nombra por su **nombre de pila** (un hogar con el nombre de su proveedora aparece como *«el cuidado infantil en casa de Maria»*).
+   Cada mensaje a una familia llega **con el nombre de su agencia** (su marca blanca, si tiene una; un texto empieza *«Sunny Days Child Care: Maya debía llegar a...»*, el correo es de su agencia, la llamada dice *«una llamada de Safe Arrival de Sunny Days Child Care»*), y a una educadora solo se la nombra por su **nombre de pila** (un hogar con el nombre de su proveedora aparece como *«el cuidado infantil en casa de Maria»*).
 3. Si la llamada telefónica está activada y sigue sin haber respuesta, los padres reciben una llamada automática (vea abajo).
 4. Si sigue sin haber entrada ni ausencia, los educadores de la sala — y los directores o administradores que usted eligió — reciben una alerta que abre este tablero.
 5. En cuanto el niño tiene la entrada registrada, se marca en un recuento o se informa una ausencia, la revisión se cierra sola.

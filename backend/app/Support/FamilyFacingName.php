@@ -76,17 +76,31 @@ final class FamilyFacingName
        sends from "KiddieTrac". */
     public static function sender(?int $agencyId): string
     {
-        $a = self::agency($agencyId);
-        if ($a !== '') {
-            return $a;
-        }
+        /* THE BRAND FAMILIES SEE (2026-11-27, Anthony): a white-label agency speaks as its brand (App\Support\Brand, the
+           same name WhiteLabelMail, SmsGateway and the email footer use - agency 6 = "Little Steps"); an agency without a
+           brand keeps its own name. */
+        $b = '';
         try {
-            $b = trim((string) Brand::name($agencyId));
+            if ($agencyId && Brand::whiteLabel($agencyId)) {
+                $b = trim((string) Brand::name($agencyId));
+            }
         } catch (\Throwable $e) {
             $b = '';
         }
+        if ($b !== '' && ! preg_match('/^kiddie ?trac$/i', $b)) {
+            return $b;
+        }
+        $a = self::agency($agencyId);
 
-        return $b !== '' ? $b : 'Your child care centre';
+        return $a !== '' ? $a : 'Your child care centre';
+    }
+
+    /** sender() without the generic fallback: '' when the agency has no name (org()/place() then fall back themselves). */
+    private static function senderOrEmpty(?int $agencyId): string
+    {
+        $s = $agencyId ? self::sender($agencyId) : '';
+
+        return $s === 'Your child care centre' ? '' : $s;
     }
 
     /** "iLearn Home Childcare: Ava was expected ..." - once, even if the text already starts with the sender. */
@@ -151,7 +165,7 @@ final class FamilyFacingName
     public static function org(?int $centreId, ?int $agencyId = null, string $fallback = 'your child care centre'): string
     {
         $c = self::centre($centreId);
-        $agency = self::agency($agencyId ?: ($c['agency_id'] ?? null));
+        $agency = self::senderOrEmpty($agencyId ?: ($c['agency_id'] ?? null));   // the brand families see (2026-11-27)
         if ($c === null || $c['name'] === '') {
             return $agency !== '' ? $agency : $fallback;
         }
@@ -178,7 +192,7 @@ final class FamilyFacingName
             return $fallback;
         }
         if ($c['provider']) {
-            return $c['first'] !== '' ? $c['first'] . "'s home child care" : (self::agency($c['agency_id']) ?: $fallback);
+            return $c['first'] !== '' ? $c['first'] . "'s home child care" : (self::senderOrEmpty($c['agency_id']) ?: $fallback);
         }
 
         return $c['name'];

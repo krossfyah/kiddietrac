@@ -22,7 +22,7 @@ signed in. Open it from the sidebar: **Operations** → **Safe Arrival**.
 
 1. Every 5 minutes, KiddieTrac looks at each child who is **scheduled today** at a centre that is **open today**.
 2. When a child's **expected drop-off time + the arrival threshold** passes, and they are not signed in and no absence was reported, the parents are asked once: *"Has Maya arrived?"* — through the channels each parent chose (app, email, text). They can tap **Not attending today** in the app.
-   Every message to a family comes **from your agency's name** (a text starts *"Sunny Days Child Care: Maya was expected at..."*, the email is from your agency, the call says *"a Safe Arrival call from Sunny Days Child Care"*), and an educator is only ever named by **first name** (a home named after its provider reads *"Maria's home child care"*).
+   Every message to a family comes **from your agency's name** (your white-label brand, if you have one; a text starts *"Sunny Days Child Care: Maya was expected at..."*, the email is from your agency, the call says *"a Safe Arrival call from Sunny Days Child Care"*), and an educator is only ever named by **first name** (a home named after its provider reads *"Maria's home child care"*).
 3. If the phone call is on and there's still no answer, the parents get an automated call (see below).
 4. If there is still no sign-in and no absence, the room's educators — and the directors or admins you chose — get an alert that opens this board.
 5. The moment the child is signed in, ticked in a headcount, or an absence is reported, the check closes by itself.
