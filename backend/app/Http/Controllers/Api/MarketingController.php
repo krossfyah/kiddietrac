@@ -81,6 +81,7 @@ final class MarketingController extends Controller
         $q = DB::table('marketing_campaigns')
             ->where('agency_id', $agencyId)
             ->whereNull('deleted_at')
+            ->whereNull('trigger_event')   // drip campaigns are listed on Drip campaigns, never here (2026-11-28)
             ->orderByDesc('updated_at');
 
         // Directors only see campaigns scoped to their centre (or agency-wide)
@@ -113,7 +114,7 @@ final class MarketingController extends Controller
         $to = $isDate($request->query('to')) ? (string) $request->query('to') : now()->toDateString();
         $centreId = $this->getCentreIdIfDirector($request);
 
-        $q = DB::table('marketing_campaigns')->where('agency_id', $agencyId)->whereNull('deleted_at')
+        $q = DB::table('marketing_campaigns')->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')
             ->where(function ($w) use ($from, $to) {
                 $w->whereBetween(DB::raw('DATE(COALESCE(sent_at, email_sent_at, scheduled_for, created_at))'), [$from, $to]);
             });
@@ -198,7 +199,7 @@ final class MarketingController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
-        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')->first();   // drips live on their own screen (2026-11-28)
         if (!$row) return response()->json(['message' => 'Not found'], 404);
         /* A director opens agency-wide campaigns and their own centres' only (2026-11-05 leak sweep): any id in
            the agency used to open, including another centre's draft. */
@@ -290,7 +291,7 @@ final class MarketingController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
-        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')->first();   // drips live on their own screen (2026-11-28)
         if (!$row) return response()->json(['message' => 'Not found'], 404);
         /* Only a campaign of a centre you direct (2026-11-05 leak sweep): a director could edit any campaign in
            the agency by id, including agency-wide ones. */
@@ -334,7 +335,7 @@ final class MarketingController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
-        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')->first();   // drips live on their own screen (2026-11-28)
         if (!$row) return response()->json(['message' => 'Not found'], 404);
         /* Only a campaign of a centre you direct (2026-11-05 leak sweep): any id in the agency could be deleted. */
         if (! \App\Support\CentreScope::canWrite($this->campaignScope($request, (int) $agencyId), $row->centre_id)) {
@@ -349,7 +350,7 @@ final class MarketingController extends Controller
     public function sendNow(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
-        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')->first();   // drips live on their own screen (2026-11-28)
         if (!$row) return response()->json(['message' => 'Not found'], 404);
         /* Only a campaign of a centre you direct (2026-11-05 leak sweep): a director could send an agency-wide
            or another centre's campaign by id, so it reached families outside their centres. */
@@ -425,7 +426,7 @@ final class MarketingController extends Controller
     {
         $agencyId = $this->getAgencyId($request);
         if (! $agencyId) return null;
-        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNull('trigger_event')->first();   // drips live on their own screen (2026-11-28)
         if (! $row || ! \App\Support\CentreScope::canRead($this->campaignScope($request, (int) $agencyId), $row->centre_id, true)) return null;
 
         return $row;

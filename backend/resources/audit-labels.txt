@@ -595,6 +595,10 @@ delete marketing/campaigns/{id} | Deleted an email campaign
 post marketing/campaigns/{id}/send | Sent an email campaign
 post marketing/campaigns/{id}/resend-bounced | Resent a campaign to people whose email bounced
 post marketing/drip | Created an email drip sequence
+put marketing/drip/{id} | Changed an email drip sequence
+post marketing/drip/{id}/pause | Paused an email drip sequence
+post marketing/drip/{id}/resume | Resumed an email drip sequence
+delete marketing/drip/{id} | Deleted an email drip sequence
 post marketing/images | Uploaded a marketing image
 post me/account-deletion | Asked to delete their account
 post me/biometric-enrolled | Turned on fingerprint or face sign-in

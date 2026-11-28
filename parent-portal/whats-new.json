@@ -3,6 +3,18 @@
     "entries": [
         {
             "type": "improved",
+            "date": "2026-11-28",
+            "icon": "💧",
+            "title": "Change, pause or delete drip campaigns",
+            "body": "Drip campaigns can now be edited, paused, resumed and deleted from the row menu, and each one shows how many emails it has sent. A change reaches only the families still to come; nobody gets the same email twice. Saving a new drip campaign works again.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
             "date": "2026-11-27",
             "icon": "📻",
             "title": "Walkie-talkie: radio sounds and a tidier screen",

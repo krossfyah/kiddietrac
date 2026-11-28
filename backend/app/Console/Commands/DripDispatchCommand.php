@@ -47,6 +47,11 @@ final class DripDispatchCommand extends Command
                     ->where('trigger_source_type', $s['type'])
                     ->exists();
                 if ($exists) continue;
+                // A dry run writes nothing (2026-11-28): it used to record a 'queued' send, so that person never got it.
+                if ($this->option('dry-run')) {
+                    $this->line(" would send '{$c->title}' to {$s['email']}");
+                    continue;
+                }
                 $sendId = DB::table('drip_sends')->insertGetId([
                     'campaign_id' => $c->id,
                     'to_user_id' => $s['user_id'] ?? null,
@@ -57,10 +62,6 @@ final class DripDispatchCommand extends Command
                     'status' => 'queued',
                     'created_at' => now(),
                 ]);
-                if ($this->option('dry-run')) {
-                    $this->line(" would send '{$c->title}' to {$s['email']}");
-                    continue;
-                }
                 try {
                     /* {first_name} (2026-11-27): the person's own first name when the address is someone's account,
                        else "there", so the token never goes out as written. */
@@ -104,6 +105,8 @@ final class DripDispatchCommand extends Command
             case 'tour_booked':
                 return DB::table('tour_bookings')
                     ->where('agency_id', $c->agency_id)
+                    // A centre's drip reaches only that centre's families (2026-11-28; it went to the whole agency).
+                    ->when($c->centre_id, fn ($q) => $q->where('centre_id', (int) $c->centre_id))
                     ->whereDate('tour_at', '=', $cutoff->toDateString())
                     ->select('id', 'parent_email as email', DB::raw('NULL as user_id'), DB::raw("'tour' as type"))
                     ->get()->toArray() ?: [];
@@ -112,6 +115,7 @@ final class DripDispatchCommand extends Command
                     ->join('families as f', 'f.id', '=', 'ch.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $c->agency_id)
+                    ->when($c->centre_id, fn ($q) => $q->where('f.centre_id', (int) $c->centre_id))
                     ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'ch'), 'f'), 'c'))
                     ->whereDate('ch.enrolled_at', '=', $cutoff->toDateString())
                     ->select('ch.id', 'f.primary_email as email', DB::raw('NULL as user_id'), DB::raw("'enrollment' as type"))
@@ -121,6 +125,7 @@ final class DripDispatchCommand extends Command
                     ->join('families as f', 'f.id', '=', 'ch.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $c->agency_id)
+                    ->when($c->centre_id, fn ($q) => $q->where('f.centre_id', (int) $c->centre_id))
                     ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'ch'), 'f'), 'c'))
                     // The agency's day (2026-10-21): this runs hourly, and from 8 PM in Toronto
                     // the server's UTC date is already tomorrow.

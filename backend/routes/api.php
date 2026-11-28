@@ -3858,6 +3858,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/marketing/drip',         [\App\Http\Controllers\Api\GrowthController::class, 'listDrip']);
         Route::post('/marketing/drip',         [\App\Http\Controllers\Api\GrowthController::class, 'createDrip']);
         Route::get ('/marketing/drip/stats',   [\App\Http\Controllers\Api\GrowthController::class, 'dripStats']);
+        // Edit, pause/resume and delete (soft, audited) a drip (2026-11-28). Changes reach only emails still to come.
+        Route::put   ('/marketing/drip/{id}',        [\App\Http\Controllers\Api\GrowthController::class, 'updateDrip'])->whereNumber('id');
+        Route::post  ('/marketing/drip/{id}/pause',  [\App\Http\Controllers\Api\GrowthController::class, 'pauseDrip'])->whereNumber('id');
+        Route::post  ('/marketing/drip/{id}/resume', [\App\Http\Controllers\Api\GrowthController::class, 'resumeDrip'])->whereNumber('id');
+        Route::delete('/marketing/drip/{id}',        [\App\Http\Controllers\Api\GrowthController::class, 'deleteDrip'])->whereNumber('id');
         Route::get ('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'listCurriculum']);
         Route::post('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'createCurriculum']);
         Route::post('/curriculum/{id}/use',    [\App\Http\Controllers\Api\GrowthController::class, 'useCurriculum']);

@@ -237,12 +237,22 @@
       + '<div style="padding:18px 4px;color:#64748B;">Loading children…</div></div>';
     const childrenRes = await Api.get('/admin/children').catch(() => ({ data: [] }));
     // /admin/children answers {children:[...]}; reading .data showed "No children on file" to everyone.
-    const children = (childrenRes.children || childrenRes.data || []).slice(0, 30);
+    /* EVERY CHILD, PAGED (2026-11-28, help-writer bug batch). This asked once per child, one after
+       another, so it stopped at the first 30 and an agency with more never saw the rest. Now
+       GET /analytics/hdlh-gaps?child_ids= answers 25 children a call, the table holds them all
+       (most gaps first across the whole list) and the portal's table pager shows 25 a page. */
+    const children = childrenRes.children || childrenRes.data || [];
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children on file.</div>'; return; }
     const results = [];
-    for (const c of children) {
-      const r = await Api.get(`/analytics/hdlh-gaps/${c.id}`).catch(() => null);
-      if (r) results.push({ ...c, gaps: r.gaps_count, domains: r.data, fw: r.framework });
+    const prog = main.querySelector('.kt-page-hero + div');
+    let failed = 0;
+    for (let i = 0; i < children.length; i += 25) {
+      const batch = children.slice(i, i + 25);
+      if (prog) prog.textContent = 'Checking children… ' + Math.min(i + 25, children.length) + ' of ' + children.length;
+      const r = await Api.get('/analytics/hdlh-gaps?child_ids=' + batch.map(c => c.id).join(',')).catch(() => null);
+      if (!main.isConnected) return;
+      if (!r || !r.data) { failed += batch.length; continue; }
+      batch.forEach(c => { const g = r.data[String(c.id)]; if (g) results.push({ ...c, gaps: g.gaps_count, domains: g.data, fw: g.framework }); });
     }
     /* Columns come from the agency's learning framework (2026-09-29) -- HDLH's four
        foundations, EYFS's seven areas, and so on -- not four hardcoded names. */
@@ -254,6 +264,7 @@
         <h2>🎯 ${esc(fw.short)} gap detection</h2>
         <p>Children with few observations in an area of ${esc(fw.name)}. Most gaps first — those need attention. (Fewer than 2 observations is a gap; 5 or more is strong.) 📋 counts the planned activities tagged with that area in the child's room.</p>
       </div>
+      ${failed ? `<div class="kt-card" style="color:#B45309;padding:12px 16px;">Some children could not be checked (${failed}). Reload the page to try again.</div>` : ''}
       <div class="kt-card">
         <table>
           <thead><tr><th>Child</th><th>Gaps</th>${areas.map(a => `<th>${esc(a.label)}</th>`).join('')}</tr></thead>
@@ -280,76 +291,148 @@
   }
 
   // ============================ Drip campaigns ============================
+  /* DRIP CAMPAIGNS (2026-11-28, Anthony: "fix all of the gaps" - create-only before). Each drip is one email sent N days
+     after an event. Row ⋮ (kt-row-actions): View, Edit, Pause/Resume, Delete. Edit and View open in the house popup.
+     A change reaches only the people still to come: everyone who already got it is recorded per event, never re-sent. */
+  const DRIP_TRIG = { tour_booked: 'After a tour is booked', enrollment_complete: 'After enrolment is complete', birthday: "On a child's birthday" };
+  const DRIP_STATUS = { active: 'Running', paused: 'Paused' };
+  const dripToast = (m, k) => { if (window.KT && KT.toast) KT.toast(m, k || 'success', 6000); };
+  const dripWhen = (ts) => { if (!ts) return '—'; try { return (KT.fmtDateTime ? KT.fmtDateTime(ts) : fmtDate(ts)); } catch (e) { return fmtDate(ts); } };
+  let dripRows = [];
+  let dripScoped = false;   // a centre director: drips are for their own centres
+
   async function renderDrip(main) {
+    main = main || document.querySelector('#appMain') || document.querySelector('main');
+    if (!main) return;
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const [list, stats] = await Promise.all([
       Api.get('/marketing/drip').catch(() => ({ data: [] })),
       Api.get('/marketing/drip/stats').catch(() => ({})),
     ]);
+    dripRows = list.data || [];
+    dripScoped = !!list.scoped;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>💧 Drip campaigns</h2>
-        <p>Auto-send follow-up emails N days after a trigger event (tour booked, enrollment complete, birthday, etc).</p>
+        <p>Send a follow-up email a set number of days after something happens: a tour is booked, an enrolment is complete, or a child's birthday.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="dp-new">+ New drip campaign</button></div>
       </div>
       <div class="kt-kpi-grid">
-        <div class="kt-kpi"><div class="kt-kpi-label">Active drip campaigns</div><div class="kt-kpi-value">${stats.campaigns || 0}</div></div>
+        <div class="kt-kpi"><div class="kt-kpi-label">Running</div><div class="kt-kpi-value">${stats.active != null ? stats.active : (stats.campaigns || 0)}</div></div>
         <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Sent (all time)</div><div class="kt-kpi-value">${stats.sent || 0}</div></div>
-        <div class="kt-kpi kt-kpi-warning"><div class="kt-kpi-label">Queued</div><div class="kt-kpi-value">${stats.queued || 0}</div></div>
+        <div class="kt-kpi kt-kpi-warning"><div class="kt-kpi-label">Waiting to send</div><div class="kt-kpi-value">${stats.queued || 0}</div></div>
         <div class="kt-kpi kt-kpi-danger"><div class="kt-kpi-label">Failed</div><div class="kt-kpi-value">${stats.failed || 0}</div></div>
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Title</th><th>Trigger</th><th>Delay</th><th>Status</th></tr></thead>
-          <tbody>${(list.data || []).map(d => `<tr>
-            <td><strong>${esc(d.title)}</strong></td>
-            <td><span class="kt-pill kt-pill-info">${esc(d.trigger_event)}</span></td>
-            <td>${d.trigger_delay_days} day(s)</td>
-            <td><span class="kt-pill ${d.status === 'active' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(d.status)}</span></td>
-          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No drip campaigns set up.</td></tr>'}</tbody>
+          <thead><tr><th>Title</th><th>Starts when</th><th>Delay</th><th>Centre</th><th>Status</th><th>Sent</th><th>Failed</th><th>Last sent</th><th></th></tr></thead>
+          <tbody>${dripRows.map(d => `<tr>
+            <td><strong>${esc(d.title)}</strong><div style="font-size:12px;color:#64748B;">${esc(d.subject || '')}</div></td>
+            <td>${esc(DRIP_TRIG[d.trigger_event] || (d.trigger_event + ' (not sending)'))}</td>
+            <td>${+d.trigger_delay_days === 0 ? 'Same day' : (d.trigger_delay_days + ' day' + (+d.trigger_delay_days === 1 ? '' : 's'))}</td>
+            <td>${esc(d.centre_name || 'All centres')}</td>
+            <td><span class="kt-pill ${d.status === 'active' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(DRIP_STATUS[d.status] || d.status)}</span></td>
+            <td>${(d.stats && d.stats.sent) || 0}</td>
+            <td>${(d.stats && d.stats.failed) || 0}</td>
+            <td>${esc(dripWhen(d.stats && d.stats.last_sent_at))}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button type="button" class="dp-view" data-id="${d.id}" title="View">View</button>
+              ${d.may_edit ? `<button type="button" class="dp-edit" data-id="${d.id}" title="Edit">Edit</button>
+              <button type="button" class="dp-toggle" data-id="${d.id}" title="${d.status === 'active' ? 'Pause' : 'Resume'}">${d.status === 'active' ? '⏸ Pause' : '▶ Resume'}</button>
+              <button type="button" class="dp-del" data-id="${d.id}" title="Delete">🗑 Delete</button>` : ''}
+            </td>
+          </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:40px;color:#64748B;">No drip campaigns set up.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('dp-new').onclick = () => openDripModal();
+    const byId = (id) => dripRows.find(d => String(d.id) === String(id));
+    main.querySelector('#dp-new').onclick = () => openDripModal(null);
+    main.querySelectorAll('.dp-view').forEach(b => b.addEventListener('click', () => viewDrip(byId(b.dataset.id))));
+    main.querySelectorAll('.dp-edit').forEach(b => b.addEventListener('click', () => openDripModal(byId(b.dataset.id))));
+    main.querySelectorAll('.dp-toggle').forEach(b => b.addEventListener('click', async () => {
+      const d = byId(b.dataset.id); if (!d) return;
+      try {
+        await Api.post('/marketing/drip/' + d.id + '/' + (d.status === 'active' ? 'pause' : 'resume'), {});
+        dripToast(d.status === 'active' ? 'Paused. Nothing more goes out until you resume it.' : 'Running again. It sends for new events from now on.');
+        renderDrip();
+      } catch (e) { dripToast((e && e.message) || 'Could not change it. Please try again.', 'error'); }
+    }));
+    main.querySelectorAll('.dp-del').forEach(b => b.addEventListener('click', async () => {
+      const d = byId(b.dataset.id); if (!d) return;
+      const ok = await KT.confirm({ title: 'Delete this drip campaign?', description: '"' + d.title + '" stops sending and leaves this list. The emails it already sent stay on record.', okLabel: 'Delete' });
+      if (!ok) return;
+      try { await Api.delete('/marketing/drip/' + d.id); dripToast('Drip campaign deleted.'); renderDrip(); }
+      catch (e) { dripToast((e && e.message) || 'Could not delete it. Please try again.', 'error'); }
+    }));
   }
-  function openDripModal() {
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:560px;width:92%;max-height:88vh;overflow:auto;">
-      <h3 style="margin:0 0 16px;color:#0F172A;">New drip campaign</h3>
-      <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Title</label>
-      <input id="dp-title" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Trigger event</label>
-      <select id="dp-trig" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-        <option value="tour_booked">After tour booked</option>
-        <option value="enrollment_complete">After enrollment complete</option>
-        <option value="birthday">On child's birthday</option>
-        <option value="inactivity_30d">After 30 days inactive</option>
+
+  function viewDrip(d) {
+    if (!d) return;
+    const st = d.stats || {};
+    const box = document.createElement('div');
+    box.innerHTML = `<table style="width:100%;font-size:14px;border-collapse:collapse;margin-bottom:12px;">
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;width:140px;">Status</td><td><strong>${esc(DRIP_STATUS[d.status] || d.status)}</strong></td></tr>
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;">Starts when</td><td>${esc(DRIP_TRIG[d.trigger_event] || d.trigger_event)}, ${+d.trigger_delay_days === 0 ? 'the same day' : d.trigger_delay_days + ' day(s) later'}</td></tr>
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;">Centre</td><td>${esc(d.centre_name || 'All centres')}</td></tr>
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;">Sent</td><td>${st.sent || 0}${st.failed ? ' · ' + st.failed + ' failed' : ''}${st.queued ? ' · ' + st.queued + ' waiting' : ''}</td></tr>
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;">Last sent</td><td>${esc(dripWhen(st.last_sent_at))}</td></tr>
+        <tr><td style="color:#64748B;padding:4px 12px 4px 0;">Subject</td><td><strong>${esc(d.subject)}</strong></td></tr>
+      </table>
+      <div style="font-size:12px;font-weight:700;color:#64748B;margin:4px 0 6px;">Email</div>`;
+    const fr = document.createElement('iframe');
+    fr.setAttribute('sandbox', '');
+    fr.style.cssText = 'width:100%;height:320px;border:1px solid #E2E8F0;border-radius:10px;background:#fff;';
+    fr.srcdoc = '<div style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;color:#1E293B;padding:12px;">' + (d.body_html || '') + '</div>';
+    box.appendChild(fr);
+    const actions = [{ label: 'Close' }];
+    if (d.may_edit) actions.push({ label: 'Edit', primary: true, handler: () => { setTimeout(() => openDripModal(d), 0); } });
+    KT.Shell.Modal.open({ title: d.title, body: box, actions, large: true });
+  }
+
+  async function openDripModal(d) {
+    const mine = await Api.get('/operations/my-centres').catch(() => ({ centres: [] }));
+    const centres = (mine && mine.centres) || [];
+    const isDirector = dripScoped;
+    const sent = !!(d && d.stats && (d.stats.sent || d.stats.failed));
+    const box = document.createElement('div');
+    const fld = 'width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;';
+    const lab = 'display:block;font-size:13px;font-weight:600;margin:12px 0 4px;color:#374151;';
+    box.innerHTML = `
+      ${d && sent ? '<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:6px;">Changes reach only the people still to come. Nobody who already got this email is sent it again.</div>' : ''}
+      <label style="${lab}">Title</label><input data-f="title" style="${fld}" value="${esc(d ? d.title : '')}">
+      <label style="${lab}">Starts when</label>
+      <select data-f="trigger_event" style="${fld}" ${sent ? 'disabled title="This drip has already sent, so what starts it cannot change. Create a new drip instead."' : ''}>
+        ${Object.keys(DRIP_TRIG).map(k => `<option value="${k}" ${d && d.trigger_event === k ? 'selected' : ''}>${esc(DRIP_TRIG[k])}</option>`).join('')}
+        ${d && !DRIP_TRIG[d.trigger_event] ? `<option value="${esc(d.trigger_event)}" selected>${esc(d.trigger_event)} (not sending)</option>` : ''}
       </select>
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Delay (days)</label>
-      <input id="dp-delay" type="number" value="3" min="0" max="365" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Email subject</label>
-      <input id="dp-subj" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Email body (HTML allowed)</label>
-      <textarea id="dp-body" rows="6" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
-      <div style="margin-top:20px;text-align:right;">
-        <button id="dp-cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Cancel</button>
-        <button id="dp-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Create</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#dp-cancel').onclick = () => m.remove();
-    m.querySelector('#dp-save').onclick = async () => {
-      await Api.post('/marketing/drip', {
-        title: m.querySelector('#dp-title').value,
-        subject: m.querySelector('#dp-subj').value,
-        body_html: m.querySelector('#dp-body').value,
-        trigger_event: m.querySelector('#dp-trig').value,
-        trigger_delay_days: +m.querySelector('#dp-delay').value,
-      });
-      m.remove();
-      renderDrip(document.querySelector('main'));
-    };
+      <label style="${lab}">Days after (0 = the same day)</label><input data-f="trigger_delay_days" type="number" min="0" max="365" style="${fld}" value="${d ? +d.trigger_delay_days : 3}">
+      <label style="${lab}">Centre</label>
+      <select data-f="centre_id" style="${fld}">
+        ${!isDirector ? `<option value="">All centres</option>` : (centres.length > 1 ? '<option value="">Choose a centre…</option>' : '')}
+        ${centres.map(c => `<option value="${esc(c.id)}" ${d && String(d.centre_id) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <label style="${lab}">Email subject</label><input data-f="subject" style="${fld}" value="${esc(d ? d.subject : '')}">
+      <label style="${lab}">Email text (you can use {first_name})</label>
+      <textarea data-f="body_html" rows="8" style="${fld}font-family:inherit;min-height:160px;">${esc(d ? d.body_html : '')}</textarea>`;
+    const val = (k) => { const el = box.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };
+    KT.Shell.Modal.open({
+      title: d ? 'Edit drip campaign' : 'New drip campaign',
+      body: box,
+      large: true,
+      actions: [
+        { label: 'Cancel' },
+        { label: d ? 'Save' : 'Create', primary: true, handler: async () => {
+          const body = { title: val('title').trim(), subject: val('subject').trim(), body_html: val('body_html'),
+            trigger_event: val('trigger_event'), trigger_delay_days: +val('trigger_delay_days'), centre_id: val('centre_id') ? +val('centre_id') : null };
+          if (!body.title || !body.subject || !body.body_html.trim()) { dripToast('Give it a title, a subject and the email text.', 'info'); return false; }
+          if (isDirector && !body.centre_id) { dripToast('Choose the centre this drip is for.', 'info'); return false; }
+          if (d) await Api.put('/marketing/drip/' + d.id, body); else await Api.post('/marketing/drip', body);
+          dripToast(d ? 'Saved. The change applies to emails still to come.' : 'Drip campaign created. It is running.');
+          renderDrip();
+        } },
+      ],
+    });
   }
 
   // ============================ Curriculum library ============================
