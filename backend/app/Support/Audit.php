@@ -235,6 +235,12 @@ final class Audit
             $rows[$i]['created_at'] = self::stamp($r['created_at'] ?? null)
                 ?? now()->format(self::TS);
             if (isset($rows[$i]['payload'])) {
+                /* An array payload is encoded here, the one door every row goes through (ticket #290,
+                   2026-11-27): the walkie-talkie passed arrays and the insert failed with "Array to
+                   string conversion", taking the request down with it. */
+                if (is_array($rows[$i]['payload']) || is_object($rows[$i]['payload'])) {
+                    $rows[$i]['payload'] = json_encode($rows[$i]['payload'], JSON_UNESCAPED_UNICODE);
+                }
                 $rows[$i]['payload'] = self::seal($rows[$i]['payload']);
             }
         }
