@@ -22,24 +22,34 @@ title: Suivi des repas CACFP
 
 ## Lire les totaux du mois
 
-Les quatre tuiles au-dessus de la liste comptent tous les repas cochés ce mois-ci :
+Les tuiles au-dessus de la liste comptent chaque repas coché ce mois-ci au centre affiché, par palier : une tuile par palier utilisé (**Tier I**, **Tier II**, **Free**, **Reduced**), **Paid**, **No tier** lorsque des repas ont été servis à un enfant sans palier au dossier, et **Total meals this month**.
 
-- **Gratuit**, **Réduit** et **Payé** : repas servis aux enfants dont la famille est à ce palier.
-- **Total des repas ce mois-ci** : tous les repas cochés, y compris ceux des enfants dont le palier n’est pas réglé.
+## La demande mensuelle : CSV et impression
 
-> ℹ️ Les tuiles suivent le centre affiché. Changer de centre change à la fois la liste et les totaux du mois; pour une réclamation de toute l’agence, additionnez les tuiles de chaque centre.
+La carte **Monthly claim** prépare la demande de remboursement du centre affiché.
 
-## Paliers des familles
+1. Choisissez le mois dans la case du mois (elle commence au mois en cours).
+2. Appuyez sur **⬇️ Claim CSV** pour télécharger un tableur, ou sur **🖨 Print claim** pour l’imprimer ou l’enregistrer en PDF.
+3. Lisez la ligne à côté des boutons : elle indique le nombre de repas et de jours d’ouverture du mois, ou combien d’enfants n’ont pas de palier au dossier.
 
-La colonne **Palier** montre le palier d’admissibilité de chaque famille : **free**, **reduced** ou **paid**. Une famille sans palier inscrit affiche **unset**. Ses repas comptent quand même dans **Total des repas ce mois-ci**, mais pas sous Gratuit, Réduit ou Payé : réglez donc le palier de chaque famille avant de produire votre demande. Le palier est copié sur chaque repas au moment de la coche : une famille qui change de palier en cours de mois garde l’ancien palier sur les repas déjà inscrits.
+La demande reprend ce que demande le formulaire d’un organisme parrain : le site, le permis et l’adresse; les jours d’ouverture (jours avec au moins un repas inscrit); les enfants inscrits par palier; la participation quotidienne moyenne (enfants ayant reçu un repas, par jour d’ouverture); les repas par type (déjeuner, collation du matin, dîner, collation de l’après-midi, souper) et par palier; et les repas de chaque jour. Le CSV a aussi une ligne par jour et par type de repas. Les enfants sans palier au dossier sont nommés à la fin de l’impression.
 
-> ⚠️ Cet écran n’a pas de bouton pour régler le palier d’une famille. Demandez au soutien KiddieTrac d’inscrire les paliers pour vous, et renouvelez l’admissibilité de chaque famille chaque année comme l’exige votre organisme CACFP.
+## Paliers de la famille et de l’enfant
+
+La colonne **Tier** montre le palier qui s’applique aujourd’hui. Utilisez le ⋮ de la ligne → **Set tier** pour le changer :
+
+1. Choisissez **The whole family** ou **Only this child** (un enfant peut avoir un palier différent de sa famille, par exemple un enfant en famille d’accueil, ou un enfant Tier I dans un service de garde en milieu familial Tier II).
+2. Choisissez le **Tier** : **Tier I** ou **Tier II** pour un service de garde en milieu familial, **Free**, **Reduced** ou **Paid** pour un centre. Pour un enfant, **Use the family's tier** retire son palier propre.
+3. Entrez l’**Eligibility date** : le jour où l’admissibilité a été établie. **Tier I**, **Free** et **Reduced** comptent pendant 12 mois à partir de cette date; **Tier II** et **Paid** n’ont pas besoin de date.
+4. Notez la preuve vue dans **Evidence seen** (par exemple le formulaire de revenu signé ou une lettre SNAP), puis appuyez sur **Save**.
+
+Les repas déjà inscrits sont recomptés selon le palier en vigueur le jour où chacun a été servi. À la fin d’une année d’admissibilité, la colonne affiche **Expired** et les nouveaux repas de l’enfant comptent dans **No tier** jusqu’au renouvellement.
 
 ## Qui peut faire quoi
 
 | Rôle | Ce qu’il peut faire |
 |---|---|
-| Administrateur d’agence | Ouvrir l’écran depuis le menu, choisir n’importe quel centre, cocher les repas, voir les totaux du mois. |
+| Administrateur d’agence | Ouvrir l’écran depuis le menu, choisir n’importe quel centre, cocher les repas, définir les paliers des familles et des enfants, télécharger ou imprimer la demande mensuelle. |
 | Administrateur de plateforme | La même chose, dans l’agence où il est passé. |
 | Directeur de centre et éducatrice | Pas dans leur menu. Les repas ne peuvent être inscrits qu’à un centre où la personne travaille, et un directeur ne voit jamais que les totaux de ses propres centres. |
 | Parent | Ne voit ni les décomptes CACFP ni les paliers. |
@@ -51,7 +61,7 @@ La colonne **Palier** montre le palier d’admissibilité de chaque famille : **
 ??? Puis-je inscrire les repas d’hier? | Non. La liste est toujours celle d’aujourd’hui. Inscrivez les repas le jour où ils sont servis.
 ??? Une coche s’est enlevée, ou je vois « You can only record meals at a centre you work at. » | Vous n’êtes pas lié à ce centre. Demandez à un administrateur d’agence de vous y ajouter.
 ??? Je vois « That child is not enrolled at this centre. » | L’inscription de l’enfant est à un autre centre. Passez à ce centre et cochez le repas là.
-??? Puis-je exporter les totaux? | Cet écran n’a pas de bouton d’exportation. Recopiez les quatre tuiles sur votre formulaire de demande à la fin du mois.
+??? Puis-je exporter les totaux? | Oui. Utilisez **⬇️ Claim CSV** ou **🖨 Print claim** dans la carte **Monthly claim**.
 ??? L’écran indique « No centres. » | Votre agence n’a aucun centre ouvert que vous pouvez voir. Demandez à un administrateur d’agence de vérifier votre accès aux centres.
 
 ## Liens utiles

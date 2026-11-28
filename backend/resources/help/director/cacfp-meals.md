@@ -26,24 +26,34 @@ screens: cacfp
 
 ## Reading the monthly totals
 
-The four tiles above the roster count every meal ticked this calendar month at the centre on screen:
+The tiles above the roster count every meal ticked this calendar month at the centre on screen, by tier: a tile for each tier in use (**Tier I**, **Tier II**, **Free**, **Reduced**), **Paid**, **No tier** when some meals were served to a child with no tier on file, and **Total meals this month**.
 
-- **Free**, **Reduced** and **Paid**: meals served to children whose family is on that tier.
-- **Total meals this month**: every meal ticked, including children whose tier is not set.
+## The monthly claim: CSV and printout
 
-> ℹ️ The tiles follow the centre on screen. Switching centre changes both the roster and the month's totals, so for an agency-wide claim add up each centre's tiles.
+The **Monthly claim** card builds the claim for the centre on screen.
 
-## Family tiers
+1. Pick the month in the month box (it starts at this month).
+2. Press **⬇️ Claim CSV** to download a spreadsheet, or **🖨 Print claim** to print it or save it as a PDF.
+3. Read the line beside the buttons: it says how many meals and operating days the month has, or how many children have no tier on file.
 
-The **Tier** column shows each family's eligibility tier: **free**, **reduced** or **paid**. A family with no tier recorded shows **unset**. Their meals still count in **Total meals this month**, but not under Free, Reduced or Paid, so set every family's tier before you file. The tier is copied onto each meal when it is ticked: a family that changes tier mid-month keeps the old tier on meals already recorded.
+The claim lists what a sponsor's claim form asks for: the site, licence and address; operating days (days with at least one meal recorded); children enrolled by tier; average daily participation (children served a meal, per operating day); meals by type (breakfast, AM snack, lunch, PM snack, supper) and tier; and every day's meals. The CSV also has one line per day and meal type. Children with no tier on file are named at the end of the printout.
 
-> ⚠️ There is no button on this screen to set a family's tier. Ask KiddieTrac support to record tiers for you, and re-certify each family's eligibility every year as your CACFP sponsor requires.
+## Family and child tiers
+
+The **Tier** column shows the tier that applies today. Use the row's ⋮ → **Set tier** to change it:
+
+1. Choose **The whole family** or **Only this child** (a child can have a different tier from the family, for example a foster child, or a Tier I child in a Tier II home).
+2. Pick the **Tier**: **Tier I** or **Tier II** for a family child care home, **Free**, **Reduced** or **Paid** for a centre. For a child, **Use the family's tier** removes the child's own tier.
+3. Enter the **Eligibility date**: the day eligibility was determined. **Tier I**, **Free** and **Reduced** count for 12 months from it; **Tier II** and **Paid** need no date.
+4. Note the **Evidence seen** (for example the signed income eligibility form, or a SNAP letter), then press **Save**.
+
+Meals already recorded are re-counted under the tier that applied on the day each was served. When an eligibility year ends, the column shows **Expired** and that child's new meals count as **No tier** until the tier is renewed.
 
 ## Who can do what
 
 | Role | What they can do |
 |---|---|
-| Agency admin | Open the screen from the menu, pick any centre, tick meals, see the month's totals. |
+| Agency admin | Open the screen from the menu, pick any centre, tick meals, set family and child tiers, download or print the monthly claim. |
 | Platform admin | The same, inside the agency they have switched into. |
 | Centre director and educator | Not in their menu. Meals can only be recorded at a centre the person works at, and a director only ever sees their own centres' totals. |
 | Parent | Does not see CACFP counts or tiers. |
@@ -55,7 +65,7 @@ The **Tier** column shows each family's eligibility tier: **free**, **reduced** 
 ??? Can I record meals for yesterday? | No. The roster is always today. Record meals on the day they are served.
 ??? A tick flipped back, or I see "You can only record meals at a centre you work at." | You are not linked to that centre. Ask an agency admin to add you to it.
 ??? I see "That child is not enrolled at this centre." | The child's enrolment is at another centre. Switch to that centre and tick the meal there.
-??? Can I export the totals? | There is no export button on this screen. Copy the four tiles onto your claim form at month end.
+??? Can I export the totals? | Yes. Use **⬇️ Claim CSV** or **🖨 Print claim** in the **Monthly claim** card.
 ??? The screen says "No centres." | Your agency has no open centre you can see. Ask an agency admin to check your centre access.
 
 ## Related

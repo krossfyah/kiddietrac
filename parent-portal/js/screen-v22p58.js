@@ -1207,7 +1207,133 @@
   }
 
   // ============================ CACFP =================================
+  /* Tiers (2026-11-28): set on the family, or on one child over the family's. Tier I / Tier II for family child care
+     homes, Free / Reduced / Paid for centres. The monthly claim (CSV + printout) is built from GET /cacfp/claim. */
   let cacfpCentreId = null;
+  let cacfpMonth = null;
+  /* A date-only value is a calendar day, not a UTC midnight (fmtDate showed the day before west of UTC). */
+  const cfDate = (d) => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+  const CACFP_TIERS = { tier1: 'Tier I', tier2: 'Tier II', free: 'Free', reduced: 'Reduced', paid: 'Paid' };
+  const CACFP_INCOME = { tier1: 1, free: 1, reduced: 1 };
+  const cacfpTierPill = (t) => {
+    if (t && t.tier) {
+      const tone = t.tier === 'paid' || t.tier === 'tier2' ? 'kt-pill-info' : 'kt-pill-success';
+      return `<span class="kt-pill ${tone}">${esc(CACFP_TIERS[t.tier] || t.tier)}</span>${t.source === 'child' ? ' <span style="font-size:11px;color:#64748B;">child</span>' : ''}${t.expires ? `<div style="font-size:11px;color:#64748B;margin-top:2px;">until ${esc(cfDate(t.expires))}</div>` : ''}`;
+    }
+    if (t && t.set) return `<span class="kt-pill kt-pill-warning">${t.expired ? 'Expired' : 'Not yet'}</span><div style="font-size:11px;color:#64748B;margin-top:2px;">${esc(CACFP_TIERS[t.set] || t.set)}${t.expires ? ' · ended ' + esc(cfDate(t.expires)) : ''}</div>`;
+    return '<span style="color:#64748B;">Not set</span>';
+  };
+
+  function cacfpTierPopup(row, onSaved) {
+    const Modal = KT.Shell && KT.Shell.Modal;
+    if (!Modal) return;
+    const wrap = document.createElement('div');
+    const opt = (v, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${esc(CACFP_TIERS[v])}</option>`;
+    const fill = (who) => {
+      const cur = who === 'child' ? row.child_tier : row.family_tier;
+      const date = (who === 'child' ? row.child_eligibility_date : row.family_eligibility_date) || '';
+      const note = (who === 'child' ? row.child_evidence_note : row.family_evidence_note) || '';
+      wrap.querySelector('#cf-tier').innerHTML = `<option value="">${who === 'child' ? 'Use the family\'s tier' : 'Not set'}</option>`
+        + `<optgroup label="Family child care home">${opt('tier1', cur)}${opt('tier2', cur)}</optgroup>`
+        + `<optgroup label="Centre">${opt('free', cur)}${opt('reduced', cur)}${opt('paid', cur)}</optgroup>`;
+      wrap.querySelector('#cf-date').value = String(date).slice(0, 10);
+      wrap.querySelector('#cf-note').value = note;
+    };
+    wrap.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="cf-who" value="family" checked> The whole family${row.family_name ? ' (' + esc(row.family_name) + ')' : ''}</label>
+        <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="cf-who" value="child"> Only this child (${esc(row.child_name)})</label>
+      </div>
+      <label style="display:block;font-size:13px;font-weight:600;">Tier
+        <select id="cf-tier" style="display:block;width:100%;margin-top:4px;"></select></label>
+      <label style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Eligibility date
+        <input id="cf-date" type="date" style="display:block;width:100%;margin-top:4px;"></label>
+      <div style="font-size:12px;color:#64748B;margin-top:4px;">Tier I, Free and Reduced count for 12 months from this date. Tier II and Paid need no date.</div>
+      <label style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Evidence seen
+        <textarea id="cf-note" maxlength="1000" placeholder="For example: income eligibility form signed 2026-09-02, SNAP letter" style="display:block;width:100%;margin-top:4px;min-height:84px;box-sizing:border-box;"></textarea></label>
+      <div id="cf-msg" style="margin-top:10px;font-size:13px;"></div>`;
+    fill('family');
+    wrap.querySelectorAll('input[name="cf-who"]').forEach(r => r.onchange = () => fill(r.value));
+    Modal.open({
+      title: 'CACFP tier · ' + row.child_name,
+      body: wrap,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save', style: 'btn-primary', busyLabel: 'Saving…',
+          handler: async () => {
+            const who = wrap.querySelector('input[name="cf-who"]:checked').value;
+            const tier = wrap.querySelector('#cf-tier').value;
+            const date = wrap.querySelector('#cf-date').value;
+            const msg = wrap.querySelector('#cf-msg');
+            if (tier && CACFP_INCOME[tier] && !date) { msg.innerHTML = '<span style="color:#B91C1C;">Enter the date eligibility was determined.</span>'; return false; }
+            try {
+              const path = who === 'child' ? `/cacfp/child/${row.child_id}` : `/cacfp/family/${row.family_id}`;
+              await Api.patch(path, { cacfp_tier: tier || null, eligibility_date: date || null, evidence_note: wrap.querySelector('#cf-note').value });
+              if (KT.toast) KT.toast('Tier saved.', 'success');
+              onSaved();
+            } catch (e) {
+              msg.innerHTML = `<span style="color:#B91C1C;">${esc((e && e.message) || 'The tier could not be saved. Please try again.')}</span>`;
+              return false;
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  async function cacfpClaim(centreId, month) {
+    return Api.get(`/cacfp/claim?centre_id=${centreId}&month=${month}`);
+  }
+  const cacfpTierCols = (c) => Object.keys(c.tiers).filter(t => t === 'paid' || t === 'none' ? (t === 'paid' || c.by_tier[t] > 0 || c.enrolled[t] > 0) : (c.by_tier[t] > 0 || c.enrolled[t] > 0));
+  const cacfpMonthLabel = (m) => { const d = new Date(m + '-01T12:00:00'); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }); };
+
+  function cacfpCsv(c) {
+    const q = (v) => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const tiers = Object.keys(c.tiers);
+    const lines = [];
+    const row = (a) => lines.push(a.map(q).join(','));
+    row(['CACFP monthly claim']); row(['Agency', c.agency]); row(['Site', c.centre.name]); row(['Licence', c.centre.license_number || '']);
+    row(['Address', c.centre.address || '']); row(['Claim month', c.month]); row(['Operating days', c.operating_days]);
+    row(['Average daily participation', c.average_daily_participation]);
+    row(['Enrolled', c.enrolled_total].concat(tiers.map(t => c.tiers[t] + ': ' + (c.enrolled[t] || 0))));
+    row([]);
+    row(['Meal type'].concat(tiers.map(t => c.tiers[t]), ['Total']));
+    Object.keys(c.meal_types).forEach(mt => { const r = c.totals[mt]; row([c.meal_types[mt]].concat(tiers.map(t => r[t] || 0), [tiers.reduce((a, t) => a + (r[t] || 0), 0)])); });
+    row(['All meals'].concat(tiers.map(t => c.by_tier[t] || 0), [c.grand_total]));
+    row([]);
+    row(['Date', 'Site', 'Meal type'].concat(tiers.map(t => c.tiers[t]), ['Total', 'Children served that day']));
+    c.days.forEach(d => Object.keys(c.meal_types).forEach(mt => {
+      const r = d.meals[mt]; const tot = tiers.reduce((a, t) => a + (r[t] || 0), 0);
+      if (tot) row([d.date, c.centre.name, c.meal_types[mt]].concat(tiers.map(t => r[t] || 0), [tot, d.children_served]));
+    }));
+    return '﻿' + lines.join('\r\n') + '\r\n';
+  }
+
+  function cacfpPrintHtml(c) {
+    const tiers = cacfpTierCols(c);
+    const th = (s) => `<th style="border:1px solid #CBD5E1;padding:5px 7px;background:#F1F5F9;text-align:left;font-size:11px;">${esc(s)}</th>`;
+    const td = (s, r) => `<td style="border:1px solid #CBD5E1;padding:5px 7px;font-size:11px;${r ? 'text-align:right;' : ''}">${esc(s)}</td>`;
+    const mts = Object.keys(c.meal_types);
+    const sum = (r) => Object.keys(c.tiers).reduce((a, t) => a + (r[t] || 0), 0);
+    const daily = c.days.map(d => `<tr>${td(cfDate(d.date))}${mts.map(mt => td(sum(d.meals[mt]) || '', 1)).join('')}${td(mts.reduce((a, mt) => a + sum(d.meals[mt]), 0), 1)}${td(d.children_served, 1)}</tr>`).join('');
+    const missing = c.no_tier_children.length ? `<h3 style="font-size:13px;margin:18px 0 6px;">Children with no tier on file (${c.no_tier_children.length})</h3><p style="font-size:11px;margin:0;">${c.no_tier_children.map(k => esc(k.name) + (k.reason === 'expired' ? ' (expired)' : '')).join(', ')}</p>` : '';
+    return `<!doctype html><html><head><meta charset="utf-8"><title>CACFP claim ${esc(c.month)}</title></head><body style="font-family:Arial,Helvetica,sans-serif;color:#0F172A;margin:24px;">
+      <h1 style="font-size:18px;margin:0 0 4px;">CACFP monthly claim · ${esc(cacfpMonthLabel(c.month))}</h1>
+      <div style="font-size:12px;color:#334155;">${esc(c.agency)} · <strong>${esc(c.centre.name)}</strong>${c.centre.license_number ? ' · Licence ' + esc(c.centre.license_number) : ''}${c.centre.address ? '<br>' + esc(c.centre.address) : ''}</div>
+      <table style="border-collapse:collapse;margin:14px 0;"><tr>${th('Operating days')}${th('Enrolled')}${tiers.map(t => th('Enrolled ' + c.tiers[t])).join('')}${th('Average daily participation')}</tr>
+        <tr>${td(c.operating_days, 1)}${td(c.enrolled_total, 1)}${tiers.map(t => td(c.enrolled[t] || 0, 1)).join('')}${td(c.average_daily_participation, 1)}</tr></table>
+      <h3 style="font-size:13px;margin:14px 0 6px;">Meals served by type and tier</h3>
+      <table style="border-collapse:collapse;width:100%;"><tr>${th('Meal type')}${tiers.map(t => th(c.tiers[t])).join('')}${th('Total')}</tr>
+        ${mts.map(mt => `<tr>${td(c.meal_types[mt])}${tiers.map(t => td(c.totals[mt][t] || 0, 1)).join('')}${td(sum(c.totals[mt]), 1)}</tr>`).join('')}
+        <tr>${td('All meals')}${tiers.map(t => td(c.by_tier[t] || 0, 1)).join('')}${td(c.grand_total, 1)}</tr></table>
+      <h3 style="font-size:13px;margin:18px 0 6px;">Meals served by day</h3>
+      <table style="border-collapse:collapse;width:100%;"><tr>${th('Date')}${mts.map(mt => th(c.meal_types[mt])).join('')}${th('Total')}${th('Children served')}</tr>${daily || `<tr><td colspan="${mts.length + 3}" style="border:1px solid #CBD5E1;padding:5px 7px;font-size:11px;">No meals recorded this month.</td></tr>`}</table>
+      ${missing}
+      <p style="font-size:10px;color:#64748B;margin-top:18px;">Meals are counted under the tier that applied on the day they were served. Tier I, Free and Reduced count for 12 months from the eligibility date.</p>
+    </body></html>`;
+  }
+
   async function renderCacfp(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading CACFP…</div>';
@@ -1219,37 +1345,74 @@
     const centreId = cacfpCentreId;
     const date = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
     const month = date.slice(0, 7);
+    if (!cacfpMonth) cacfpMonth = month;
     const [roster, report] = await Promise.all([
       Api.get(`/cacfp/roster?centre_id=${centreId}&date=${date}`),
       Api.get(`/cacfp/monthly?month=${month}&centre_id=${centreId}`),
     ]);
+    if (!main.isConnected) return;
+    const rows = roster.data || [];
+    const canTier = !!roster.can_set_tier;
+    const shown = ['tier1', 'tier2', 'free', 'reduced'].filter(t => (report.totals[t] || 0) > 0 || rows.some(r => r.cacfp_tier === t));
+    const tile = (label, n, tone) => `<div class="kt-kpi ${tone || ''}"><div class="kt-kpi-label">${esc(label)}</div><div class="kt-kpi-value">${n || 0}</div></div>`;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🍽 CACFP meal tracking</h2>
-        <p>${esc((centres.find(c => +c.id === +centreId) || centres[0]).name)} · ${fmtDate(date)} · ${roster.data.length} enrolled children. Tap to record served meals — totals roll into the monthly reimbursement claim.</p>
+        <p>${esc((centres.find(c => +c.id === +centreId) || centres[0]).name)} · ${cfDate(date)} · ${rows.length} enrolled children. Tap to record served meals — totals roll into the monthly reimbursement claim.</p>
       </div>
       <div class="kt-kpi-grid">
-        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Free</div><div class="kt-kpi-value">${report.totals.free || 0}</div></div>
-        <div class="kt-kpi kt-kpi-warning"><div class="kt-kpi-label">Reduced</div><div class="kt-kpi-value">${report.totals.reduced || 0}</div></div>
-        <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Paid</div><div class="kt-kpi-value">${report.totals.paid || 0}</div></div>
-        <div class="kt-kpi"><div class="kt-kpi-label">Total meals this month</div><div class="kt-kpi-value">${report.totals.grand_total}</div></div>
+        ${shown.map(t => tile(CACFP_TIERS[t], report.totals[t], 'kt-kpi-success')).join('')}
+        ${tile('Paid', report.totals.paid, 'kt-kpi-info')}
+        ${(report.totals.no_tier || 0) > 0 ? tile('No tier', report.totals.no_tier, 'kt-kpi-warning') : ''}
+        ${tile('Total meals this month', report.totals.grand_total)}
+      </div>
+      <div class="kt-card" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+        <strong style="font-size:14px;">Monthly claim</strong>
+        <input id="cf-month" type="month" value="${esc(cacfpMonth)}" max="${esc(month)}" aria-label="Claim month">
+        <button id="cf-csv" type="button" class="kt-btn">⬇️ Claim CSV</button>
+        <button id="cf-print" type="button" class="kt-btn">🖨 Print claim</button>
+        <span id="cf-claim-msg" style="font-size:12.5px;color:#64748B;">Meals by type, tier and day for this centre, as a sponsor claim asks for them.</span>
       </div>
       <div class="kt-card">
-        <div class="kt-card-header"><h3 class="kt-card-title">Today's roster — ${fmtDate(date)}</h3></div>
+        <div class="kt-card-header"><h3 class="kt-card-title">Today's roster — ${cfDate(date)}</h3></div>
         <table>
-          <thead><tr><th>Child</th><th>Tier</th><th>Breakfast</th><th>AM snack</th><th>Lunch</th><th>PM snack</th><th>Dinner</th></tr></thead>
-          <tbody>${(roster.data || []).map(r => {
+          <thead><tr><th>Child</th><th>Tier</th><th>Breakfast</th><th>AM snack</th><th>Lunch</th><th>PM snack</th><th>Dinner</th><th></th></tr></thead>
+          <tbody>${rows.map(r => {
             const cell = (mt) => `<td><input type="checkbox" data-meal="${mt}" data-child="${r.child_id}" ${r[mt] ? 'checked' : ''} style="width:22px;height:22px;cursor:pointer;"></td>`;
             return `<tr>
               <td><strong>${esc(r.child_name)}</strong></td>
-              <td>${r.cacfp_tier ? `<span class="kt-pill kt-pill-info">${esc(r.cacfp_tier)}</span>` : '<span style="color:#64748B;">unset</span>'}</td>
+              <td>${cacfpTierPill(r.tier)}</td>
               ${cell('breakfast')}${cell('morning_snack')}${cell('lunch')}${cell('afternoon_snack')}${cell('dinner')}
+              <td style="text-align:center;white-space:nowrap;">${canTier ? `<button type="button" data-tier-child="${r.child_id}" title="Set CACFP tier">Set tier</button>` : ''}</td>
             </tr>`;
-          }).join('') || '<tr><td colspan="7" style="text-align:center;padding:30px;color:#64748B;">No children enrolled.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#64748B;">No children enrolled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
     if (window.KT && KT.centreBar) KT.centreBar(main, { items: centres, current: centreId, onChange: function (id) { cacfpCentreId = id; renderCacfp(main); } });
+    main.querySelectorAll('button[data-tier-child]').forEach(b => b.onclick = () => {
+      const row = rows.find(r => +r.child_id === +b.dataset.tierChild);
+      if (row) cacfpTierPopup(row, () => renderCacfp(main));
+    });
+    const monthEl = main.querySelector('#cf-month');
+    monthEl.onchange = () => { if (/^\d{4}-\d{2}$/.test(monthEl.value)) cacfpMonth = monthEl.value; };
+    const claimMsg = main.querySelector('#cf-claim-msg');
+    const getClaim = async () => {
+      claimMsg.textContent = 'Building the claim…';
+      try { const c = await cacfpClaim(centreId, cacfpMonth); claimMsg.textContent = c.no_tier_children.length ? `${c.no_tier_children.length} child${c.no_tier_children.length === 1 ? ' has' : 'ren have'} no tier on file for ${cacfpMonthLabel(c.month)}: their meals are counted as "No tier".` : `${c.grand_total} meals over ${c.operating_days} operating days.`; return c; }
+      catch (e) { claimMsg.textContent = (e && e.message) || 'The claim could not be built. Please try again.'; return null; }
+    };
+    main.querySelector('#cf-csv').onclick = async () => {
+      const c = await getClaim(); if (!c) return;
+      const blob = new Blob([cacfpCsv(c)], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `cacfp-claim-${c.month}-${String(c.centre.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.csv`;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    };
+    main.querySelector('#cf-print').onclick = async () => {
+      const c = await getClaim(); if (!c) return;
+      if (KT.printDoc) KT.printDoc({ html: cacfpPrintHtml(c) }, { title: `CACFP claim ${c.month} · ${c.centre.name}` });
+    };
     main.querySelectorAll('input[type="checkbox"][data-meal]').forEach(cb => cb.onchange = async () => {
       // A refused save puts the tick back (2026-11-27): it used to stay ticked although nothing was recorded.
       try {
@@ -1273,7 +1436,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🧮 Billing schedule</h2>
-        <p>Bill a family weekly, every two weeks or monthly. Each date raises their invoice by itself, and autopay families are charged.</p>
+        <p>Pick weekly, biweekly, or monthly billing per family.</p>
       </div>
       <div class="kt-card">
         <label style="font-size:13px;font-weight:600;">Family</label>
@@ -1303,99 +1466,55 @@
       let r;
       try { r = await Api.get(`/billing/schedule/${fid}`); }
       catch (e) { detail.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + esc((e && e.message) || 'Could not load this family\u2019s schedule.') + '</div>'; return; }
-      /* THE SCHEDULE RUNS (2026-11-28, App\Support\BillingSchedules): on each date (agency time) the family's invoice is
-         raised and, with autopay, charged. Day pickers instead of typed numbers, the next invoice date worked out live,
-         and the log of what each date did. A schedule saved before this ran nothing; it starts when saved again. */
+      /* A disabled schedule is no schedule (2026-11-27). The row stays (active = 0), and the form used to redraw it with
+         its old values and a Disable button, as if nothing had happened; a family with no row at all got
+         { frequency: 'monthly' }, so Disable showed for them too. */
       const on = !!(r && r.data && +r.data.active);
-      const running = !!(r && r.running);
-      const s = on ? r.data : { frequency: 'monthly', day_of_month: 1, day_of_week: 1 };
-      const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const fd = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
-      const sd = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-      const PILL = { invoiced: ['Invoiced', '#DBEAFE', '#1E40AF'], charged: ['Charged', '#DCFCE7', '#166534'], charge_failed: ['Charge failed', '#FEE2E2', '#991B1B'],
-        failed: ['Failed', '#FEE2E2', '#991B1B'], skipped: ['Skipped', '#F1F5F9', '#475569'], running: ['Running', '#FEF3C7', '#92400E'] };
-      const pill = (st) => { const p = PILL[st] || [st, '#F1F5F9', '#475569']; return `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:${p[1]};color:${p[2]};">${esc(p[0])}</span>`; };
-      const state = running
-        ? '<span style="color:#166534;font-weight:600;">✅ Running.</span> Each date raises this family’s invoice and emails it; with autopay the card is charged.'
-        : on ? '<span style="color:#92400E;font-weight:600;">⏸ Not running yet.</span> This schedule was saved before schedules raised invoices. Press <strong>Save schedule</strong> to start it.'
-          : 'No billing schedule is set for this family. Save one to start it; until then the family is billed by the monthly invoice run.';
-      const runs = (r && r.runs) || [];
-      const sel = 'width:100%;padding:8px 9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;font-size:13.5px;';
+      const s = on ? r.data : { frequency: 'monthly' };
       detail.innerHTML = `
-        <div style="font-size:13px;color:#475569;margin-bottom:12px;">${state}</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:760px;">
-          <div><label for="bs-freq" style="font-size:13px;font-weight:600;display:block;">How often</label>
-            <select id="bs-freq" style="${sel}">
-              <option value="weekly" ${s.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
-              <option value="biweekly" ${s.frequency === 'biweekly' ? 'selected' : ''}>Every two weeks</option>
-              <option value="monthly" ${s.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
-            </select></div>
-          <div id="bs-dow-wrap"><label for="bs-dow" style="font-size:13px;font-weight:600;display:block;">Invoice on</label>
-            <select id="bs-dow" style="${sel}">${DAYS.map((d, i) => `<option value="${i}" ${+(s.day_of_week ?? 1) === i ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
-          <div id="bs-dom-wrap"><label for="bs-dom" style="font-size:13px;font-weight:600;display:block;">Invoice on day</label>
-            <select id="bs-dom" style="${sel}">${Array.from({ length: 31 }, (_, i) => i + 1).map(n => `<option value="${n}" ${+(s.day_of_month || 1) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        </div>
-        <div id="bs-cover" style="font-size:12.5px;color:#64748B;margin-top:8px;max-width:760px;"></div>
-        <div id="bs-next" style="margin-top:12px;font-size:13.5px;color:#0F172A;min-height:20px;"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-          <button id="bs-save" class="kt-btn kt-btn-primary"${running ? '' : ' data-kt-always-save'}>Save schedule</button>
-          ${on ? `<button id="bs-off" class="kt-btn kt-btn-danger">Stop schedule</button>` : ''}
-        </div>
+        <div style="font-size:13px;color:#475569;margin-bottom:12px;">${on ? 'This family has its own billing schedule.' : 'No billing schedule is set for this family. Save one to start it.'}</div>`;
+      detail.insertAdjacentHTML('beforeend', `
+        <label style="font-size:13px;font-weight:600;display:block;">Frequency</label>
+        <select id="bs-freq" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
+          <option value="weekly" ${s.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+          <option value="biweekly" ${s.frequency === 'biweekly' ? 'selected' : ''}>Biweekly</option>
+          <option value="monthly" ${s.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+        </select>
+        <label style="font-size:13px;font-weight:600;display:block;margin-top:14px;">Day of week (0=Sun … 6=Sat)</label>
+        <input id="bs-dow" type="number" min="0" max="6" value="${s.day_of_week || 1}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
+        <label style="font-size:13px;font-weight:600;display:block;margin-top:14px;">Day of month (1-31)</label>
+        <input id="bs-dom" type="number" min="1" max="31" value="${s.day_of_month || 1}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
+        ${s.next_charge_at ? `<div style="margin-top:14px;color:#475569;font-size:13px;">Next charge: <strong>${fmtDate(s.next_charge_at)}</strong></div>` : ''}
+        <button id="bs-save" class="kt-btn kt-btn-primary" style="margin-top:14px;"${on ? '' : ' data-kt-always-save'}>Save schedule</button>
+        ${on ? `<button id="bs-off" class="kt-btn kt-btn-danger" style="margin-top:14px;margin-left:8px;">Disable</button>` : ''}
         <div id="bs-msg" role="status" style="font-size:13px;min-height:18px;margin-top:10px;"></div>
-        <h3 style="font-size:14px;margin:18px 0 8px;">Recent runs</h3>
-        ${runs.length ? `<div style="overflow-x:auto;"><table class="kt-table" style="width:100%;font-size:13px;">
-          <thead><tr><th>Date</th><th>Covers</th><th>Result</th><th style="text-align:right;">Amount</th><th>Invoice</th><th>Note</th></tr></thead>
-          <tbody>${runs.map(x => `<tr><td>${esc(fd(x.run_on))}</td><td>${esc(sd(x.period_start))} – ${esc(sd(x.period_end))}</td><td>${pill(x.status)}</td>
-            <td style="text-align:right;">${x.amount != null ? '$' + Number(x.amount).toFixed(2) : '—'}</td><td>${esc(x.invoice_number || '—')}</td><td style="color:#475569;">${esc(x.message || '')}</td></tr>`).join('')}</tbody>
-        </table></div>` : '<div style="font-size:13px;color:#64748B;">Nothing has run for this family yet.</div>'}`;
-      const $ = (id) => document.getElementById(id);
-      const body = () => {
-        const f = $('bs-freq').value;
-        return { family_id: fid, frequency: f, day_of_week: f === 'monthly' ? null : +$('bs-dow').value, day_of_month: f === 'monthly' ? +$('bs-dom').value : null };
-      };
-      let seq = 0;
-      const refresh = async () => {
-        const f = $('bs-freq').value;
-        // !important: the page polish sets grid children to display:block, which beat a plain inline display:none.
-        const show = (id, yes) => { const e = $(id); e.hidden = !yes; if (yes) e.style.removeProperty('display'); else e.style.setProperty('display', 'none', 'important'); };
-        show('bs-dow-wrap', f !== 'monthly');
-        show('bs-dom-wrap', f === 'monthly');
-        $('bs-cover').textContent = f === 'weekly' ? 'Each invoice covers the 7 days from its date: the monthly tuition × 12 ÷ 52. Due 7 days after.'
-          : f === 'biweekly' ? 'Each invoice covers the 14 days from its date: the monthly tuition × 24 ÷ 52. Due 7 days after.'
-            : 'An invoice on the 1st covers that month; on any later day it covers the next month (billed ahead). Due 15 days after. Days 29–31 use the last day of a shorter month.';
-        const my = ++seq;
-        $('bs-next').innerHTML = '<span style="color:#64748B;">Working out the next invoice…</span>';
-        try {
-          const p = await Api.post('/billing/schedule/preview', body());
-          if (my !== seq) return;
-          $('bs-next').innerHTML = `📅 Next invoice: <strong>${esc(fd(p.next_invoice))}</strong>, for ${esc(sd(p.next_period.start))} – ${esc(fd(p.next_period.end))}${running ? '' : ' <span style="color:#64748B;">(once saved)</span>'}`;
-        } catch (e) { if (my === seq) $('bs-next').innerHTML = `<span style="color:#B91C1C;">${esc((e && e.message) || 'Could not work out the next date.')}</span>`; }
-      };
-      ['bs-freq', 'bs-dow', 'bs-dom'].forEach(id => $(id).addEventListener('change', refresh));
-      refresh();
-      // Say what went wrong (2026-11-27): a failed Save or Stop used to leave the screen exactly as it was.
+      `);
+      // Say what went wrong (2026-11-27): a failed Save or Disable used to leave the screen exactly as it was.
       const fail = (e, what) => {
-        const m = $('bs-msg');
+        const m = document.getElementById('bs-msg');
         if (m) { m.style.color = '#B91C1C'; m.textContent = (e && e.message) || what; }
       };
-      const _bsSave = $('bs-save');
+      const _bsSave = main.querySelector('#bs-save');
       if (_bsSave) _bsSave.onclick = async () => {
         _bsSave.disabled = true;
-        let res;
-        try { res = await Api.post('/billing/schedule', body()); }
-        catch (e) { _bsSave.disabled = false; fail(e, 'Could not save the schedule. Please try again.'); return; }
-        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule saved. Next invoice ' + fd(res && res.next_invoice), 'success');
-        $('bs-load').click();
+        try {
+          await Api.post('/billing/schedule', {
+            family_id: fid,
+            frequency: document.getElementById('bs-freq').value,
+            day_of_week: +document.getElementById('bs-dow').value,
+            day_of_month: +document.getElementById('bs-dom').value,
+          });
+        } catch (e) { _bsSave.disabled = false; fail(e, 'Could not save the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule saved', 'success');
+        document.getElementById('bs-load').click();
       };
-      const off = $('bs-off');
+      const off = document.getElementById('bs-off');
       if (off) off.onclick = async () => {
-        const ok = KT.confirm ? await KT.confirm({ title: 'Stop this billing schedule?', description: 'No more invoices will be raised on its dates. Invoices already raised stay as they are.', okLabel: 'Stop schedule' }) : true;
-        if (!ok) return;
         off.disabled = true;
         try { await Api.delete(`/billing/schedule/${fid}`); }
-        catch (e) { off.disabled = false; fail(e, 'Could not stop the schedule. Please try again.'); return; }
-        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule stopped', 'success');
-        $('bs-load').click();
+        catch (e) { off.disabled = false; fail(e, 'Could not disable the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule disabled', 'success');
+        document.getElementById('bs-load').click();
       };
     };
   }

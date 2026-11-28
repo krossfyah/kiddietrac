@@ -2,6 +2,18 @@
     "updated": "2026-11-28",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-28",
+            "icon": "🥕",
+            "title": "CACFP tiers and monthly claim",
+            "body": "Set each family's CACFP tier (Tier I, Tier II, Free, Reduced or Paid) with its eligibility date and the evidence seen, or give one child their own tier. Meals count under the tier of the day they were served, and the Monthly claim card downloads the claim as a CSV or prints it: meals by type, tier and day for the centre.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-28",
             "icon": "🧮",
