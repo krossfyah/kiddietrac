@@ -76,9 +76,15 @@ final class WellnessController extends Controller
         if ($result !== 'cleared') {
             $child = DB::table('children')->where('id', $data['child_id'])->first();
             $family = DB::table('families')->where('id', $child->family_id)->first();
-            $staff = DB::table('role_assignments')->where('centre_id', $family->centre_id)
-                ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])
-                ->where('active', 1)->pluck('user_id')->unique();
+            /* Who hears (2026-11-27): the educators and directors placed at the child's centre, plus the agency's
+               admins (CentreScope::managers). An agency admin's role row usually has no centre_id, so the old
+               "role at this centre" lookup never reached the admins at all. */
+            $agencyId = (int) DB::table('centres')->where('id', (int) $family->centre_id)->value('agency_id');
+            $staff = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')->whereNull('u.deleted_at')
+                ->where('ra.centre_id', $family->centre_id)->where('ra.role', 'educator')->where('ra.active', 1)
+                ->pluck('u.id')
+                ->merge($agencyId ? \App\Support\CentreScope::managers($agencyId, [(int) $family->centre_id])->pluck('u.id') : [])
+                ->map(fn ($v) => (int) $v)->unique()->values();
             $title = $result === 'block'
                 ? "🚫 {$child->first_name}: do not admit today"
                 : "⚠ {$child->first_name}: review symptoms before admit";

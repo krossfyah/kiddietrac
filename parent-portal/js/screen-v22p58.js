@@ -729,7 +729,7 @@
       <div class="kt-page-hero">
         <h2>🎬 Video feed</h2>
         <p>${(r.data || []).length} video(s). React with a heart / smile / clap.</p>
-        <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="v-upload">+ Upload video</button></div>
+        ${r.can_upload ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="v-upload">+ Upload video</button></div>' : ''}
       </div>
       <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:18px;">
         ${(r.data || []).map(v => {
@@ -761,6 +761,7 @@
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:480px;width:92%;">
       <h3 style="margin:0 0 16px;color:#0F172A;">Share a video</h3>
       <input id="v-file" type="file" accept="video/mp4,video/quicktime,video/webm" style="width:100%;padding:9px;border:2px dashed #CBD5E1;border-radius:8px;background:#F8FAFC;">
+      <div id="v-tags" style="margin-top:14px;"><div style="font-size:12.5px;color:#94A3B8;">Loading children…</div></div>
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Caption</label>
       <textarea id="v-cap" rows="3" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
       <div style="margin-top:20px;text-align:right;">
@@ -768,11 +769,26 @@
         <button id="v-go" class="kt-btn kt-btn-primary" style="margin-left:8px;">Upload</button>
       </div></div>`;
     document.body.appendChild(m);
+    m.firstElementChild.style.maxHeight = '92vh'; m.firstElementChild.style.overflow = 'auto';
+    /* Tag the children in it (2026-11-27), the same picker as photo sharing. Without tags a video reached no
+       family: the parent feed shows a family only the videos that tag one of its children. The picker greys out
+       children whose family said "do not photograph" and the server refuses them too. */
+    let tagger = null;
+    const say = (msg, kind) => { if (window.KT && KT.toast) KT.toast(msg, kind || 'info', 7000); };
+    if (window.KT && KT.childTagger) {
+      KT.childTagger.load().then((kids) => {
+        const host = m.querySelector('#v-tags'); host.innerHTML = '';
+        tagger = KT.childTagger.mount(host, { children: kids });
+      }).catch(() => { m.querySelector('#v-tags').innerHTML = '<div style="font-size:12.5px;color:#B91C1C;">Could not load the children to tag.</div>'; });
+    }
     m.querySelector('#v-cancel').onclick = () => m.remove();
     m.querySelector('#v-go').onclick = async () => {
       const f = m.querySelector('#v-file').files[0];
-      if (!f) { (window.KT && window.KT.toast) ? KT.toast('Pick a video', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Pick a video') ? 'success' : 'info') : alert('Pick a video'); return; }
+      if (!f) { say('Pick a video'); return; }
+      const tagged = tagger ? tagger.value() : [];
+      if (!tagged.length) { say('Tag at least one child so their family sees it.'); return; }
       const fd = new FormData(); fd.append('video', f); fd.append('caption', m.querySelector('#v-cap').value);
+      fd.append('child_ids', JSON.stringify(tagged));
       try {
         const r = await fetch(apiBase() + '/videos', {
           method: 'POST', headers: { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') }, body: fd,
@@ -788,9 +804,11 @@
           throw new Error(detail);
         }
         m.remove();
-        if (window.KT && window.KT.toast) window.KT.toast('Video uploaded', 'success');
+        let notice = '';
+        try { notice = ((await r.json()) || {}).notice || ''; } catch (e) {}
+        if (window.KT && window.KT.toast) window.KT.toast(notice || 'Video shared', notice ? 'info' : 'success', notice ? 9000 : undefined);
         renderVideoFeed(document.querySelector('main'));
-      } catch (e) { if (window.KT && window.KT.toast) window.KT.toast(e.message || 'Upload failed', 'error', 7000); else (window.KT && window.KT.toast) ? KT.toast(e.message, /save|sent|added|created|approved|deleted|removed|done|charged/i.test(e.message) ? 'success' : 'info') : alert(e.message); }
+      } catch (e) { say(e.message || 'The video could not be shared. Please try again.', 'error'); }
     };
   }
 

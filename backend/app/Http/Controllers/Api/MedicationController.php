@@ -92,7 +92,49 @@ class MedicationController extends Controller
         }
 
         $rows = $q->limit(200)->get();
-        return response()->json(['medications' => $this->hydrate($rows)]);
+        return response()->json(['medications' => $this->withPeople($this->hydrate($rows))]);
+    }
+
+    /* PICKERS, NOT TYPED USER IDS (2026-11-27). The forms asked for an "Authorizing parent user ID" and a
+       "Witness user ID", and the server took any user id at all. Each medication (staff lists only, never the
+       parent's) now carries the people who may fill those boxes: the parents of the child's own family, and the
+       staff working at the medication's centre. authorize() and give() accept only those people. */
+    private function authorizerIds(int $childId): array
+    {
+        return DB::table('children as c')->join('guardians as g', 'g.family_id', '=', 'c.family_id')
+            ->join('users as u', 'u.id', '=', 'g.user_id')->whereNull('u.deleted_at')
+            ->where('c.id', $childId)->pluck('u.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
+
+    private function witnessIds(int $centreId): array
+    {
+        if (! $centreId) return [];
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        return DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->whereNull('u.deleted_at')->where('ra.active', 1)
+            ->where(fn ($q) => $q->where(fn ($w) => $w->whereIn('ra.role', ['centre_director', 'educator'])->where('ra.centre_id', $centreId))
+                ->orWhere(fn ($w) => $w->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId)))
+            ->pluck('u.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
+
+    private function withPeople($meds)
+    {
+        if ($meds->isEmpty()) return $meds;
+        $byChild = []; $byCentre = [];
+        foreach ($meds as $m) {
+            $byChild[(int) $m['child_id']] ??= $this->authorizerIds((int) $m['child_id']);
+            $byCentre[(int) $m['centre_id']] ??= $this->witnessIds((int) $m['centre_id']);
+        }
+        $ids = array_unique(array_merge([], ...array_values($byChild), ...array_values($byCentre)));
+        $names = DB::table('users')->whereIn('id', $ids ?: [0])->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim($u->first_name . ' ' . $u->last_name)]);
+        $people = fn (array $list) => collect($list)->map(fn ($id) => ['id' => $id, 'name' => $names[$id] ?? ''])
+            ->filter(fn ($p) => $p['name'] !== '')->sortBy('name')->values()->all();
+        return $meds->map(function ($m) use ($byChild, $byCentre, $people) {
+            $m['authorizers'] = $people($byChild[(int) $m['child_id']] ?? []);
+            $m['witnesses'] = $people($byCentre[(int) $m['centre_id']] ?? []);
+            return $m;
+        });
     }
 
     public function activeForProvider(Request $request): JsonResponse
@@ -105,7 +147,7 @@ class MedicationController extends Controller
             ->limit(200)
             ->get();
 
-        return response()->json(['medications' => $this->hydrate($rows)]);
+        return response()->json(['medications' => $this->withPeople($this->hydrate($rows))]);
     }
 
     /**
@@ -304,6 +346,10 @@ class MedicationController extends Controller
             'authorized_by_id'        => 'required|integer|exists:users,id',
             'parent_signature_data'   => 'nullable|string|max:200000',
         ]);
+        // Only a parent of this child's own family can be the one who authorized it (see authorizerIds).
+        if (! in_array((int) $data['authorized_by_id'], $this->authorizerIds((int) $med->child_id), true)) {
+            return response()->json(['message' => 'Choose one of this child\'s parents or guardians.'], 422);
+        }
 
         $med->update([
             'authorized_by_id'      => $data['authorized_by_id'],
@@ -350,8 +396,14 @@ class MedicationController extends Controller
         }
         if ($med->status !== 'active') {
             return response()->json([
-                'message' => 'Medication is not active (status: ' . $med->status . '). Director must authorize before doses are recorded.',
+                'message' => 'This medication is not active yet. A director must record the parent\'s authorization before doses are logged.',
             ], 422);
+        }
+        // A witness is someone working at this centre, and not the person giving the dose.
+        if (! empty($data['witness_id'])
+            && ((int) $data['witness_id'] === (int) $request->user()->id
+                || ! in_array((int) $data['witness_id'], $this->witnessIds((int) $med->centre_id), true))) {
+            return response()->json(['message' => 'Choose a witness who works at this centre (not yourself).'], 422);
         }
 
         $log = MedicationLog::create([

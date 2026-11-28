@@ -909,7 +909,8 @@
   };
 
   if (Shell && Shell.registerScreen) {
-    ['educator', 'centre_director', 'agency_admin'].forEach(function (r) {
+    // platform_admin too (2026-11-27): a platform admin inside an agency opened an unregistered screen.
+    ['educator', 'centre_director', 'agency_admin', 'platform_admin'].forEach(function (r) {
       Shell.registerScreen(r + ':observations',     renderObservations);
       Shell.registerScreen(r + ':observation-new',  renderObservationNew);
     });

@@ -682,7 +682,20 @@ final class OperationsController extends Controller
             ->orderBy('sp.contact_priority')
             ->select('sp.*', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email', 'u.phone as user_phone')
             ->get();
+        /* A centre director sees the substitutes who cover THEIR centres (2026-11-27, CentreScope): a pool member
+           with no centres listed covers the whole agency; one listed for other centres only is not theirs to see. */
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
+        if ($scope !== null) {
+            $rows = $rows->filter(fn ($r) => self::poolCovers($r->centres, $scope))->values();
+        }
         return response()->json(['data' => $rows]);
+    }
+
+    /** Does a pool row (centres JSON, empty = every centre) cover any of these centres? */
+    private static function poolCovers($centresJson, array $centreIds): bool
+    {
+        $list = array_map('intval', array_filter((array) (json_decode((string) $centresJson, true) ?: [])));
+        return ! $list || (bool) array_intersect($list, array_map('intval', $centreIds));
     }
 
     public function upsertSubstitute(Request $request): JsonResponse
@@ -744,17 +757,26 @@ final class OperationsController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        // notify pool members
-        $subIds = DB::table('substitute_pool')
-            ->where('agency_id', $agencyId)->where('active', 1)
-            ->pluck('user_id');
+        /* Notify the pool members who cover this centre (2026-11-27). Every active pool member of the agency was
+           told, about every centre, and the notice linked to #substitutes - a director/admin screen a substitute
+           cannot open. There is no claim screen for substitutes yet, so the notice carries the shift and the
+           centre in words and no link to a screen that refuses them. */
+        $centreName = (string) DB::table('centres')->where('id', $data['centre_id'])->value('name');
+        $subIds = DB::table('substitute_pool as sp')
+            ->join('users as u', 'u.id', '=', 'sp.user_id')->whereNull('u.deleted_at')
+            ->where('sp.agency_id', $agencyId)->where('sp.active', 1)
+            ->where('sp.user_id', '!=', $request->user()->id)
+            ->get(['sp.user_id', 'sp.centres'])
+            ->filter(fn ($r) => self::poolCovers($r->centres, [(int) $data['centre_id']]))
+            ->pluck('user_id')->unique()->values();
+        $when = Carbon::parse($data['shift_date'])->format('D M j') . ', ' . substr($data['shift_start'], 0, 5) . '-' . substr($data['shift_end'], 0, 5);
         foreach ($subIds as $uid) {
             \App\Support\Notify::write([
                 'user_id' => $uid,
                 'type' => 'sub_request',
-                'title' => 'New substitute request',
-                'body' => 'Shift on ' . Carbon::parse($data['shift_date'])->format('M j') . ' ' . substr($data['shift_start'], 0, 5) . '-' . substr($data['shift_end'], 0, 5),
-                'data' => json_encode(['link' => '#substitutes', 'request_id' => $id]),
+                'title' => 'Substitute needed',
+                'body' => trim(($centreName ? $centreName . ': ' : '') . $when) . '. Contact the centre if you can take this shift.',
+                'data' => json_encode(['request_id' => $id]),
                 'created_at' => now(),
             ]);
         }
@@ -764,10 +786,14 @@ final class OperationsController extends Controller
     public function listSubRequests(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        // Directors see their own centres' requests only (2026-11-27, CentreScope; agency admins see every centre).
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         $rows = DB::table('substitute_requests as sr')
             ->join('centres as c', 'c.id', '=', 'sr.centre_id')
             ->leftJoin('users as u', 'u.id', '=', 'sr.assigned_user_id')
             ->where('sr.agency_id', $agencyId)
+            ->where('c.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('sr.centre_id', $scope ?: [0]))
             ->orderByDesc('sr.shift_date')
             ->select('sr.*', 'c.name as centre_name', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as assigned_name"))
             ->limit(100)

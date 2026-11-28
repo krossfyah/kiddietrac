@@ -430,7 +430,8 @@
             </div>
             <div id="kt-edit-status" style="min-height:20px;font-size:14px;"></div>
             <div style="display:flex;justify-content:space-between;gap:8px;">
-              ${a.id !== 1 ? '<button type="button" id="kt-delete" style="background:#FEE2E2;color:#991B1B;border:none;padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;">Delete</button>' : '<div></div>'}
+              <!-- Delete is platform-only (2026-11-27): the server refuses anyone else, so an agency admin saw a button that always failed. -->
+              ${a.id !== 1 && data.is_platform_admin ? '<button type="button" id="kt-delete" style="background:#FEE2E2;color:#991B1B;border:none;padding:12px 20px;border-radius:10px;font-weight:600;cursor:pointer;">Delete</button>' : '<div></div>'}
               <div style="display:flex;gap:8px;">
                 <button type="button" id="kt-cancel" style="background:#F3F4F6;color:#374151;border:none;padding:12px 22px;border-radius:10px;font-weight:600;cursor:pointer;">Cancel</button>
                 <button type="submit" id="kt-save" style="background:#1F6080;color:white;border:none;padding:12px 22px;border-radius:10px;font-weight:700;cursor:pointer;">Save</button>

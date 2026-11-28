@@ -924,7 +924,8 @@
             const notes = (document.getElementById('rv-notes') || {}).value || '';
             const notify = !!(document.getElementById('rv-notify') || {}).checked;
             try {
-              await Api.post(base + '/incidents/' + inc.id + '/review', { director_notes: notes.trim() || null });
+              // PATCH: the route is PATCH /director/incidents/{incident}/review; a POST was refused every time.
+              await Api.patch(base + '/incidents/' + inc.id + '/review', { director_notes: notes.trim() || null });
               if (notify) {
                 await Api.post(base + '/incidents/' + inc.id + '/notify-parent');
               }

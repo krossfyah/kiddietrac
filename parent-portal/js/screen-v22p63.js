@@ -99,7 +99,20 @@
         cb.checked = !cb.checked;
         update();
       });
+      cb._wsUpdate = update;
       update();
+    });
+    /* EACH CHILD'S OWN ANSWERS (2026-11-27). The form was filled once with the FIRST child's answers for today,
+       so after picking a brother or sister it still showed the first child's ticks and notes, and submitting
+       would have filed them for the wrong child. Switching child now loads that child's answers. */
+    const childSel = document.getElementById('ws-child');
+    childSel.addEventListener('change', async () => {
+      const id = childSel.value;
+      const t = (await Api.get(`/wellness/today/${id}`).catch(() => ({ data: null }))).data || {};
+      if (childSel.value !== id) return;   // they picked again while this loaded
+      main.querySelectorAll('input[data-sym]').forEach(cb => { cb.checked = !!t[cb.dataset.sym]; if (cb._wsUpdate) cb._wsUpdate(); });
+      document.getElementById('ws-notes').value = t.notes || '';
+      document.getElementById('ws-result').innerHTML = '';
     });
     document.getElementById('ws-submit').onclick = async () => {
       const body = { child_id: +document.getElementById('ws-child').value, notes: document.getElementById('ws-notes').value };
@@ -112,7 +125,7 @@
           : r.result === 'review' ? '⚠ Submitted. Staff will review symptoms at arrival.'
           : '✓ Cleared for drop-off today.';
         document.getElementById('ws-result').innerHTML = `<div style="background:${colour};color:${fg};padding:16px;border-radius:10px;font-weight:600;">${msg}</div>`;
-      } catch (e) { toast(e.message || 'Submission failed', 'error'); }
+      } catch (e) { toast(e.message || 'The screening could not be sent. Please try again.', 'error'); }
     };
   }
 

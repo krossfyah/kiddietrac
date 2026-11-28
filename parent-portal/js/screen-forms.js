@@ -31,7 +31,31 @@
   function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return d; } }
 
   // ── List view ─────────────────────────────────────────────────────
+  /* WHO BUILDS CUSTOM FORMS (2026-11-27). The forms API is agency-admin only, so a centre director who followed a
+     link here got a refusal printed as an error. A director gets a plain "managed by your agency admin" state and
+     a way to the forms they CAN work with (Forms Manager). */
+  function effectiveRole() {
+    var u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+    var roles = Array.isArray(u.roles) ? u.roles : [];
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (va && roles.indexOf('platform_admin') !== -1) return va === 'platform_admin' ? 'agency_admin' : va;
+    if (roles.indexOf('platform_admin') !== -1 || roles.indexOf('agency_admin') !== -1) return 'agency_admin';
+    return u.role_key || roles[0] || '';
+  }
+  function renderNotAvailable(container) {
+    Dom.clear(container);
+    var wrap = Dom.el('div', { style: 'padding:24px;' });
+    var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:40px 24px;text-align:center;color:#475569;' });
+    card.innerHTML = '<div style="font-size:34px;margin-bottom:8px;">🗳️</div>'
+      + '<div style="font-size:17px;font-weight:800;color:#0F172A;margin-bottom:6px;">Custom forms are managed by your agency admin</div>'
+      + '<div style="font-size:14px;max-width:520px;margin:0 auto 16px;">Your agency admin builds and sends these forms. To send or review forms for your centre, use Forms Manager.</div>'
+      + '<a href="#forms-manager" style="display:inline-block;background:#1F6080;color:#fff;text-decoration:none;padding:9px 18px;border-radius:8px;font-weight:700;font-size:14px;">Open Forms Manager</a>';
+    wrap.appendChild(card);
+    container.appendChild(wrap);
+  }
+
   function render(container) {
+    if (effectiveRole() !== 'agency_admin') { renderNotAvailable(container); return; }
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -90,7 +114,7 @@
       paint();
     }).catch(function (e) {
       Dom.clear(listWrap);
-      listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
+      listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Forms could not be loaded. Please refresh and try again.'));
     });
   }
 

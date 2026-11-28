@@ -30,20 +30,32 @@
     }
     var res = await fetch(apiBase() + path, opts);
     var json = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(json.message || ('API ' + res.status));
+    if (!res.ok) throw new Error(json.message || (res.status === 403 ? 'You do not have access to that.' : 'Something went wrong. Please try again.'));
     return json;
   }
 
   function esc(s) {
     return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  /* Agency time (2026-11-27). starts_on / expires_on are calendar days: printed from their parts, never through
+     new Date() (which reads "2026-11-27" as UTC midnight and shows the day before in the Americas). Dose times
+     are instants: shown in the agency's timezone, not the device's. */
   function fmtDate(s) {
     if (!s) return '-';
-    try { return new Date(s).toLocaleDateString('en-CA'); } catch (e) { return s; }
+    if (window.KT && KT.dayLabel) return KT.dayLabel(String(s).slice(0, 10));
+    return String(s).slice(0, 10);
   }
   function fmtDateTime(s) {
     if (!s) return '-';
-    try { return new Date(s).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return s; }
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(s) || '-';
+    return String(s);
+  }
+  // The medications from the last list drawn, by id, so a dialog can offer that order's own parents and staff.
+  var MEDS = {};
+  function remember(meds) { (meds || []).forEach(function (m) { MEDS[m.id] = m; }); }
+  function personOptions(list, blank) {
+    return (blank ? '<option value="">' + esc(blank) + '</option>' : '')
+      + (list || []).map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
   }
   function statusBadge(status) {
     var colors = {
@@ -69,10 +81,11 @@
     var resp;
     try { resp = await api('GET', '/director/medications'); }
     catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Medications could not be loaded. Please refresh and try again.</div>';
       return;
     }
     var meds = resp.medications || [];
+    remember(meds);
 
     container.innerHTML =
       '<div style="padding:24px;max-width:1800px;">' +
@@ -196,7 +209,7 @@
               await api('POST', '/director/medications', payload);
               renderDirector(container);
             } catch (e) {
-              body.querySelector('#kt-msg').textContent = 'Error: ' + e.message;
+              body.querySelector('#kt-msg').textContent = e.message || 'That could not be saved. Please try again.';
               body.querySelector('#kt-msg').style.color = '#DC2626';
               return false;
             }
@@ -214,18 +227,20 @@
   }
 
   function openAuthorizeModal(medId, container) {
-    var me = getUser();
+    var med = MEDS[medId] || {};
+    var parents = med.authorizers || [];
     var body = document.createElement('div');
     body.innerHTML =
       '<p style="font-size:14px;color:#374151;line-height:1.6;">' +
         'Record that the parent/guardian has signed authorization for this standing medication. ' +
         'CCEYA requires written parental consent before any dose can be administered.' +
       '</p>' +
-      '<div style="margin-top:12px;background:#FEF3C7;--kt-edge:#F59E0B;padding:10px 14px;border-radius:6px;font-size:13px;color:#92400E;">' +
-        'For v22p1, the director records this on behalf of the parent. v22p2 will add the parent-side e-signature flow.' +
-      '</div>' +
-      '<label style="display:block;margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;">Authorizing parent user ID</label>' +
-      '<input id="kt-auth-uid" type="number" placeholder="user_id from family roster" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+      '<label style="display:block;margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;">Parent or guardian who authorized it</label>' +
+      (parents.length
+        ? '<select id="kt-auth-uid" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+            personOptions(parents, parents.length > 1 ? 'Choose a parent…' : '') + '</select>'
+        : '<div style="padding:10px 12px;background:#FEF3C7;border-radius:8px;font-size:13px;color:#92400E;">' +
+            'This child\'s family has no parent account yet. Add a parent to the family first.</div>') +
       '<div id="kt-msg" style="font-size:13px;margin-top:8px;min-height:20px;"></div>';
     Modal.open({
       title: 'Record parent authorization',
@@ -236,13 +251,14 @@
           label: 'Mark authorized',
           style: 'btn-primary',
           handler: async function () {
-            var uid = parseInt(body.querySelector('#kt-auth-uid').value, 10);
-            if (!uid) { body.querySelector('#kt-msg').textContent = 'Enter a user ID'; body.querySelector('#kt-msg').style.color = '#DC2626'; return false; }
+            var pick = body.querySelector('#kt-auth-uid');
+            var uid = pick ? parseInt(pick.value, 10) : 0;
+            if (!uid) { body.querySelector('#kt-msg').textContent = pick ? 'Choose the parent who authorized it.' : 'Add a parent to the family first.'; body.querySelector('#kt-msg').style.color = '#DC2626'; return false; }
             try {
               await api('POST', '/director/medications/' + medId + '/authorize', { authorized_by_id: uid });
               renderDirector(container);
             } catch (e) {
-              body.querySelector('#kt-msg').textContent = 'Error: ' + e.message;
+              body.querySelector('#kt-msg').textContent = e.message || 'The authorization could not be saved. Please try again.';
               body.querySelector('#kt-msg').style.color = '#DC2626';
               return false;
             }
@@ -266,6 +282,8 @@
   }
 
   function openLogDoseModal(medId, container) {
+    var me = getUser();
+    var witnesses = ((MEDS[medId] || {}).witnesses || []).filter(function (p) { return String(p.id) !== String(me && me.id); });
     var body = document.createElement('div');
     body.innerHTML =
       '<label style="font-size:12px;font-weight:700;color:#6B7280;">Dose given</label>' +
@@ -279,8 +297,9 @@
       '</select>' +
       '<label style="font-size:12px;font-weight:700;color:#6B7280;">Notes</label>' +
       '<textarea id="kt-notes" rows="3" placeholder="Optional context" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;margin-bottom:12px;"></textarea>' +
-      '<label style="font-size:12px;font-weight:700;color:#6B7280;">Witness user ID (optional, recommended for narcotics)</label>' +
-      '<input id="kt-witness" type="number" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+      '<label style="font-size:12px;font-weight:700;color:#6B7280;">Witness (optional, recommended for narcotics)</label>' +
+      '<select id="kt-witness" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+        personOptions(witnesses, 'No witness') + '</select>' +
       '<div id="kt-msg" style="font-size:13px;margin-top:8px;min-height:20px;"></div>';
 
     Modal.open({
@@ -301,9 +320,9 @@
             };
             try {
               await api('POST', '/provider/medications/give', payload);
-              renderDirector(container);
+              render(container);
             } catch (e) {
-              body.querySelector('#kt-msg').textContent = 'Error: ' + e.message;
+              body.querySelector('#kt-msg').textContent = e.message || 'The dose could not be saved. Please try again.';
               body.querySelector('#kt-msg').style.color = '#DC2626';
               return false;
             }
@@ -348,10 +367,11 @@
     var resp;
     try { resp = await api('GET', '/provider/medications'); }
     catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Medications could not be loaded. Please refresh and try again.</div>';
       return;
     }
     var meds = resp.medications || [];
+    remember(meds);
     container.innerHTML =
       '<div style="padding:24px;max-width:1800px;">' +
         '<h2 style="font-size:24px;margin:0 0 4px;">Medications to administer</h2>' +
@@ -376,7 +396,7 @@
     var children;
     try { children = await api('GET', '/parent/children'); }
     catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Medications could not be loaded. Please refresh and try again.</div>';
       return;
     }
     var kids = (children && children.children) || [];
@@ -507,14 +527,15 @@
   // ---------------------------------------------------------------
   function render(container) {
     var r = role();
-    if (r === 'agency_admin' || r === 'centre_director') return renderDirector(container);
+    // A platform admin works inside the agency they are viewing, with the director view (2026-11-27).
+    if (r === 'agency_admin' || r === 'centre_director' || r === 'platform_admin') return renderDirector(container);
     if (r === 'educator') return renderEducator(container);
     if (r === 'guardian') return renderParent(container);
     container.innerHTML = '<div style="padding:24px;color:#6B7280;">No medications view for this role.</div>';
   }
 
   if (Shell && Shell.registerScreen) {
-    ['agency_admin', 'centre_director', 'educator', 'guardian'].forEach(function (r) {
+    ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'guardian'].forEach(function (r) {
       Shell.registerScreen(r + ':medications', render);
     });
   }

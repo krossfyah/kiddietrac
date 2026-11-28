@@ -1251,8 +1251,8 @@
           <h3 style="font-size:14px;color:#374151;">Recent requests (${(requests.data || []).length})</h3>
           <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;table-layout:fixed;">
             <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:110px;">Date</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:90px;">Status</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Filled by</th></tr></thead>
-            <tbody>${(requests.data || []).map(r => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.shift_date)}</td>
-              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;"><span style="color:${r.status === 'filled' ? '#047857' : '#D97706'};font-weight:600;">${r.status}</span></td>
+            <tbody>${(requests.data || []).map(r => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.shift_date)}${r.centre_name ? `<div style="font-size:11.5px;color:#64748B;">${esc(r.centre_name)}</div>` : ''}</td>
+              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;"><span style="color:${r.status === 'filled' ? '#047857' : '#D97706'};font-weight:600;">${esc(SUB_STATUS[r.status] || 'Open')}</span></td>
               <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(r.assigned_name || '')}</td></tr>`).join('') || '<tr><td colspan="3" style="padding:14px;color:#64748B;font-size:13px;">No requests yet.</td></tr>'}</tbody>
           </table>
           <button id="sr-new" style="margin-top:12px;background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">+ Post open shift</button>
@@ -1261,12 +1261,19 @@
     </div>`;
     document.getElementById('sr-new').onclick = () => openSubRequestModal();
   }
-  function openSubRequestModal() {
+  // Status words people read, not the stored values (2026-11-27).
+  const SUB_STATUS = { open: 'Open', filled: 'Filled', cancelled: 'Cancelled', canceled: 'Cancelled', expired: 'Expired' };
+  async function openSubRequestModal() {
+    /* The centres this person may post for (operations/my-centres is scoped: a director gets their own centres,
+       an agency admin the agency's). A typed "Centre ID" number used to be asked for here. */
+    const mine = await Api.get('/operations/my-centres').catch(() => ({ centres: [] }));
+    const centres = (mine && mine.centres) || [];
+    if (!centres.length) { if (window.KT && KT.toast) KT.toast('You are not placed at a centre yet, so there is nowhere to post a shift for.', 'info', 7000); return; }
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:440px;width:92%;">
       <h3>New substitute request</h3>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Centre ID <input id="sr-cid" type="number" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
+      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Centre <select id="sr-cid" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">${centres.length > 1 ? '<option value="">Choose a centre…</option>' : ''}${centres.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>
       <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Shift date <input id="sr-date" type="date" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
       <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Start <input id="sr-start" type="time" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
       <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">End <input id="sr-end" type="time" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
@@ -1277,16 +1284,32 @@
       </div></div>`;
     document.body.appendChild(m);
     m.querySelector('#sr-cancel').onclick = () => m.remove();
-    m.querySelector('#sr-save').onclick = async () => {
-      await Api.post('/operations/sub-requests', {
+    m.querySelector('#sr-save').onclick = async (ev) => {
+      /* Check before sending and say what went wrong (2026-11-27): the post had no error handling, so a missing
+         field or a refusal failed with nothing on screen. */
+      const say = (msg, kind) => { if (window.KT && KT.toast) KT.toast(msg, kind || 'info', 7000); };
+      const body = {
         centre_id: +m.querySelector('#sr-cid').value,
         shift_date: m.querySelector('#sr-date').value,
         shift_start: m.querySelector('#sr-start').value,
         shift_end: m.querySelector('#sr-end').value,
         reason: m.querySelector('#sr-reason').value,
-      });
-      m.remove();
-      renderSubstitutes(document.querySelector('main') || document.getElementById('main'));
+      };
+      if (!body.centre_id) { say('Choose the centre that needs cover.'); return; }
+      if (!body.shift_date) { say('Choose the date of the shift.'); return; }
+      if (!body.shift_start || !body.shift_end) { say('Enter the start and end time of the shift.'); return; }
+      if (body.shift_end <= body.shift_start) { say('The shift has to end after it starts.'); return; }
+      const btn = ev && ev.currentTarget; if (btn) btn.disabled = true;
+      try {
+        const res = await Api.post('/operations/sub-requests', body);
+        m.remove();
+        const n = (res && res.notified) || 0;
+        say(n ? `Shift posted. ${n} substitute${n === 1 ? '' : 's'} told.` : 'Shift posted. No substitutes in your pool cover this centre yet, so nobody was told.', n ? 'success' : 'info');
+        renderSubstitutes(document.querySelector('main') || document.getElementById('main'));
+      } catch (e) {
+        if (btn) btn.disabled = false;
+        say((e && e.message) || 'The shift could not be posted. Please try again.', 'error');
+      }
     };
   }
 

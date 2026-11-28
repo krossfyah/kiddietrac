@@ -107,6 +107,8 @@ final class MediaV2Controller extends Controller
             $q->whereIn('v.centre_id', $centreIds ?: [0]);
         }
         $rows = $q->get();
+        // Photo permissions hold for video too: a family sees a video only when every child on it allows that.
+        if (! $isStaff) $rows = \App\Support\MediaConsent::filter($rows, $childIds);
         $videoIds = $rows->pluck('id');
         $reactions = DB::table('reactions')
             ->where('target_type', 'video')->whereIn('target_id', $videoIds)
@@ -117,7 +119,7 @@ final class MediaV2Controller extends Controller
             unset($v->child_ids);
             return $v;
         });
-        return response()->json(['data' => $rows]);
+        return response()->json(['data' => $rows, 'can_upload' => $isStaff]);
     }
 
     public function uploadVideo(Request $request): JsonResponse
@@ -138,8 +140,38 @@ final class MediaV2Controller extends Controller
            from the request unchecked, and with none sent it fell back to the first centre on any of your roles
            (any agency) and then to centre 1, so videos were filed into other centres' and other agencies'
            feeds. With none sent it is now the first centre you may see here; with none of those, refused. */
+        /* VIDEOS REACH FAMILIES THROUGH THEIR TAGS (2026-11-27). The upload used to send no children, so the
+           parent feed (which shows a family only videos tagging one of its children) never showed a single video
+           and nobody was told. A video now needs at least one tagged child, exactly like a photo, and ids are
+           stored as integers: FormData sends "123", which JSON_CONTAINS in the parent feed would never match. */
+        $childIds = $request->input('child_ids');
+        if (is_string($childIds)) $childIds = json_decode($childIds, true);
+        if (!is_array($childIds)) $childIds = [];
+        $childIds = collect($childIds)->flatten()
+            ->filter(fn ($v) => is_numeric($v) && (int) $v > 0)
+            ->map(fn ($v) => (int) $v)->unique()->values()->all();
+        if (! $childIds) {
+            return response()->json(['message' => 'Tag at least one child so their family sees the video.'], 422);
+        }
+        // SECURITY (v22p94): the uploader must have access to every tagged child.
+        foreach ($childIds as $cid) {
+            abort_unless($this->canAccessChildId($u, $cid), 403);
+        }
+        // PHOTO PERMISSIONS apply to video too: a child whose family said "do not photograph" cannot be tagged.
+        if ($why = \App\Support\MediaConsent::untaggable($childIds)) {
+            return response()->json(['message' => str_replace('share this photo', 'share this video', $why), 'reason' => 'no_photo_consent'], 422);
+        }
+
+        /* The video's centre must be one you work at, in this agency (2026-11-05 leak sweep): centre_id was taken
+           from the request unchecked, and with none sent it fell back to the first centre on any of your roles
+           (any agency) and then to centre 1, so videos were filed into other centres' and other agencies'
+           feeds. With none sent it is the first tagged child's centre when you may see it, else the first centre
+           you may see here; with none of those, refused. */
         $visibleCentres = $this->visibleCentreIds($request);
-        $centreId = (int) ($request->input('centre_id') ?: ($visibleCentres[0] ?? 0));
+        $childCentre = (int) DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->where('c.id', $childIds[0])->value('f.centre_id');
+        $fallback = in_array($childCentre, $visibleCentres, true) ? $childCentre : ($visibleCentres[0] ?? 0);
+        $centreId = (int) ($request->input('centre_id') ?: $fallback);
         $agencyId = (int) $this->resolveAgencyId($request);
         if (! $centreId || ! $agencyId
             || (int) DB::table('centres')->where('id', $centreId)->value('agency_id') !== $agencyId
@@ -151,14 +183,6 @@ final class MediaV2Controller extends Controller
         $path = $file->storeAs('videos/' . now()->format('Y/m'),
             $u->id . '-' . time() . '-' . preg_replace('/[^A-Za-z0-9._-]/', '', $file->getClientOriginalName()),
             'public');
-
-        $childIds = $request->input('child_ids');
-        if (is_string($childIds)) $childIds = json_decode($childIds, true);
-        if (!is_array($childIds)) $childIds = [];
-        // SECURITY (v22p94): the uploader must have access to every tagged child.
-        foreach ($childIds as $cid) {
-            abort_unless($this->canAccessChildId($u, (int) $cid), 403);
-        }
 
         $id = DB::table('videos')->insertGetId([
             'centre_id' => $centreId,
@@ -173,20 +197,28 @@ final class MediaV2Controller extends Controller
             'created_at' => now(),
         ]);
 
-        if (!empty($childIds)) {
-            $familyIds = DB::table('children')->whereIn('id', $childIds)->pluck('family_id')->unique();
-            $gids = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id');
-            foreach ($gids as $gid) {
+        /* Tell the families allowed to see it, the same way a photo does: photo permissions decide which families
+           (familiesWhoMaySee), the parent's "photos & videos" notice choice decides whether they are told, and
+           Notify::write rings the phone. */
+        $mayFam = \App\Support\MediaConsent::familiesWhoMaySee((object) ['child_ids' => json_encode($childIds), 'hidden_at' => null]);
+        $seen = $mayFam ? array_merge(...array_values($mayFam)) : [];
+        $keptFrom = count(array_diff($childIds, $seen));
+        if ($mayFam) {
+            $body = $request->input('caption') ?: 'A new moment is on the feed.';
+            foreach (DB::table('guardians')->whereIn('family_id', array_keys($mayFam))->pluck('user_id')->unique() as $gid) {
+                if (! \App\Support\ChildMomentNotify::wants((int) $gid, \App\Support\ChildMomentNotify::PREF_PHOTOS)) { continue; }
                 \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'video',
                     'title' => 'New video shared',
-                    'body' => $request->input('caption') ?: 'A new moment is on the feed.',
+                    'body' => $body,
                     'data' => json_encode(['link' => '#videos', 'video_id' => $id]),
                     'created_at' => now(),
                 ]);
             }
         }
-        return response()->json(['id' => $id, 'url' => '/storage/' . $path], 201);
+        $notice = $keptFrom ? \App\Support\MediaConsent::keptFromNotice($childIds) : null;
+        return response()->json(['id' => $id, 'url' => '/storage/' . $path, 'kept_from' => $keptFrom,
+            'notice' => $notice ? str_replace('a photo', 'a video', $notice) : null], 201);
     }
 
     /**

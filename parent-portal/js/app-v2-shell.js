@@ -436,7 +436,9 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
-          { hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' },   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
+          // Not for a platform admin (2026-11-27): the walkie is between an agency's own staff, and a super admin is not agency staff
+          // (AgencyOutsiders), so it opened and could not talk to anyone.
+          ...(isPlatformAdmin_v22p34 ? [] : [{ hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' }]),   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
@@ -1578,7 +1580,7 @@
     'immunizations': 'Where each child stands against the immunization schedule, the records on file, and a place to send one in.',
     'allergy-alerts': 'Allergies and dietary requirements, by room.',
     'room-ratios': 'Live child-to-educator ratios against licensing.',
-    'room-rotations': 'Which educator is in which room.',
+    'room-rotations': 'Children about to age into the next room, so the move can be planned.',
     'closures': 'Holidays and unplanned closures.',
     'late-pickups': 'Late pickups and arrivals: log them, then approve the fee, waive it or decline.',
     'field-trips': 'Outings, consent and headcounts.',

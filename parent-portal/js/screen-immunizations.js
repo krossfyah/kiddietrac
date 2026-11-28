@@ -748,13 +748,14 @@
     /* Opens on the children, not the records table. The roster with a status against
        each name is what people come to this screen for; the dose-by-dose table is the
        detail behind it, and for an agency that keeps paper records it is empty. */
-    if (r === 'agency_admin' || r === 'centre_director') return renderEmbedded(container, 'due');
+    if (r === 'agency_admin' || r === 'centre_director' || r === 'platform_admin') return renderEmbedded(container, 'due');
     if (r === 'guardian') return renderParent(container);
     container.innerHTML = '<div style="padding:24px;color:#6B7280;">Immunizations are managed by the centre director. Ask your director for the latest list.</div>';
   }
 
   if (Shell && Shell.registerScreen) {
-    ['agency_admin', 'centre_director', 'educator', 'guardian'].forEach(function (r) {
+    // platform_admin too (2026-11-27): a platform admin inside an agency opened an unregistered screen.
+    ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'guardian'].forEach(function (r) {
       Shell.registerScreen(r + ':immunizations', render);
     });
     /* #immun-schedule was its own screen and is now a tab of this one. Anything still
