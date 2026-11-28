@@ -628,7 +628,12 @@ class PayrollDocumentController extends Controller
 
         /* OFFICE VIEW (2026-11-27): officeView() asks for the locally drawn copy, so an admin or director reads an iLearn
            payslip without its password. Downloads, emails and the person's own copy never set this. */
-        if (! empty($doc->pdf_url) && $request->attributes->get('kt_office_view') !== true) {
+        /* THE SWITCH (2026-11-27, Anthony: "Switch after copying DOBs"). A payslip that came with the source system's own PDF
+           (iLearn) is now drawn in the KiddieTrac layout and locked with the same password iLearn's PDF uses: iLearn payees'
+           dates of birth were copied from iLearn's own records and every one of the 139 iLearn payslips was checked to give
+           the identical password. iLearn's PDF stays as the fallback if ours cannot be made. A payroll invoice still gets the
+           source document first, as before. */
+        $sourcePdf = function () use ($doc) {
             try {
                 $res = \Illuminate\Support\Facades\Http::timeout(20)
                     ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
@@ -658,6 +663,11 @@ class PayrollDocumentController extends Controller
                     'doc' => $doc->id, 'error' => $e->getMessage(),
                 ]);
             }
+
+            return null;
+        };
+        if (! empty($doc->pdf_url) && $doc->kind === 'invoice' && $locked && ($src = $sourcePdf())) {
+            return $src;
         }
 
         $agency = DB::table('agencies')->where('id', $doc->agency_id)->first(['name', 'logo_url', 'settings']);
@@ -725,8 +735,18 @@ class PayrollDocumentController extends Controller
            only the deductions that were recorded, else "Deductions not calculated in KiddieTrac", terms, NON-NEGOTIABLE
            watermark). A payroll invoice keeps the layout below. */
         if ($doc->kind !== 'invoice') {
-            return \App\Support\Payroll\PayslipPdf::response(\App\Support\Payroll\PayslipPdf::fromDocument($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf',
-                $locked ? \App\Support\Payroll\PayslipLock::forDoc($doc) : false);
+            try {
+                return \App\Support\Payroll\PayslipPdf::response(\App\Support\Payroll\PayslipPdf::fromDocument($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf',
+                    $locked ? \App\Support\Payroll\PayslipLock::forDoc($doc) : false);
+            } catch (\Throwable $e) {
+                // The source system's own (already password-protected) PDF beats an error page on payday. Never for the office view.
+                if ($locked && ! empty($doc->pdf_url) && ($src = $sourcePdf())) {
+                    report($e);
+
+                    return $src;
+                }
+                throw $e;
+            }
         }
 
         $period = $doc->period_start
