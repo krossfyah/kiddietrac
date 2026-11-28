@@ -27,11 +27,50 @@
       } catch (e) {}
       return '';
     };
+    /* SMALL BOOT READS, ONCE PER TAB SESSION (2026-11-28, portal speed, Anthony approved). Every boot - a refresh, the
+       app coming back, an agency or role switch reload - asked again for four answers that change about once a year:
+       the language, the centre/room word, the agency's jurisdiction, and (twice) the MFA status. They are kept in
+       sessionStorage for this tab only, under a key that names the sign-in (token id), the person, their roles, the
+       agency and the view-as role - so another person, another sign-in, another agency or a role change never reads
+       them. A write that could change one of them drops them all, and so does any 401 or sign-out (the token changes).
+       MFA status guards a sign-in gate, so it is kept for one minute only (enough to merge the boot's repeat reads).
+       Only a 200 JSON answer is kept. Off switch: sessionStorage.kt_no_boot_cache = '1'. */
+    const BR_PREFIX = 'kt_br:';
+    const BR_TTL = { '/locale': 900000, '/agency/centre-term': 900000, '/admin/jurisdiction': 900000, '/auth/mfa/status': 60000 };
+    const BR_WRITE = /\/api\/v1\/(locale|admin\/jurisdiction|admin\/centre-term|auth\/mfa|auth\/logout|auth\/login|auth\/password|admin\/agency|admin\/settings|agency\/settings|admin\/users\/\d+\/roles|roles)/;
+    const brPath = function (url) {
+      const i = url.indexOf('/api/v1/'); if (i === -1) return null;
+      const p = url.slice(i + 7).split('#')[0];
+      return Object.prototype.hasOwnProperty.call(BR_TTL, p) ? p : null;   // exact path, no query
+    };
+    const brKey = function (p, h) {
+      const auth = hdr(h, 'Authorization'); if (!auth) return null;
+      const tokId = auth.replace(/^Bearer\s+/i, '').split('|')[0];
+      let u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+      if (!u.id || !tokId) return null;
+      return BR_PREFIX + p + '|' + tokId + '|' + u.id + '|' + (u.roles || []).join(',') + '|' + (u.role_key || '')
+        + '|' + hdr(h, 'X-Active-Agency-Id') + '|' + hdr(h, 'X-View-As-Role');
+    };
+    const brClear = function () {
+      try { for (let i = sessionStorage.length - 1; i >= 0; i--) { const k = sessionStorage.key(i); if (k && k.indexOf(BR_PREFIX) === 0) sessionStorage.removeItem(k); } } catch (e) {}
+    };
+    window.KT_bootReadsClear = brClear;
     const shared = function (input, init) {
       try {
+        const method = String((init && init.method) || 'GET').toUpperCase();
+        if (typeof input === 'string' && method !== 'GET' && BR_WRITE.test(input)) brClear();
         if (typeof input === 'string' && input.indexOf('/api/v1/') !== -1
-            && (!init || ((!init.method || String(init.method).toUpperCase() === 'GET') && !init.signal && !init.cache && !init.body))) {
+            && (!init || (method === 'GET' && !init.signal && !init.cache && !init.body))) {
           const h = init && init.headers;
+          let bk = null;
+          try { const bp = sessionStorage.getItem('kt_no_boot_cache') === '1' ? null : brPath(input); bk = bp ? brKey(bp, h) : null;
+            if (bk) {
+              const hit = JSON.parse(sessionStorage.getItem(bk) || 'null');
+              if (hit && Date.now() - hit.at < BR_TTL[brPath(input)]) {
+                return Promise.resolve(new Response(hit.body, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+              }
+            }
+          } catch (e) { bk = null; }
           const key = input + '|' + hdr(h, 'Authorization') + '|' + hdr(h, 'X-Active-Agency-Id') + '|' + hdr(h, 'X-View-As-Role');
           let p = flight.get(key);
           if (!p) {
@@ -39,6 +78,13 @@
             flight.set(key, p);
             const done = function () { if (flight.get(key) === p) flight.delete(key); };
             p.then(done, done);
+            if (bk) {
+              p.then(function (r) {
+                if (r.status === 401) { brClear(); return; }
+                if (r.status !== 200 || !/json/i.test(r.headers.get('Content-Type') || '')) return;
+                r.clone().text().then(function (t) { try { sessionStorage.setItem(bk, JSON.stringify({ at: Date.now(), body: t })); } catch (e) {} }, function () {});
+              }, function () {});
+            }
           }
           return p.then(function (r) { return r.clone(); });
         }
@@ -128,6 +174,7 @@
            else. */
         sessionStorage.removeItem('kt_view_as');
       } catch (e) {}
+      try { if (window.KT_bootReadsClear) window.KT_bootReadsClear(); } catch (e) {}   // the boot-read cache dies with the session
     },
     requireLogin() {
       if (!this.token()) {
