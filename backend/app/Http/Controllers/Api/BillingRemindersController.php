@@ -93,17 +93,37 @@ final class BillingRemindersController extends Controller
             'reminders'      => $this->read($agencyId),
             'global_enabled' => (bool) config('billing.reminders_enabled'),
             // Who can be copied: agency admins, directors and other staff of THIS agency (2026-10-31).
-            'staff'          => $this->staffList($agencyId),
+            'staff'          => $this->staffList($request, $agencyId),
         ]);
     }
 
     /** Admins and directors (default copies) plus every other active staff member, for the "also copy" picker. */
-    private function staffList(int $agencyId): array
+    private function staffList(Request $request, int $agencyId): array
     {
         $cfg = $this->read($agencyId);
         $all = \App\Support\InvoiceReminders::staffChoices($agencyId, null, array_merge($cfg, ['cc_staff' => DB::table('role_assignments')
             ->where('agency_id', $agencyId)->where('active', 1)->whereIn('role', ['educator', 'home_visitor'])->pluck('user_id')->map(fn ($v) => (int) $v)->all()]));
+        $see = $this->visibleStaffIds($request, $agencyId);
+        $all = array_values(array_filter($all, fn ($s) => isset($see[(int) $s['user_id']])));
         return array_map(fn ($s) => ['user_id' => $s['user_id'], 'name' => $s['name'], 'email' => $s['email'], 'role' => $s['role']], $all);
+    }
+
+    /**
+     * WHO THIS CALLER MAY SEE IN THE COPY PICKER (2026-11-27, leak guard centre scope). The schedule is agency-wide,
+     * but a centre director sees only the staff of their own centres (CentreScope) plus the agency's admins, never a
+     * colleague placed at another centre. Everyone is Live: no leavers, no closed-centre-only staff, no accounts
+     * that are off. Agency admins keep the whole agency. @return array<int,true>
+     */
+    private function visibleStaffIds(Request $request, int $agencyId): array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $ids = \App\Support\Live::staffIds($agencyId, $scope);
+        if ($scope !== null) {
+            $admins = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
+                ->where('role', 'agency_admin')->pluck('user_id')->map(fn ($v) => (int) $v)->all();
+            $ids = array_merge($ids, array_intersect(\App\Support\Live::staffIds($agencyId, null), $admins));
+        }
+        return array_fill_keys(array_map('intval', $ids), true);
     }
 
     /** GET /admin/billing-reminders/preview - who is due now and who today's reminders would go to (read-only). */
@@ -112,7 +132,28 @@ final class BillingRemindersController extends Controller
         $this->assertAccess($request);
         $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 404, 'Agency not found');
-        return response()->json(\App\Support\InvoiceReminders::preview($agencyId, 7, true));
+        $out = \App\Support\InvoiceReminders::preview($agencyId, 7, true);
+        /* A centre director sees the invoices of their own centres only, and the copy list names only people they can
+           see in the picker (2026-11-27, centre scope). An agency-wide invoice (no centre) is the agency's, not theirs. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) {
+            $cent = DB::table('invoices')->whereIn('id', array_column(array_filter($out['rows'], fn ($r) => $r['kind'] === 'native'), 'id') ?: [0])
+                ->pluck('centre_id', 'id');
+            $xcent = DB::table('external_invoices as x')->join('families as f', 'f.id', '=', 'x.family_id')
+                ->whereIn('x.id', array_column(array_filter($out['rows'], fn ($r) => $r['kind'] === 'external'), 'id') ?: [0])
+                ->pluck('f.centre_id', 'x.id');
+            $emails = array_flip(array_map('strtolower', DB::table('users')->whereIn('id', array_keys($this->visibleStaffIds($request, $agencyId)) ?: [0])
+                ->whereNotNull('email')->pluck('email')->map(fn ($e) => trim((string) $e))->all()));
+            $out['rows'] = array_values(array_filter($out['rows'], function ($r) use ($cent, $xcent, $scope) {
+                $c = $r['kind'] === 'native' ? ($cent[$r['id']] ?? null) : ($xcent[$r['id']] ?? null);
+                return $c !== null && in_array((int) $c, $scope, true);
+            }));
+            foreach ($out['rows'] as &$r) {
+                $r['copies'] = array_values(array_filter($r['copies'], fn ($e) => isset($emails[strtolower((string) $e)])));
+            }
+            unset($r);
+        }
+        return response()->json($out);
     }
 
     /** POST /admin/billing-reminders */
@@ -153,8 +194,17 @@ final class BillingRemindersController extends Controller
                 if (array_key_exists('cc_staff', $data)) {
                     // Only people with an active role in THIS agency can be copied.
                     $ids = array_values(array_unique(array_map('intval', (array) ($data['cc_staff'] ?? []))));
+                    /* A centre director only picks from the people they can see, and their save never drops a copy the
+                       agency set up for somebody outside their centres (they cannot see it, so they cannot have unticked it). */
+                    $keep = [];
+                    if (\App\Support\CentreScope::ids($request, $agencyId) !== null) {
+                        $see = $this->visibleStaffIds($request, $agencyId);
+                        $ids = array_values(array_filter($ids, fn ($id) => isset($see[$id])));
+                        $keep = array_values(array_filter(array_map('intval', (array) ($current['cc_staff'] ?? [])), fn ($id) => ! isset($see[$id])));
+                    }
                     $current['cc_staff'] = $ids ? DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
                         ->whereIn('user_id', $ids)->where('role', '!=', 'guardian')->distinct()->pluck('user_id')->map(fn ($v) => (int) $v)->values()->all() : [];
+                    $current['cc_staff'] = array_values(array_unique(array_merge($current['cc_staff'], $keep)));
                 }
             } elseif (array_key_exists($k, $data) && $data[$k] !== null) {
                 $current[$k] = is_int($def) ? (int) $data[$k] : $data[$k];

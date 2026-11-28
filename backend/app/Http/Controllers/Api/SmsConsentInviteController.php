@@ -145,10 +145,12 @@ final class SmsConsentInviteController extends Controller
     public function coverage(Request $request): JsonResponse
     {
         $agencyId = $this->agency($request);
+        $mine = $this->scopedPeople($request, $agencyId);
 
         $rows = DB::table('users as u')
             ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
             ->where('ra.agency_id', $agencyId)->where('ra.active', true)->where('ra.role', '<>', 'integration')   // a service account is not a person to text
+            ->whereIn('u.id', $mine ?: [0])
             ->groupBy('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone', 'u.sms_opt_in',
                 'u.sms_opt_in_at', 'u.sms_consent_source', 'u.sms_opt_out_at')
             ->selectRaw("u.id, TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) name,
@@ -221,6 +223,8 @@ final class SmsConsentInviteController extends Controller
            so an id belonging to another agency, or to somebody who already consented,
            simply does not come back. */
         $q->whereIn('u.id', $data['user_ids']);
+        $mine = $this->scopedPeople($request, $agencyId);
+        $q->whereIn('u.id', $mine ?: [0]);   // people still with us; a centre director only those of their own centres
 
         $people = $q->get();
         $sent = 0;
@@ -312,6 +316,8 @@ final class SmsConsentInviteController extends Controller
 
         abort_unless(DB::table('role_assignments')->where('user_id', $user)
             ->where('agency_id', $agencyId)->where('active', true)->exists(), 403, 'Not in this agency.');
+        $mine = $this->scopedPeople($request, $agencyId);
+        abort_unless(in_array($user, $mine, true), 403, 'Not one of your people.');
 
         $u = DB::table('users')->where('id', $user)->first(['id', 'first_name', 'last_name', 'phone']);
         abort_unless($u, 404, 'No such person.');
@@ -406,6 +412,30 @@ final class SmsConsentInviteController extends Controller
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /**
+     * WHO THIS LIST MAY NAME (2026-11-27, leak guard centre scope). The people still with us: staff who work here
+     * today (Live::staffIds: no leavers, no closed-centre-only staff, no accounts that are off) and the guardians of
+     * live families at open centres. An agency admin gets the whole agency; a centre director only their own centres
+     * (CentreScope), never a colleague or a parent at another centre. Fails closed: no centres, nobody. @return int[]
+     */
+    private function scopedPeople(Request $request, int $agencyId): array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $open = \App\Support\Live::centreIds($agencyId);
+        if ($scope !== null) {
+            $open = array_values(array_intersect($open, array_map('intval', $scope)));
+            if (! $open) {
+                return [];
+            }
+        }
+        $guardians = $open ? \App\Support\Live::families(DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id'), 'f')
+            ->whereIn('f.centre_id', $open)->whereNotNull('g.user_id')->pluck('g.user_id')->map(fn ($v) => (int) $v)->all() : [];
+        $guardians = $guardians ? \App\Support\Audience::excludeOff(DB::table('users as u')->whereIn('u.id', $guardians)->whereNull('u.deleted_at'))
+            ->pluck('u.id')->map(fn ($v) => (int) $v)->all() : [];
+
+        return array_values(array_unique(array_merge(\App\Support\Live::staffIds($agencyId, $scope === null ? null : $open), $guardians)));
     }
 
     private function agency(Request $request): int

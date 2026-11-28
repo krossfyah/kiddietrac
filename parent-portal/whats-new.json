@@ -1,6 +1,18 @@
 {
-    "updated": "2026-11-27",
+    "updated": "2026-11-28",
     "entries": [
+        {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "🔒",
+            "title": "Directors see their own centres",
+            "body": "Centre directors now see only the staff of their own centres in billing reminder copies, bus route drivers, holiday closures and text alert consent. People who have left, and closed centres, no longer appear in staff pickers, the contacts directory, team chat or meeting invites.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
         {
             "type": "improved",
             "date": "2026-11-27",

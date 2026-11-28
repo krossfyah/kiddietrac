@@ -406,6 +406,9 @@ class MeetingController extends Controller
             $cs = CentreScope::ids($r, $aid);
             $s = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')->where('ra.agency_id', $aid)->where('ra.active', 1)
                 ->whereIn('ra.role', ['agency_admin', 'centre_director', 'educator', 'home_visitor'])->whereNull('u.deleted_at')->whereNotNull('u.email');
+            /* Colleagues stay agency-wide on purpose (any colleague can be invited; KtLeakProbe::CENTRE_SCOPE_OK), but
+               only people still with us: no leavers, no staff placed only at closed centres, no accounts that are off. */
+            $s->whereIn('u.id', \App\Support\Live::staffIds((int) $aid, null) ?: [0]);
             $nameMatch($s);
             foreach ($s->select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role')->limit(60)->get() as $p) $add($p->id, $p->first_name . ' ' . $p->last_name, $p->email, 'staff', $ROLE[$p->role] ?? 'Staff');
             $g = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')->join('families as f', 'f.id', '=', 'g.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')

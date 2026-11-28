@@ -596,15 +596,22 @@ final class OperationsV2Controller extends Controller
         return $route;
     }
 
-    /** Current staff who may drive (ids) for these centres. */
-    private function busDriverIds(int $agencyId, array $centreIds): array
+    /**
+     * Current staff who may drive (ids) for these centres.
+     * CENTRE SCOPE (2026-11-27, leak guard): "agency_id = A OR centre_id IN (...)" matched every staff row of the agency,
+     * because director/educator rows carry agency_id too, so a director saw the other centres' staff as drivers. Now
+     * Live::staffIds: a centre director gets the staff placed at their own centres, an agency admin the whole agency;
+     * leavers, closed-centre-only staff and accounts that are off never appear.
+     */
+    private function busDriverIds(Request $request, int $agencyId, array $centreIds): array
     {
-        $ids = DB::table('role_assignments')->where('active', true)->whereIn('role', self::BUS_DRIVER_ROLES)
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $live = \App\Support\Live::staffIds($agencyId, $scope === null ? null : $centreIds);
+        if (! $live) return [];
+        return DB::table('role_assignments')->where('active', true)->whereIn('role', self::BUS_DRIVER_ROLES)
+            ->whereIn('user_id', $live)
             ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0]))
-            ->pluck('user_id')->unique()->all();
-        if (! $ids) return [];
-        return \App\Support\Audience::excludeOff(DB::table('users as u')->whereIn('u.id', $ids)->whereNull('u.deleted_at'))
-            ->pluck('u.id')->map(fn ($v) => (int) $v)->all();
+            ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
     }
 
     public function busRoutes(Request $request): JsonResponse
@@ -638,7 +645,7 @@ final class OperationsV2Controller extends Controller
         });
 
         $centres = DB::table('centres')->whereIn('id', $centreIds ?: [0])->orderBy('name')->get(['id', 'name']);
-        $drivers = DB::table('users')->whereIn('id', $this->busDriverIds($agencyId, $centreIds) ?: [0])
+        $drivers = DB::table('users')->whereIn('id', $this->busDriverIds($request, $agencyId, $centreIds) ?: [0])
             ->orderBy('first_name')->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
             ->map(fn ($u) => ['id' => (int) $u->id, 'name' => trim($u->first_name . ' ' . $u->last_name)])->values();
 
@@ -673,7 +680,7 @@ final class OperationsV2Controller extends Controller
         $centreIds = $this->busCentres($request, $agencyId);
         if (isset($data['centre_id'])) abort_unless(in_array((int) $data['centre_id'], $centreIds, true), 422, 'Choose one of your centres.');
         if (! empty($data['driver_id'])) {
-            abort_unless(in_array((int) $data['driver_id'], $this->busDriverIds($agencyId, $centreIds), true), 422, 'Choose a driver from your staff.');
+            abort_unless(in_array((int) $data['driver_id'], $this->busDriverIds($request, $agencyId, $centreIds), true), 422, 'Choose a driver from your staff.');
         }
         if (isset($data['route_name'])) {
             $data['route_name'] = trim((string) $data['route_name']);
@@ -969,18 +976,26 @@ final class OperationsV2Controller extends Controller
         $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 403);
 
+        /* CENTRE SCOPE (2026-11-27, leak guard): a centre director gets their own centres and the staff placed there,
+           never the other centres' people; an agency admin keeps the whole agency. Live::staffIds also drops leavers
+           (HR file says left) and staff only placed at closed centres. Every centre a holiday is written to is still
+           checked by assertCentreAccess in addClosureBulk. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
         $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('id', $scope ?: [0]))
             ->orderBy('name')->get(['id', 'name']);
-        $centreIds = $centres->pluck('id')->all();
+        $centreIds = $centres->pluck('id')->map(fn ($v) => (int) $v)->all();
         if (! $centreIds) {
             return response()->json(['centres' => [], 'staff' => []]);
         }
+        $live = \App\Support\Live::staffIds($agencyId, $scope === null ? null : $centreIds);
 
         $roles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
         $rows = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', true)
             ->whereIn('ra.role', $roles)
+            ->whereIn('ra.user_id', $live ?: [0])
             ->where('u.status', 'active')
             ->whereNull('u.deleted_at')
             ->where(function ($w) use ($agencyId, $centreIds) {

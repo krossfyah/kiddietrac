@@ -163,6 +163,17 @@ final class TeamChatController extends Controller
            chat nobody will ever read. */
         $staff = self::withoutServiceAccounts($staff);
 
+        /* STILL WITH US (2026-11-27, leak guard centre scope). Colleagues across the agency's centres stay reachable on
+           purpose (KtLeakProbe::CENTRE_SCOPE_OK), but a leaver, someone placed only at a closed centre, or an account
+           that is off is not a colleague any more. Platform admins are kept: their role row has no agency (see above). */
+        $live = [];
+        foreach ($agencyIds as $aid) {
+            foreach (\App\Support\Live::staffIds((int) $aid, null) as $id) $live[$id] = true;
+        }
+        $platform = DB::table('role_assignments')->where('active', true)->where('role', 'platform_admin')
+            ->whereIn('user_id', $staff ?: [0])->pluck('user_id')->map(fn ($v) => (int) $v)->all();
+        $staff = array_values(array_filter($staff, fn ($id) => isset($live[(int) $id]) || in_array((int) $id, $platform, true)));
+
         $ids = array_values(array_unique(array_merge(
             $staff,
             $this->reachableGuardianIds($exclude, $centreIds)

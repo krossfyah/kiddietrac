@@ -99,6 +99,11 @@ final class KtLeakProbe extends Command
      * Keep this short and justified: every entry is a place the centre-scope check does not look.
      */
     public const CENTRE_SCOPE_OK = [
+        // Anthony, 2026-11-27: these three are agency-wide BY DESIGN. Each still lists only people who are with us
+        // today (Live::staffIds: no leavers, no closed-centre-only staff, no accounts that are off).
+        '#^contacts$#' => 'All contacts directory: a director looks up any colleague in the agency (parents stay own-centre, CentreScope)',
+        '#^provider/team-contacts$#' => 'Team chat picker: colleagues at every centre of the agency can message each other',
+        '#^meetings/people$#' => 'Meeting invitees: any colleague in the agency can be invited (parents stay own-centre, CentreScope)',
     ];
 
     private $kernel;

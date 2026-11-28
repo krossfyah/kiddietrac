@@ -144,6 +144,11 @@ final class ContactController extends Controller
                    as an employee. */
                 ->whereIn('ra.role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor', 'platform_admin', 'sales_rep'])
                 ->whereNull('u.deleted_at')
+                /* STILL WITH US (2026-11-27, leak guard centre scope). The colleague list stays agency-wide on purpose
+                   (KtLeakProbe::CENTRE_SCOPE_OK), but only people who work here today: Live::staffIds drops leavers,
+                   staff placed only at closed centres, accounts that are off, service accounts, and KiddieTrac's own
+                   platform/sales people, who are not this agency's staff. */
+                ->whereIn('u.id', \App\Support\Live::staffIds($agencyId, null) ?: [0])
                 ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone', 'ra.role', 'ra.centre_id']);
 
             foreach ($staffRows as $r) {
@@ -168,10 +173,16 @@ final class ContactController extends Controller
                 ]);
             }
 
+            /* Parents: the families of OPEN centres only, and for a centre director only their own centres (CentreScope,
+               the same rule as meetings/people and every director list of families). Colleagues stay agency-wide. */
+            $pScope = \App\Support\CentreScope::ids($request, $agencyId);
+            $parentCentres = array_values(array_intersect(\App\Support\Live::centreIds($agencyId),
+                $pScope === null ? array_map('intval', $centreIds->all()) : array_map('intval', $pScope)));
             $famPhones = DB::table('guardians as g')
                 ->join('users as u', 'u.id', '=', 'g.user_id')
                 ->join('families as f', 'f.id', '=', 'g.family_id')
-                ->whereIn('f.centre_id', $centreIds)
+                ->whereIn('f.centre_id', $parentCentres ?: [0])
+                ->whereNull('f.deleted_at')->whereNull('f.departure_applied_at')   // Live::families: a family that left is not a contact
                 ->whereNull('u.deleted_at')
                 ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
                        'f.primary_phone', 'f.family_name', 'f.centre_id', 'f.id as family_id',
