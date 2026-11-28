@@ -389,6 +389,13 @@ Route::get('/media/p/{kind}/{id}', [\App\Http\Controllers\Api\PrivateFileControl
     ->name('media.private')
     ->middleware(['signed', 'throttle:120,1,r-media-private']);
 
+/* A Walk Watch ROUTE MAP drawn from 2026-11-28 on (App\Support\WalkMap): private disk, served only against a signed,
+   agency-tied token (30 days in emails, 12 hours in the portal). Older maps stay public in /walk-maps by decision. */
+Route::get('/media/w/{token}', [\App\Http\Controllers\Api\WalkMapFileController::class, 'show'])
+    ->where('token', '[A-Za-z0-9\-_\.]+')
+    ->name('media.walkmap')
+    ->middleware('throttle:240,1,r-media-walkmap');
+
 Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1,r-zumrails-webhook');
 
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);

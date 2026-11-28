@@ -62,10 +62,10 @@ class SecurityHeaders
            show up at all with a broken link" in Outlook). The two routes that exist only to be
            shown inside someone's mail reader -- signed email media (/media/e/{token}) and the
            open-tracking pixel (/e/o/{token}) -- say cross-origin; everything else stays
-           same-site. */
+           same-site. Walk Watch route maps (/media/w/{token}, 2026-11-28) join them. */
         $path = '/' . ltrim($request->path(), '/');
         $h->set('Cross-Origin-Resource-Policy',
-            preg_match('#^/api/v1/(media/e|e/o)/#', $path) ? 'cross-origin' : 'same-site');
+            preg_match('#^/api/v1/(media/e|media/w|e/o)/#', $path) ? 'cross-origin' : 'same-site');
         $h->set('X-Permitted-Cross-Domain-Policies', 'none');
 
         // HSTS only over HTTPS. 1 year; add includeSubDomains + preload later

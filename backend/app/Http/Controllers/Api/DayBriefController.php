@@ -926,7 +926,7 @@ final class DayBriefController extends Controller
             // for finished walks: a live one is still moving, and the live map already
             // shows it.
             $mapUrl = ($w->status === 'completed' && $pings > 1)
-                ? \App\Support\WalkMap::urlFor((int) $w->id)
+                ? \App\Support\WalkMap::portalUrl((int) $w->id)   // the portal's 12-hour link (2026-11-28)
                 : null;
 
             $walks[] = [

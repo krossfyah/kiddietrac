@@ -11,6 +11,9 @@ use Illuminate\Support\Str;
 /**
  * A small map of where a walk went, as a PNG a mail client will actually show.
  *
+ * 2026-11-28: maps drawn from now on are PRIVATE (see WHERE THE MAPS LIVE below). The next paragraph describes
+ * the LEGACY public maps, which stay public by decision.
+ *
  * Email cannot authenticate, so the image has to be fetchable without a session. That
  * makes the FILENAME the access control: a 40-character random token per walk, which is
  * not enumerable and is not derived from any id. This is the same reasoning as an
@@ -30,54 +33,126 @@ final class WalkMap
     private const TILE = 256;
     private const UA = 'KiddieTrac/1.0 (+https://www.kiddietrac.com; info@kiddietrac.com)';
 
-    /**
-     * Absolute URL of the map for this walk, or null when there is nothing to draw.
-     * Rendered once and reused: the route cannot change after the walk has ended.
+    /** An email is read next week or next month: its map link lives this long (Anthony, 2026-11-28). */
+    public const EMAIL_TTL_DAYS = 30;
+
+    /** The portal asks again on every load, so its link only has to outlive a working day. */
+    public const PORTAL_TTL_HOURS = 12;
+
+    /** Expiries round up to this, so one walk's link is identical for a while (cacheable, like ProtectedMedia). */
+    private const STABLE_WINDOW = 21600;
+
+    /*
+     * WHERE THE MAPS LIVE (2026-11-28, Anthony: "Move new ones only").
+     *   - LEGACY: the 32 maps drawn before this date stay in public/walk-maps/<token>.png, served by URL as before, so the
+     *     emails already sent keep showing them. Decided, not an oversight: do not move them.
+     *   - NEW: walk-maps/<agency>/<token>.png on the PRIVATE disk (outside the web root), handed out only as a signed,
+     *     agency-tied link /api/v1/media/w/<token>: EMAIL_TTL_DAYS for emails (urlFor), PORTAL_TTL_HOURS for the portal
+     *     (portalUrl, read through the signed-in, agency-scoped walk record). WalkMapFileController re-checks that the
+     *     walk still belongs to the agency the link names.
      */
+
+    /** The map link for an EMAIL (30 days), or null when there is nothing to draw. */
     public static function urlFor(int $tripId): ?string
+    {
+        return self::link($tripId, self::EMAIL_TTL_DAYS * 86400);
+    }
+
+    /** The map link for the PORTAL (12 hours). Callers have already scoped the walk to the signed-in person's agency. */
+    public static function portalUrl(int $tripId): ?string
+    {
+        return self::link($tripId, self::PORTAL_TTL_HOURS * 3600);
+    }
+
+    /** The private-disk path of a new-style map. */
+    public static function privatePath(int $agencyId, string $token): string
+    {
+        return 'walk-maps/' . $agencyId . '/' . $token . '.png';
+    }
+
+    private static function link(int $tripId, int $ttl): ?string
     {
         try {
             $trip = DB::table('field_trips')->where('id', $tripId)->first();
-            if (! $trip) {
+            if (! $trip || ! $trip->agency_id) {
                 return null;
             }
-
             $token = $trip->map_token ?: null;
-            $dir = public_path('walk-maps');
-            if ($token && is_file($dir.'/'.$token.'.png')) {
-                return rtrim(config('app.url'), '/').'/walk-maps/'.$token.'.png';
+            // Legacy map: stays public by decision (2026-11-28) so old emails keep working.
+            if ($token && is_file(public_path('walk-maps') . '/' . $token . '.png')) {
+                return rtrim(config('app.url'), '/') . '/walk-maps/' . $token . '.png';
+            }
+            if (! $token || ! PrivateFiles::disk()->exists(self::privatePath((int) $trip->agency_id, $token))) {
+                if (self::draw($trip, $token) === null) {
+                    return null;
+                }
             }
 
-            $points = DB::table('field_trip_pings')->where('field_trip_id', $tripId)
-                ->orderBy('recorded_at')->orderBy('id')
-                ->get(['lat', 'lon', 'accuracy_m'])
-                ->filter(fn ($p) => (float) $p->lat !== 0.0 || (float) $p->lon !== 0.0)
-                ->filter(fn ($p) => $p->accuracy_m === null || (float) $p->accuracy_m <= 100)
-                ->map(fn ($p) => [(float) $p->lat, (float) $p->lon])
-                ->values()->all();
-
-            // One fix is a dot, not a route. Two is the minimum worth drawing.
-            if (count($points) < 2) {
-                return null;
-            }
-
-            if (! is_dir($dir) && ! @mkdir($dir, 0755, true)) {
-                return null;
-            }
-            $token = $token ?: Str::random(40);
-            $png = self::render($points);
-            if ($png === null) {
-                return null;
-            }
-            file_put_contents($dir.'/'.$token.'.png', $png);
-            DB::table('field_trips')->where('id', $tripId)->update(['map_token' => $token]);
-
-            return rtrim(config('app.url'), '/').'/walk-maps/'.$token.'.png';
+            return rtrim(config('app.url'), '/') . '/api/v1/media/w/' . self::token((int) $trip->id, (int) $trip->agency_id, $ttl);
         } catch (\Throwable $e) {
-            Log::warning('walk map render failed', ['trip_id' => $tripId, 'error' => $e->getMessage()]);
+            Log::warning('walk map link failed', ['trip_id' => $tripId, 'error' => $e->getMessage()]);
 
             return null;
         }
+    }
+
+    /** Draw the route once, onto the private disk. Returns the walk's map token, or null when there is nothing to draw. */
+    private static function draw(object $trip, ?string $token): ?string
+    {
+        $points = DB::table('field_trip_pings')->where('field_trip_id', $trip->id)
+            ->orderBy('recorded_at')->orderBy('id')
+            ->get(['lat', 'lon', 'accuracy_m'])
+            ->filter(fn ($p) => (float) $p->lat !== 0.0 || (float) $p->lon !== 0.0)
+            ->filter(fn ($p) => $p->accuracy_m === null || (float) $p->accuracy_m <= 100)
+            ->map(fn ($p) => [(float) $p->lat, (float) $p->lon])
+            ->values()->all();
+
+        // One fix is a dot, not a route. Two is the minimum worth drawing.
+        if (count($points) < 2) {
+            return null;
+        }
+        $png = self::render($points);
+        if ($png === null) {
+            return null;
+        }
+        $token = $token ?: Str::random(40);
+        PrivateFiles::disk()->put(self::privatePath((int) $trip->agency_id, $token), $png);
+        DB::table('field_trips')->where('id', $trip->id)->update(['map_token' => $token]);
+
+        return $token;
+    }
+
+    /** payload.signature, both base64url: one path segment, nothing an HTML escaper can break (as ProtectedMedia::emailToken). */
+    public static function token(int $tripId, int $agencyId, int $ttl): string
+    {
+        $exp = (int) (ceil((time() + $ttl) / self::STABLE_WINDOW) * self::STABLE_WINDOW);
+        $payload = rtrim(strtr(base64_encode((string) json_encode(['t' => $tripId, 'a' => $agencyId, 'e' => $exp])), '+/', '-_'), '=');
+
+        return $payload . '.' . self::signature($payload);
+    }
+
+    /** [trip id, agency id] for a good, unexpired token; null when forged, altered or expired. */
+    public static function verify(?string $token): ?array
+    {
+        $token = (string) $token;
+        if (substr_count($token, '.') !== 1) {
+            return null;
+        }
+        [$payload, $sig] = explode('.', $token, 2);
+        if ($payload === '' || ! hash_equals(self::signature($payload), $sig)) {
+            return null;
+        }
+        $d = json_decode((string) base64_decode(strtr($payload, '-_', '+/'), true), true);
+        if (! is_array($d) || empty($d['t']) || empty($d['a']) || empty($d['e']) || time() > (int) $d['e']) {
+            return null;
+        }
+
+        return [(int) $d['t'], (int) $d['a']];
+    }
+
+    private static function signature(string $payload): string
+    {
+        return rtrim(strtr(base64_encode(hash_hmac('sha256', 'kt-walk-map|' . $payload, (string) config('app.key'), true)), '+/', '-_'), '=');
     }
 
     /** @param array<int,array{0:float,1:float}> $points */

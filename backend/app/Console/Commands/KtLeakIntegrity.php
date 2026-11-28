@@ -27,7 +27,7 @@ use Throwable;
  */
 final class KtLeakIntegrity extends Command
 {
-    protected $signature = 'kt:leak-integrity {--no-alert} {--quiet-ok} {--days=30 : window for high-volume tables}';
+    protected $signature = 'kt:leak-integrity {--no-alert} {--quiet-ok} {--days=30 : window for high-volume tables} {--no-files : skip the stored-file references check}';
 
     protected $description = 'SQL sweep: rows whose agency does not match their parent (centre, child, family, room, thread, recipient).';
 
@@ -136,6 +136,24 @@ final class KtLeakIntegrity extends Command
             AND u.id NOT IN ({$paList})
             AND NOT EXISTS (SELECT 1 FROM users u2 JOIN lg_member m ON m.user_id = u2.id WHERE u2.email COLLATE utf8mb4_unicode_ci = x.to_email COLLATE utf8mb4_unicode_ci AND m.agency_id = x.agency_id)
             AND NOT EXISTS (SELECT 1 FROM users u3 WHERE u3.email COLLATE utf8mb4_unicode_ci = x.to_email COLLATE utf8mb4_unicode_ci AND u3.id IN ({$paList}))");
+
+        // ---- FILES (2026-11-28) ----------------------------------------------------------------------------------------
+        /* Stored references to our protected/private files that point outside the row's agency (App\Support\FileRefIntegrity).
+           Also rebuilds file_owners, which RefuseForeignFileRefs reads. --no-files skips it. */
+        if (! $this->option('no-files')) {
+            try {
+                $f = \App\Support\FileRefIntegrity::run();
+                $this->checks += $f['checks'];
+                foreach ($f['findings'] as $title => $hit) {
+                    $this->found[$title] = $hit;
+                }
+                $this->line("  files: {$f['refs']} reference(s) in {$f['rows']} row(s) across {$f['columns']} column(s)"
+                    . ($f['untenanted'] ? '; not judged (no agency on the row): ' . json_encode($f['untenanted']) : ''));
+            } catch (Throwable $e) {
+                $this->found['files: references check (CHECK FAILED TO RUN)'] = [0, []];
+                $this->warn('  check failed: files: ' . mb_substr($e->getMessage(), 0, 160));
+            }
+        }
 
         // ---- report ------------------------------------------------------------------------------------------------
         $lines = [];

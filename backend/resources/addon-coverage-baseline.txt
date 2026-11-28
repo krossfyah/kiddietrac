@@ -302,6 +302,7 @@ route media/download
 route media/e
 route media/f
 route media/p
+route media/w
 route meetings
 route meetings/people
 route meetings/rsvp

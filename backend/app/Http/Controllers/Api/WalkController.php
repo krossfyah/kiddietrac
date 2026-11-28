@@ -328,9 +328,8 @@ final class WalkController extends Controller
                     'age_min' => $ageMin,
                     'address' => \App\Support\Geocode::reverse($last->lat, $last->lon),
                 ] : null,
-                'map_url' => $t->map_token
-                    ? rtrim((string) config('app.url'), '/').'/walk-maps/'.$t->map_token.'.png'
-                    : null,
+                // A legacy public map, or a new private one as a 12-hour signed link (WalkMap, 2026-11-28).
+                'map_url' => $t->map_token ? \App\Support\WalkMap::portalUrl((int) $t->id) : null,
             ], $summary);
         }
 

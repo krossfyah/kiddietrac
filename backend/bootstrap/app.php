@@ -79,6 +79,10 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,
             // A reseller naming an agency it does not own is refused (2026-10-21).
             \App\Http\Middleware\ResellerAgencyGuard::class,
+            /* A save may only name THIS agency's files (2026-11-28, data-leakage rule): any protected or private file a
+               write request names must belong to the active agency, else 422. App\Support\FileRefs. Kill switch:
+               KT_FILE_REF_GUARD=off|log. */
+            \App\Http\Middleware\RefuseForeignFileRefs::class,
             // Portal-wide activity audit — records every write action to audit_logs.
             AuditActivity::class,
             // Presence: stamps users.last_seen_at from ordinary traffic, throttled

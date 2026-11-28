@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🔒",
+            "title": "Files stay with their own centre",
+            "body": "A record can now only point to files that belong to your own agency. If you paste a link to a file from somewhere else, you will be asked to upload it again here. Walk Watch route maps in emails now use a private link that lasts 30 days.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔁",
             "title": "Families answer re-enrolment",
             "body": "Launching a re-enrolment campaign now sends every family a notice and an email with an Answer now button, and they say for each child whether they are coming back, with a note if they like. Responded, Renewed and Not returning fill in as they answer, View answers shows every reply, and families who haven't answered get one reminder before the deadline (set the days with ⚙ Reminder rule). Directors can run campaigns for their own centres.",

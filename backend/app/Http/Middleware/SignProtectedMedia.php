@@ -27,6 +27,10 @@ class SignProtectedMedia
     /** Guards against pathological payloads rather than legitimate ones. */
     private const MAX_DEPTH = 12;
 
+    /** Protected paths seen in a WRITE response (raw, before signing): what the upload ledger may record. */
+    private array $seen = [];
+    private bool $collect = false;
+
     public function handle(Request $request, Closure $next)
     {
         $response = $next($request);
@@ -40,7 +44,12 @@ class SignProtectedMedia
             return $response;
         }
 
+        $this->seen = [];
+        $this->collect = ! in_array($request->getMethod(), ['GET', 'HEAD', 'OPTIONS'], true);
         $response->setData($this->walk($data, 0));
+        if ($this->collect && $this->seen) {
+            $this->ledger($request);
+        }
 
         return $response;
     }
@@ -65,10 +74,37 @@ class SignProtectedMedia
                 continue;
             }
             if (ProtectedMedia::isProtected($value)) {
+                if ($this->collect && count($this->seen) < 50) {
+                    $this->seen[(string) ProtectedMedia::relative($value)] = true;
+                }
                 $node[$key] = ProtectedMedia::sign($value);
             }
         }
 
         return $node;
+    }
+
+    /**
+     * THE UPLOAD LEDGER (2026-11-28, App\Support\FileRefs). A file this write request has just CREATED (written in the
+     * last few minutes) and handed back is the caller's agency's file: recorded, so the save that follows - the form
+     * sending the new photo_url back - passes RefuseForeignFileRefs. Older files in a reply are not recorded: a reply
+     * echoing a file is not evidence of who owns it.
+     */
+    private function ledger(Request $request): void
+    {
+        try {
+            $user = \Illuminate\Support\Facades\Auth::guard('sanctum')->user();
+            $agencyId = (int) $request->header('X-Active-Agency-Id');
+            if (! $user || $agencyId <= 0) {
+                return;
+            }
+            foreach (array_keys($this->seen) as $rel) {
+                if ($rel !== '' && \App\Support\FileRefs::isFresh($rel)) {
+                    \App\Support\FileRefs::record($rel, $agencyId, (int) $user->id, 'upload');
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }
