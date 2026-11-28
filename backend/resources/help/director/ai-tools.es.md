@@ -34,9 +34,9 @@ Usa Claude con las observaciones y actividades del niño registradas esta semana
 
 Suba una foto o un escaneo de un documento (registro de vacunas, certificación, verificación VSS, identificación, formulario de inscripción) y extraemos los campos estructurados a JSON.
 
-1. Pegue la URL del documento (debe ser accesible públicamente: use primero la carga de **MediaController** si lo tiene en disco y luego copie la URL devuelta).
+1. Elija la foto, el escaneo o el PDF que va a subir. Se envía el archivo en sí para leerlo; nunca se pone en un enlace público y no se acepta un enlace.
 2. Elija el tipo de documento.
 3. Haga clic en **Extraer campos**.
-4. El JSON aparece debajo. Por ahora copie los campos manualmente al registro del niño o del personal correspondiente; el enlace automático llegará en v22p52.
+4. Los datos aparecen debajo en una lista con sus nombres. **AI doc extractions** puede luego vincular automáticamente un certificado o una verificación al registro del empleado correspondiente.
 
 Se aplican costos por cada llamada de visión de Claude. Calcule aproximadamente 0,01-0,03 USD por documento según el tamaño.

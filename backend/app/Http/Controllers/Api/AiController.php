@@ -196,42 +196,49 @@ final class AiController extends Controller
 
     /**
      * Anthropic-vision-based document extraction.
-     * Accepts an image URL + doc_type. Returns extracted JSON fields.
+     *
+     * THE FILE GOES TO THE AI AS ITS BYTES, NEVER AS A LINK (2026-11-28). This used to accept a
+     * "publicly reachable" document URL and hand it to the AI to fetch, and it saved every upload on
+     * the PUBLIC disk (/storage/ai-extractions/...), so an ID card or immunization record sat at a
+     * permanent public address. Now: an uploaded image or PDF only (no URL mode), sent inline as
+     * base64, and kept on the private disk for the auto-link step. A URL in the request is refused.
      */
     public function docExtract(Request $request): JsonResponse
     {
         $key = config('services.anthropic.key');
-        abort_unless($key, 503, 'AI not configured');
-        $hasFile = $request->hasFile('file');
+        abort_unless($key, 503, 'Reading documents is not available right now.');
+        if (! $request->hasFile('file')) {
+            return response()->json(['message' => 'Choose the photo or scan to upload. A link to a document is not accepted: the file itself is read, so it never has to be public.'], 422);
+        }
         $data = $request->validate([
-            'document_url' => ($hasFile ? 'nullable|string' : 'required|string|url'),
             'doc_type'     => 'required|string|in:immunization,certification,background_check,id,enrollment',
-            'file'         => 'sometimes|file|mimes:jpg,jpeg,png,webp|max:10240',
+            'file'         => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
         ]);
 
         $agencyId = $this->resolveAgencyId($request);
 
-        // Uploaded file -> base64 image block (works for private files, no public-URL needed);
-        // otherwise use the supplied URL as before.
-        $storedUrl = $data['document_url'] ?? null;
-        if ($hasFile) {
-            $f = $request->file('file');
-            $mime = $f->getClientMimeType() ?: 'image/png';
-            $imageBlock = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => base64_encode((string) file_get_contents($f->getRealPath()))]];
-            try {
-                $name = (string) \Illuminate\Support\Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: 'png');
-                $f->storeAs('ai-extractions/' . $agencyId, $name, 'public');
-                $storedUrl = '/storage/ai-extractions/' . $agencyId . '/' . $name;
-            } catch (\Throwable $e) {}
+        $f = $request->file('file');
+        $mime = (string) ($f->getMimeType() ?: $f->getClientMimeType());
+        $b64 = base64_encode((string) file_get_contents($f->getRealPath()));
+        if ($mime === 'application/pdf') {
+            $imageBlock = ['type' => 'document', 'source' => ['type' => 'base64', 'media_type' => 'application/pdf', 'data' => $b64]];
         } else {
-            $imageBlock = ['type' => 'image', 'source' => ['type' => 'url', 'url' => $data['document_url']]];
+            if (! in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) $mime = 'image/jpeg';
+            $imageBlock = ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => $mime, 'data' => $b64]];
         }
+        $storedPath = null;
+        try {
+            $ext = strtolower($f->getClientOriginalExtension() ?: ($mime === 'application/pdf' ? 'pdf' : 'jpg'));
+            $storedPath = $f->storeAs('ai-extractions/' . $agencyId, (string) \Illuminate\Support\Str::uuid() . '.' . $ext, 'local') ?: null;
+        } catch (\Throwable $e) {}
 
         $extractionId = DB::table('ai_doc_extractions')->insertGetId([
             'agency_id'      => $agencyId,
             'uploaded_by_id' => $request->user()->id,
             'doc_type'       => $data['doc_type'],
-            'document_url'   => $storedUrl,
+            'document_url'   => null,
+            'document_path'  => $storedPath,
+            'document_name'  => mb_substr((string) $f->getClientOriginalName(), 0, 190) ?: null,
             'status'         => 'processing',
             'created_at'     => now(),
             'updated_at'     => now(),
@@ -265,7 +272,7 @@ final class AiController extends Controller
                 DB::table('ai_doc_extractions')->where('id', $extractionId)->update([
                     'status' => 'failed', 'error_message' => 'HTTP ' . $res->status(), 'updated_at' => now(),
                 ]);
-                return response()->json(['error' => 'AI extraction failed', 'status' => $res->status()], 502);
+                return response()->json(['message' => 'The document could not be read this time. Please try again, or use a clearer photo.'], 502);
             }
             $raw = \App\Support\AiConfig::text($res->json()) ?? '';
             $jsonStart = strpos($raw, '{');
@@ -280,9 +287,10 @@ final class AiController extends Controller
             return response()->json(['id' => $extractionId, 'fields' => $parsed]);
         } catch (\Throwable $e) {
             DB::table('ai_doc_extractions')->where('id', $extractionId)->update([
-                'status' => 'failed', 'error_message' => $e->getMessage(), 'updated_at' => now(),
+                'status' => 'failed', 'error_message' => mb_substr($e->getMessage(), 0, 500), 'updated_at' => now(),
             ]);
-            return response()->json(['error' => $e->getMessage()], 502);
+            Log::warning('AI doc extract failed', ['extraction' => $extractionId, 'msg' => $e->getMessage()]);
+            return response()->json(['message' => 'The document could not be read this time. Please try again.'], 502);
         }
     }
 

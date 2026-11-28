@@ -32,12 +32,12 @@ Uses Claude with the child's observations + activities tracked this week. Comes 
 
 **Sidebar → AI doc extract** (admin / director).
 
-Upload a photo or scan of a document — immunization record, certification, VSS check, ID, enrolment form — and we extract structured fields into JSON.
+Upload a photo or scan of a document — immunization record, certification, VSS check, ID, enrolment form — and we read its fields for you.
 
-1. Paste the document URL (the doc must be publicly reachable — use the **MediaController** upload first if you have it on disk, then copy the returned URL).
+1. Choose the photo, scan or PDF to upload. The file itself is sent for reading; it is never put at a public link, and a link is not accepted.
 2. Pick the document type.
 3. Click **Extract fields**.
-4. The JSON appears below. Copy fields into the relevant child / staff record manually for now — auto-link comes in v22p52.
+4. The fields appear below as a labelled list. **AI doc extractions** can then auto-link a certificate or check to the matching staff record.
 
 Costs apply per Claude vision call. Budget ~$0.01-0.03 per document depending on size.
 

@@ -12,22 +12,18 @@ recopiez vous-même le résultat dans le bon dossier — rien n'est enregistré 
 
 ## Lire un document
 
-1. Prenez une photo ou une numérisation nette du document (PNG, JPEG ou WebP), à plat et bien éclairé.
+1. Prenez une photo ou une numérisation nette du document (PNG, JPEG, WebP ou PDF), à plat et bien éclairé.
 2. Ouvrez **Marketing › AI doc extract**. Le titre indique **AI document extraction**.
-3. Sous **Upload a file (image)**, choisissez l'image.
+3. Sous **Upload a file (photo, scan or PDF)**, choisissez le fichier.
 4. Choisissez le **Document type** : **Immunization record**, **Staff certification**, **Background / VSS check**, **ID document** ou **Enrollment form**.
-5. Appuyez sur **Extract fields**. « Extracting… » s'affiche pendant la lecture, puis les champs apparaissent dans la boîte foncée, un par ligne (par exemple le nom, la date de délivrance et la date d'expiration).
+5. Appuyez sur **Extract fields**. « Extracting… » s'affiche pendant la lecture, puis les champs apparaissent dans une liste, chacun avec son libellé (par exemple le nom, la date de délivrance et la date d'expiration).
 6. Comparez chaque valeur au papier, puis tapez-la ou collez-la dans le dossier de l'enfant ou de l'employé.
 
 > ⚠️ Vérifiez toujours le résultat avec l'original. Une écriture à la main, un reflet ou un bord coupé peut donner une mauvaise date ou un mauvais nom.
 
-## Utiliser un lien au lieu d'un fichier
+## Votre fichier reste privé
 
-1. Laissez la case du fichier vide.
-2. Collez un lien dans **…or a document URL (publicly reachable)**.
-3. Choisissez le **Document type** et appuyez sur **Extract fields**.
-
-> ⚠️ N'utilisez un lien que pour un document qui doit être public. Ne mettez jamais le document personnel d'un enfant ou d'un employé sur un lien public — téléversez plutôt le fichier.
+C'est le fichier lui-même qui est lu : il est envoyé directement à l'IA pour cette seule lecture et n'est jamais placé à un lien public. Un lien vers un document n'est pas accepté. KiddieTrac garde le fichier en privé pour que **Auto-link** puisse joindre un certificat au dossier de l'employé.
 
 ## Qui peut faire quoi
 
@@ -37,13 +33,13 @@ recopiez vous-même le résultat dans le bon dossier — rien n'est enregistré 
 | Directeur de centre | Utiliser l'outil. |
 | Administrateur de plateforme | Utiliser l'outil dans l'agence choisie dans le sélecteur. |
 
-L'outil utilise l'IA. Le document est envoyé seulement pour être lu et obtenir les champs; KiddieTrac ne le joint à aucun dossier.
+L'outil utilise l'IA. Le document est envoyé seulement pour être lu et obtenir les champs; il n'est jamais placé à un lien public.
 
 ## Questions fréquentes et problèmes
 
 ??? J'obtiens « Error: … » dans la boîte. | L'image n'a pas pu être lue. Essayez une photo plus nette, un autre format (PNG ou JPEG) ou un fichier plus petit.
 ??? Certains champs sont vides. | L'outil ne les a pas trouvés sur le document. Tapez-les vous-même.
-??? Le document est-il enregistré quelque part? | Non. Téléversez l'original dans le dossier de la personne si vous devez le garder.
+??? Le document est-il enregistré quelque part? | Oui, en privé, pour Auto-link : un certificat d'employé lié avec **Auto-link** garde le fichier dans le dossier de la personne. Il n'est jamais à un lien public.
 ??? L'élément de menu n'apparaît pas. | Les outils d'IA dépendent de votre forfait. Demandez à votre administrateur d'agence.
 
 ## Écrans connexes

@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🔒",
+            "title": "AI doc extract keeps files private",
+            "body": "AI doc extract now reads PDFs as well as photos and scans, and the file is sent straight to the AI to be read. It is never put at a public link, and Auto-link attaches a staff certificate's file to the person's record privately.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "📈",
             "title": "Tuition increases now tell families and apply themselves",
             "body": "Schedule a percent or flat increase and see exactly which families and children it affects, old and new amount, before you save. Families are told automatically before the date (your notice rule, 30 days by default), and on the date their tuition and your tuition plans update by themselves. Edit or delete while it is still Scheduled.",

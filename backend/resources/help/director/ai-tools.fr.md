@@ -34,9 +34,9 @@ Utilise Claude avec les observations et les activités de l’enfant suivies cet
 
 Téléversez une photo ou une numérisation d’un document — dossier de vaccination, certification, vérification VSS, pièce d’identité, formulaire d’inscription — et nous en extrayons les champs structurés en JSON.
 
-1. Collez l’URL du document (le document doit être accessible publiquement — utilisez d’abord le téléversement **MediaController** si vous l’avez sur disque, puis copiez l’URL retournée).
+1. Choisissez la photo, la numérisation ou le PDF à téléverser. Le fichier lui-même est envoyé pour être lu; il n’est jamais placé à un lien public, et un lien n’est pas accepté.
 2. Choisissez le type de document.
 3. Cliquez sur **Extraire les champs**.
-4. Le JSON s’affiche en dessous. Copiez pour l’instant les champs manuellement dans la fiche de l’enfant ou du membre du personnel concerné — le lien automatique arrivera dans v22p52.
+4. Les champs s’affichent en dessous dans une liste avec leurs libellés. **AI doc extractions** peut ensuite lier automatiquement un certificat ou une vérification au dossier de l’employé correspondant.
 
 Des frais s’appliquent par appel de vision Claude. Prévoyez environ 0,01 à 0,03 $ par document selon la taille.

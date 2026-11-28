@@ -179,17 +179,28 @@ final class AiV2Controller extends Controller
                             'reference' => $fields['reference'] ?? null,
                             'issued_at' => $fields['issued_date'] ?? null,
                             'expires_at' => $fields['expiry_date'] ?? \App\Support\AgencyTime::todayDate()->addYear()->toDateString(),
-                            'document_url' => $ext->document_url,
+                            /* No file link (2026-11-28): the extraction's file is private now and a check's
+                               document_url is a public /storage/ address, so the file is not copied there. */
+                            'document_url' => null,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
                         $result['action'] = 'inserted background_check';
+                        $result['note'] = 'Attach the scan on the Background checks screen if you need it on file.';
                     } else {
                         /* INTO staff_certifications (2026-11-05). This wrote to `certifications`, a table that does
                            not exist, so linking any AI-read certificate failed with a database error. The real table
                            is the one Staff > Certifications and the expiry alerts read; its cert_type is a fixed list,
                            so the name on the certificate is mapped onto it and kept word for word in the title. */
                         $certName = trim((string) ($fields['cert_name'] ?? ''));
+                        /* The certificate file is COPIED on the private disk to where Staff > Certifications keeps
+                           its files (served by /staff-certifications/{id}/document, signed-in and scoped). */
+                        $certPath = null;
+                        $srcPath = (string) ($ext->document_path ?? '');
+                        if ($srcPath !== '' && \Illuminate\Support\Facades\Storage::disk('local')->exists($srcPath)) {
+                            $certPath = 'staff-certificates/' . (int) $ext->agency_id . '/' . \Illuminate\Support\Str::uuid() . '.' . (pathinfo($srcPath, PATHINFO_EXTENSION) ?: 'bin');
+                            try { \Illuminate\Support\Facades\Storage::disk('local')->copy($srcPath, $certPath); } catch (\Throwable $e) { $certPath = null; }
+                        }
                         $rowId = DB::table('staff_certifications')->insertGetId([
                             'user_id' => $userId,
                             'agency_id' => $ext->agency_id,
@@ -198,7 +209,9 @@ final class AiV2Controller extends Controller
                             'certifier' => isset($fields['issuing_body']) ? mb_substr((string) $fields['issuing_body'], 0, 160) : null,
                             'issued_at' => $fields['issued_date'] ?? null,
                             'expires_at' => $fields['expiry_date'] ?? \App\Support\AgencyTime::todayDate()->addYear()->toDateString(),
-                            'document_url' => $ext->document_url,
+                            'document_url' => null,
+                            'document_path' => $certPath,
+                            'document_name' => $certPath ? ($ext->document_name ?? null) : null,
                             'active' => 1,
                             'added_by' => $request->user()->id,
                             'created_at' => now(),

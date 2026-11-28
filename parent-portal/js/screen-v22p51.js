@@ -2958,11 +2958,9 @@
   async function renderAiDocs(main) {
     main.innerHTML = `<div style="padding:24px;max-width:760px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">AI document extraction</h2>
-      <p style="color:#6B7280;font-size:14px;">Upload a photo or scan of a document and we'll extract structured fields into JSON. Useful for new staff certifications, immunization records, etc.</p>
-      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Upload a file (image)
-        <input id="aid-file" type="file" accept="image/png,image/jpeg,image/webp" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;background:#fff;"></label>
-      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">…or a document URL (publicly reachable)
-        <input id="aid-url" placeholder="https://…/document.png" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;"></label>
+      <p style="color:#6B7280;font-size:14px;">Upload a photo, scan or PDF of a document and we'll read its fields for you. Useful for new staff certifications, immunization records, etc. The file is kept private: it is never put at a public link.</p>
+      <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Upload a file (photo, scan or PDF)
+        <input id="aid-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;background:#fff;"></label>
       <label style="display:block;margin-top:14px;font-size:13px;font-weight:600;">Document type
         <select id="aid-type" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:4px;margin-top:4px;">
           <option value="immunization">Immunization record</option>
@@ -2996,18 +2994,11 @@
       try {
         const fileEl = document.getElementById('aid-file');
         const docType = document.getElementById('aid-type').value;
-        let r;
-        if (fileEl && fileEl.files && fileEl.files[0]) {
-          const fd = new FormData();
-          fd.append('file', fileEl.files[0]);
-          fd.append('doc_type', docType);
-          r = await Api.postForm('/ai/doc-extract', fd);
-        } else {
-          r = await Api.post('/ai/doc-extract', {
-            document_url: document.getElementById('aid-url').value,
-            doc_type: docType,
-          });
-        }
+        if (!(fileEl && fileEl.files && fileEl.files[0])) { out.innerHTML = '<div style="color:#B45309;font-size:13px;">Choose the photo, scan or PDF to read first.</div>'; return; }
+        const fd = new FormData();
+        fd.append('file', fileEl.files[0]);
+        fd.append('doc_type', docType);
+        const r = await Api.postForm('/ai/doc-extract', fd);
         out.innerHTML = paint(r && r.fields);
       } catch (e) { out.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + escapeHtml((e && e.message) || 'The document could not be read. Please try again.') + '</div>'; }
     };
