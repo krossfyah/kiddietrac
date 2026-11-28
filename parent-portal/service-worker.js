@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = 'kt-20261128sanm';
+const CACHE = 'kt-20261128wlat1';
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -97,6 +97,11 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('/api/')) return; // Don't cache the API
+  /* WALKIE-TALKIE FILES GO STRAIGHT TO THE NETWORK (2026-11-28, "long delay receiving walkie-talkie messages"). The
+     doorbell (/wt/b/<x>.txt, read every half second) and the live pieces (/wt/<dir>/<n>.bin) each carry a fresh ?r=,
+     so the network-first rule below stored EVERY read as a new cache entry (3,600 an hour per open tab) and put the
+     worker in the middle of the most time-critical fetches. Never through the worker, never cached. */
+  if (e.request.url.indexOf(self.location.origin + '/wt/') === 0) return;
 
   const accept = e.request.headers.get('accept') || '';
   const isDoc = e.request.mode === 'navigate' || accept.includes('text/html');

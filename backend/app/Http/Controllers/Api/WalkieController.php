@@ -104,7 +104,7 @@ final class WalkieController extends Controller
 
         return response()->json([
             'enabled' => $s['enabled'], 'me' => ['id' => $me, 'kind' => $who['kind'], 'name' => Walkie::firstName($me)],
-            'bell' => Walkie::bellPath($me), 'channels' => $channels, 'people' => $people,
+            'bell' => Walkie::bellPath($me), 'bell_key' => base64_encode(Walkie::bellKey($me)), 'channels' => $channels, 'people' => $people,
             'prefs' => ['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me), 'vibrate' => self::vibrate($me)],
             'settings' => $isAdmin ? $s : ['listen' => $s['listen'], 'retention_days' => $s['retention_days'], 'emergency' => $s['emergency'], 'emergency_name' => $s['emergency_name']],
             'can_admin' => $isAdmin, 'rate' => Walkie::SAMPLE_RATE, 'max_secs' => Walkie::MAX_SECS,
@@ -192,8 +192,17 @@ final class WalkieController extends Controller
             $centre = $ch['centre_id'] ?? null;
         }
 
+        // THE FIRST PIECE RIDES WITH THE START (2026-11-28, latency): the page cuts a short first piece (~0.2 s) and
+        // sends it here, so it is on disk before the doorbells ring - one round trip instead of start-then-chunk.
+        $first = null;
+        if ($request->filled('first')) {
+            $first = base64_decode((string) $request->input('first'), true);
+            abort_unless($first !== false && $first !== '' && strlen($first) <= self::CHUNK_MAX, 422, 'That piece of audio could not be read.');
+        }
+        $liveDir = bin2hex(random_bytes(16));
+        $liveKey = base64_encode(random_bytes(32));
         $busy = null;
-        $txId = DB::transaction(function () use ($aid, $key, $me, $label, $to, $emergency, $centre, &$busy) {
+        $txId = DB::transaction(function () use ($aid, $key, $me, $label, $to, $emergency, $centre, $liveDir, $liveKey, &$busy) {
             DB::table('walkie_floor')->insertOrIgnore(['agency_id' => $aid, 'channel' => $key]);
             $f = DB::table('walkie_floor')->where('agency_id', $aid)->where('channel', $key)->lockForUpdate()->first();
             if ($f && $f->speaker_user_id && (int) $f->speaker_user_id !== $me && $f->until && strtotime((string) $f->until) > time()) {
@@ -204,8 +213,8 @@ final class WalkieController extends Controller
             $now = now();
             $id = (int) DB::table('walkie_transmissions')->insertGetId([
                 'agency_id' => $aid, 'channel' => $key, 'channel_label' => $label, 'centre_id' => $centre, 'speaker_user_id' => $me,
-                'to_user_id' => $to, 'emergency' => $emergency, 'status' => 'live', 'live_dir' => bin2hex(random_bytes(16)),
-                'live_key' => Sensitive::seal(base64_encode(random_bytes(32)), 'text'), 'started_at' => $now, 'last_chunk_at' => $now,
+                'to_user_id' => $to, 'emergency' => $emergency, 'status' => 'live', 'live_dir' => $liveDir,
+                'live_key' => Sensitive::seal($liveKey, 'text'), 'started_at' => $now, 'last_chunk_at' => $now,
                 'created_at' => $now, 'updated_at' => $now,
             ]);
             DB::table('walkie_floor')->where('agency_id', $aid)->where('channel', $key)
@@ -232,16 +241,28 @@ final class WalkieController extends Controller
             if ($st === 'sent') $sent[] = $u;
         }
         foreach (array_chunk($rows, 500) as $part) DB::table('walkie_recipients')->insert($part);
-        DB::table('walkie_transmissions')->where('id', $txId)->update(['recipients' => count($sent)]);
-        Walkie::ring($sent);
+        $txSet = ['recipients' => count($sent)];
+        if ($first !== null) {
+            DB::table('walkie_chunks')->insertOrIgnore(['transmission_id' => $txId, 'seq' => 0, 'data' => Sensitive::seal(base64_encode($first), 'text'), 'created_at' => now()]);
+            Walkie::writeLive($liveDir, $liveKey, 0, $first);
+            $txSet['chunks'] = 1;
+        }
+        DB::table('walkie_transmissions')->where('id', $txId)->update($txSet);
+        // The ring carries the talk (sealed per person, Walkie::bellKey): an open tab plays without asking walkie/inbox.
         $wakeLabel = $to ? 'Direct' : $label;
+        $fromName = Walkie::firstName($me);
+        $startedAt = (string) DB::table('walkie_transmissions')->where('id', $txId)->value('started_at');
+        $row = fn (int $u) => ['id' => $txId, 'from' => $fromName, 'from_id' => $me, 'label' => $wakeLabel,
+            'channel' => $to ? Walkie::dmKey($u, $me) : $key, 'emergency' => $emergency, 'done' => false, 'chunks' => $first !== null ? 1 : 0,
+            'live' => '/wt/' . $liveDir . '/', 'key' => $liveKey, 'started_at' => $startedAt];
+        Walkie::ring($sent, $row);
         if ($sent) {
-            dispatch(function () use ($aid, $sent, $txId, $me, $wakeLabel, $emergency) {
-                WalkiePush::wake($aid, $sent, $txId, $me, $wakeLabel, $emergency);
+            dispatch(function () use ($aid, $sent, $txId, $me, $wakeLabel, $emergency, $row) {
+                WalkiePush::wake($aid, $sent, $txId, $me, $wakeLabel, $emergency, $row);
             })->afterResponse();
         }
 
-        return response()->json(['id' => $txId, 'recipients' => count($sent), 'skipped' => count($members) - count($sent), 'emergency' => $emergency]);
+        return response()->json(['id' => $txId, 'recipients' => count($sent), 'skipped' => count($members) - count($sent), 'emergency' => $emergency, 'first' => $first !== null]);
     }
 
     private function myLive(int $id, int $me): object

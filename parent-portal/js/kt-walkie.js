@@ -3,9 +3,10 @@
    Server: App\Support\Walkie (how it works, who may talk to whom), WalkieController (the API).
 
    This file does three things, for staff roles only:
-   1. LISTENS in every open portal tab: reads the person's "doorbell" (/wt/b/<hmac>.txt, a static file) once a
-      second; when it changes, asks GET /walkie/inbox for live talks (with their one-time key) and plays them as they
-      arrive: AES-GCM pieces /wt/<dir>/<seq>.bin -> G.711 mu-law 16 kHz -> Web Audio, ~0.3 s jitter buffer. One tab plays
+   1. LISTENS in every open portal tab: reads the person's "doorbell" (/wt/b/<hmac>.txt, a static file) every half
+      second; a ring for a new talk carries the talk itself (sealed under the person's bell_key, 2026-11-28), so it
+      plays at once - GET /walkie/inbox follows for the badge and replies (and is the way in for an old-style ring).
+      Pieces as they arrive: AES-GCM pieces /wt/<dir>/<seq>.bin -> G.711 mu-law 16 kHz -> Web Audio, ~0.3 s jitter buffer. One tab plays
       (the leader, like kt-reminders.js). Inside the Android app the native listener plays instead (KtWalkie plugin),
       so the page only shows the "Amna is talking" card.
    2. TALKS: hold the 🎙 button (or the spacebar on the Walkie-talkie screen). The mic is captured at once, cut into
@@ -21,9 +22,29 @@
   var KT = w.KT = w.KT || {};
   var STAFF_CLASSES = ['role-agency-admin', 'role-centre-director', 'role-educator', 'role-home-visitor'];
   var RATE = 16000, PIECE = 6400;            // 400 ms of 16 kHz samples
+  /* FASTER TO THE EAR (2026-11-28, Anthony: "long delay receiving walkie-talkie messages, can you check to see why it's
+     not instant"). Measured press -> voice heard was 1.8-4.8 s (median 3.7 s with the server busy). The path had four
+     server round trips in a row (start, then the first piece; the listener's doorbell read, then walkie/inbox for the
+     key), a 400 ms first piece, a 1 s doorbell read, and the 0.6 s incoming sound played only AFTER the first piece came.
+     Now: the first piece is 200 ms and rides inside the start request; the doorbell carries the talk (no walkie/inbox
+     wait); the doorbell is read every 0.5 s by the leader tab, on a worker clock (a hidden tab's own timers are slowed
+     to once a minute by Chrome); the incoming sound plays the moment the ring is seen, the voice right after it. */
+  var FIRST = 3200, POLL_MS = 500, POLL_SLOW_MS = 1500, START_WAIT_MS = 300, LEAD = 0.25;
+  /* A WORKER CLOCK: timers inside a Worker are not throttled when the tab is in the background (main-page timers are,
+     down to once a minute after five minutes hidden). later(fn, ms) = setTimeout that keeps time in a hidden tab. */
+  var later = (function () {
+    var wk = null, n = 0, cbs = {};
+    try {
+      var src = 'onmessage=function(e){var d=e.data;setTimeout(function(){postMessage(d)},d.ms)};';
+      wk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      wk.onmessage = function (e) { var f = cbs[e.data.id]; delete cbs[e.data.id]; if (f) try { f(); } catch (x) {} };
+      wk.onerror = function () { wk = null; };
+    } catch (e) { wk = null; }
+    return function (fn, ms) { if (!wk) return setTimeout(fn, ms); var id = ++n; cbs[id] = fn; wk.postMessage({ id: id, ms: ms }); return id; };
+  })();
   var ID = Math.random().toString(36).slice(2);
   var S = { me: null, bell: null, bellV: null, played: {}, queue: [], busyPlay: false, ctx: null, nativeOn: false, talk: null,
-    sel: null, replies: {}, card: null, timer: null, booted: false, worker: null, lastInbox: 0 };
+    sel: null, replies: {}, card: null, timer: null, booted: false, worker: null, lastInbox: 0, bellKey: null, nativeBuild: 0 };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function T(s, c) { try { return (KT.i18n && KT.i18n.t) ? KT.i18n.t(s, c) : s; } catch (e) { return s; } }   // c = context key ('walkie' -> 'walkie::Play')
@@ -151,19 +172,55 @@
 
   /* ---- listening ---- */
   function poll() {
-    if (!S.me || !S.bell || d.visibilityState === 'hidden' && !isLeader()) return;
-    if (!isLeader() && !S.card) { /* followers still show the card when the leader tells them (storage event) */ }
-    fetch(S.bell + '?r=' + Date.now() + Math.random().toString(36).slice(2, 6), { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (v) {
+    if (!S.me || !S.bell || d.visibilityState === 'hidden' && !isLeader()) return Promise.resolve();
+    return fetch(S.bell + '?r=' + Date.now() + Math.random().toString(36).slice(2, 6), { cache: 'no-store', credentials: 'omit' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (v) {
       v = (v || '').trim();
       if (!v) return;
       if (S.bellV === null) { S.bellV = v; return; }
-      if (v !== S.bellV) { S.bellV = v; inbox(); }
+      if (v === S.bellV) return;
+      S.bellV = v;
+      return openBell(v).then(function (t) {
+        if (t) { enqueue(t); later(inbox, 1500); }   // the talk is already playing; the badge / replies can wait
+        else inbox();
+      });
     }).catch(function () {});
+  }
+  /* The doorbell loop: the leader every 0.5 s (also while hidden: it is the tab that plays), other open tabs every
+     1.5 s (they only show the card), hidden followers not at all. Each read starts when the last one is done. */
+  function pollLoop() { poll().then(next1, next1); function next1() { later(pollLoop, isLeader() ? POLL_MS : POLL_SLOW_MS); } }
+  /* "<ms>.<base64 iv|ciphertext|tag>" -> the live talk (walkie/inbox's row), or null (an old-style ring, a ring for
+     something else, a stale one, no key) - then walkie/inbox is asked as before. */
+  function openBell(v) {
+    var i = v.indexOf('.');
+    if (i < 0 || !S.me || !S.me.bell_key || !(w.crypto && w.crypto.subtle)) return Promise.resolve(null);
+    var kp = S.bellKey || (S.bellKey = w.crypto.subtle.importKey('raw', unb64(S.me.bell_key), 'AES-GCM', false, ['decrypt']));
+    return kp.then(function (k) {
+      var u = unb64(v.slice(i + 1));
+      return w.crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.subarray(0, 12) }, k, u.subarray(12));
+    }).then(function (b) {
+      var o = JSON.parse(new TextDecoder().decode(b));
+      if (!o || !o.live || !o.live.id || !o.live.key) return null;
+      if (o.ts && Math.abs(Date.now() - o.ts) > 120000) return null;   // old (or a skewed clock): walkie/inbox decides
+      return o.live;
+    }).catch(function () { S.bellKey = null; return null; });
+  }
+  function enqueue(t) {
+    if (!t || S.played[t.id]) return;
+    S.played[t.id] = 1;
+    nativePlay(t);
+    S.queue.push(t); next();
+  }
+  /* Inside the Android app (3.13.5 / vc81+) the native listener plays it straight away from the ring, without waiting
+     for Google's push (which still comes, and is skipped as already played). Older apps: the push plays it. */
+  function nativePlay(t) {
+    var n = native();
+    if (!S.nativeOn || S.nativeBuild < 81 || !n || !n.play) return;
+    try { n.play({ talk: JSON.stringify(t), sounds: soundsOn(), vibrate: vibOn() }).catch(function () {}); } catch (e) {}
   }
   function inbox() {
     S.lastInbox = Date.now();
     api().get('/walkie/inbox').then(function (r) {
-      (r.live || []).forEach(function (t) { if (!S.played[t.id]) { S.played[t.id] = 1; S.queue.push(t); } });
+      (r.live || []).forEach(function (t) { if (!S.played[t.id]) { S.played[t.id] = 1; nativePlay(t); S.queue.push(t); } });
       (r.replies || []).forEach(function (x) { var k = x.tx + ':' + x.from; if (!S.replies[k]) { S.replies[k] = 1; toast('📻', x.from + ' can\'t talk right now', 'Walkie-talkie reply', '#B45309'); } });
       emit('kt:walkie-inbox', { unplayed: +r.unplayed || 0, latest: r.latest || null });
       next();
@@ -332,7 +389,13 @@
         if (S.nativeOn) setTimeout(function () { clearInterval(iv); finish(); }, 6000);
         return;
       }
-      w.crypto.subtle.importKey('raw', unb64(t.key), 'AES-GCM', false, ['decrypt']).then(function (k) { key = k; loop(0, 0, null, Date.now()); }, finish);
+      var chirpEnd = null;
+      w.crypto.subtle.importKey('raw', unb64(t.key), 'AES-GCM', false, ['decrypt']).then(function (k) {
+        key = k;
+        // The incoming sound NOW, while the first piece is still on its way (it used to wait for it: +0.6 s).
+        if (unlocked()) { var c1 = ctx(); chirpEnd = chirp(c1, c1.currentTime + 0.02, t.emergency); }
+        loop(0, 0, null, Date.now());
+      }, finish);
       function loop(seq, misses, at, since) {
         if (stop) return finish();
         fetch(t.live + seq + '.bin?r=' + Date.now(), { cache: 'no-store', credentials: 'omit' }).then(function (r) {
@@ -344,7 +407,7 @@
             var c2 = ctx();
             if (!unlocked()) { loop(seq + 1, 0, at, Date.now()); return; }    // locked tab: catch up silently until "Listen" is tapped
             var now = c2.currentTime;
-            if (at === null) at = Math.max(now + 0.3, chirp(c2, now + 0.02, t.emergency) + 0.06);   // the incoming sound, then the voice
+            if (at === null) at = Math.max(now + LEAD, (chirpEnd !== null ? chirpEnd : chirp(c2, now + 0.02, t.emergency)) + 0.06);   // the incoming sound, then the voice
             else if (at < now + 0.05) at = now + 0.12;
             at = schedule(c2, new Uint8Array(pcm), at);
             markHeard(false);
@@ -359,9 +422,9 @@
                 var c3 = S.ctx, end = c3 && at ? sound(c3, 'rxEnd', Math.max(at, c3.currentTime) + 0.03) : 0;   // they finished
                 var left = c3 && end ? Math.max(0, (end - c3.currentTime) * 1000) : 0; setTimeout(finish, left);
               }
-              else setTimeout(function () { loop(seq, misses + 1, at, since); }, 120);
-            }).catch(function () { setTimeout(function () { loop(seq, misses + 1, at, since); }, 150); });
-          } else setTimeout(function () { loop(seq, misses + 1, at, since); }, 120);
+              else later(function () { loop(seq, misses + 1, at, since); }, 100);
+            }).catch(function () { later(function () { loop(seq, misses + 1, at, since); }, 150); });
+          } else later(function () { loop(seq, misses + 1, at, since); }, 100);
         });
       }
     });
@@ -404,7 +467,7 @@
     if (!md || !md.getUserMedia) { toast('⚠️', 'This browser cannot use the microphone', '', '#DC2626'); return; }
     var c = ctx(); if (!c) return;
     if (S.me && channel && channel.indexOf('emergency') !== 0) { S.me.last = channel; emit('kt:walkie-last', { key: channel }); }
-    var tk = S.talk = { channel: channel, id: null, seq: 0, pend: [], buf: new Float32Array(PIECE), fill: 0, pos: 0, ups: [], released: false, t0: Date.now(), ui: ui };
+    var tk = S.talk = { channel: channel, id: null, seq: 0, pend: [], buf: new Float32Array(PIECE), fill: 0, pos: 0, ups: [], released: false, t0: Date.now(), ui: ui, sent: false };
     ui && ui.state('opening');
     var gotMic = function (stream) {
       clearTimeout(tk.micT);
@@ -418,7 +481,7 @@
         for (; tk.pos < inp.length; tk.pos += ratio) {
           var i = tk.pos | 0, f = tk.pos - i, v = inp[i] + ((inp[i + 1] !== undefined ? inp[i + 1] : inp[i]) - inp[i]) * f;
           tk.buf[tk.fill++] = v;
-          if (tk.fill === PIECE) piece(tk);
+          if (tk.fill === (tk.seq === 0 ? FIRST : PIECE)) piece(tk);
         }
         tk.pos -= inp.length;
       };
@@ -428,7 +491,7 @@
       if (tk.released) talkEnd();
     };
     var noMic = function () {
-      clearTimeout(tk.micT);
+      clearTimeout(tk.micT); clearTimeout(tk.goT);
       if (tk.failed || tk.forced) return;
       tk.failed = true; teardown(tk); if (S.talk === tk) S.talk = null; ui && ui.state('idle');
       if (tk.id) api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {});
@@ -439,18 +502,28 @@
       md.getUserMedia(AUDIO).then(gotMic, noMic);
       tk.micT = setTimeout(function () { if (!tk.stream && !tk.failed) { noMic(); } }, 6000);   // a permission bridge that never answers
     }
-    api().post('/walkie/talk', { channel: channel }, { quiet: true }).then(function (r) {
+    /* The start goes with the first 0.2 s piece (one round trip, and the piece is there when the doorbells ring); when
+       the microphone is not running yet it goes on its own after START_WAIT_MS, and the pieces follow. */
+    tk.go = function (first) {
+      if (tk.sent || tk.failed || tk.forced) return;
+      tk.sent = true; clearTimeout(tk.goT);
+      var body = { channel: channel }; if (first) body.first = first;
+      api().post('/walkie/talk', body, { quiet: true }).then(started, refused);
+    };
+    tk.goT = setTimeout(function () { tk.go(null); }, START_WAIT_MS);
+    function started(r) {
       tk.id = r.id;
       if (tk.failed || tk.forced) { api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {}); return; }   // no microphone / let go of
       tk.ack = r;
       if (tk.liveUi && !tk.released) ui && ui.state('live', r);   // now with how many are hearing
       tk.pend.splice(0).forEach(function (p) { send(tk, p); });
       if (tk.released) talkEnd();
-    }, function (e) {
+    }
+    function refused(e) {
       tk.failed = true; teardown(tk); if (S.talk === tk) S.talk = null; ui && ui.state('idle');
       if (e && e.status === 409) toast('📻', (e.data && e.data.talking ? e.data.talking + ' is talking' : 'Someone is talking'), 'Try again in a moment.', '#B45309');
       else toast('⚠️', 'Could not start talking', errMsg(e), '#DC2626');
-    });
+    }
     tk.cap = setTimeout(function () { if (S.talk === tk) talkEnd(); }, ((S.me && S.me.max_secs) || 60) * 1000);
   }
   function piece(tk) {
@@ -458,6 +531,7 @@
     for (var i = 0; i < n; i++) out[i] = mulaw(tk.buf[i]);
     tk.fill = 0;
     var p = { seq: tk.seq++, data: b64(out) };
+    if (p.seq === 0 && !tk.sent) { tk.go(p.data); return; }   // the first piece rides with the start
     if (tk.id) send(tk, p); else tk.pend.push(p);
   }
   function send(tk, p) {
@@ -470,7 +544,7 @@
     // The microphone itself stays open a little while (warm) for the next press; cool() closes it.
     if (tk.stream && tk.stream !== S.warm) { try { tk.stream.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {} }
     keepWarm();
-    clearTimeout(tk.cap); clearTimeout(tk.micT); clearTimeout(tk.relT);
+    clearTimeout(tk.cap); clearTimeout(tk.micT); clearTimeout(tk.relT); clearTimeout(tk.goT);
   }
   /* Let go of a talk that cannot finish normally (no server answer after the release): the button is free again. */
   function forceEnd(tk) {
@@ -482,6 +556,9 @@
   function talkEnd() {
     var tk = S.talk; if (!tk) return;
     tk.released = true;
+    if (!tk.sent && !(tk.stream && (tk.fill > 0 || tk.seq > 0))) {   // let go before anything was recorded: no talk at all
+      tk.forced = true; teardown(tk); if (S.talk === tk) S.talk = null; tk.ui && tk.ui.state('idle'); return;
+    }
     if (!tk.id || !tk.stream) {   // finishes when the start / mic answers - but never waits forever
       if (tk.failed) S.talk = null;
       else { if (tk.stream && tk.fill > 0) piece(tk); clearTimeout(tk.relT); tk.relT = setTimeout(function () { forceEnd(tk); }, 8000); }
@@ -503,11 +580,12 @@
     return api().get('/walkie/me').then(function (r) {
       emit('kt:walkie-me', r || null);
       if (!r || !r.enabled) { S.me = r && r.me ? r : null; S.bell = null; return r; }
-      S.me = r; S.bell = r.bell;
+      S.me = r; S.bell = r.bell; S.bellKey = null;
       var n = native();
       if (n && n.status) {
         n.status().then(function (st) {
           S.nativeOn = !!(st && st.configured && String(st.userId) === String(r.me.id));
+          S.nativeBuild = +(st && st.build) || 0;
           if (!S.nativeOn && st && st.pushToken) {
             api().post('/walkie/device', { push_token: st.pushToken, platform: 'android', app_build: st.build || '' }, { quiet: true }).then(function (x) {
               return n.configure({ base: location.origin, secret: x.secret, userId: String(r.me.id), name: r.me.name });
@@ -526,8 +604,7 @@
     if (S.booted) return;
     if (!isStaff() || !api()) return;
     S.booted = true;
-    load().then(function () { if (S.bell) { poll(); inbox(); } }).catch(function () {});
-    S.timer = setInterval(poll, 1000);
+    load().then(function () { if (S.bell) inbox(); }).catch(function () {}).then(pollLoop);
     // A hidden tab's timers slow down: on return, ask straight away.
     d.addEventListener('visibilitychange', function () { if (!d.hidden && S.me) { claim(); if (Date.now() - S.lastInbox > 3000) inbox(); } });
     css();

@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
  * root-managed, no supervisor), which is why it is pieces + static files rather than a socket.
  *
  * WAKING A LISTENER. Each person has a "doorbell": parent-portal/wt/b/<HMAC of their id>.txt, a number that changes
- * when something is said to them. An open portal tab reads it once a second (static, ~0 CPU). Phones are woken by a
+ * when something is said to them. An open portal tab reads it every half second (static, ~0 CPU); a ring for a new
+ * talk also carries the talk itself, sealed under the person's bellKey() (2026-11-28), so the tab plays it at once. Phones are woken by a
  * high-priority DATA-ONLY FCM message (WalkiePush) to the app's native listener (Android 3.13+), which plays it out
  * loud with the screen off. Other phones get a normal "Walkie-talkie from Amna" notification to tap.
  *
@@ -316,16 +317,49 @@ final class Walkie
         return '/wt/b/' . self::bellName($uid) . '.txt';
     }
 
-    /** Ring these people's doorbells (an open portal tab notices within a second). */
-    public static function ring(array $uids): void
+    /**
+     * The person's DOORBELL KEY (2026-11-28, Anthony: "long delay receiving walkie-talkie messages"). A ring for a new
+     * talk carries that talk (its folder and one-time key, the same row walkie/inbox gives) sealed AES-256-GCM under
+     * this key, so an open tab starts playing straight from the doorbell instead of first asking the API - one PHP
+     * round trip less on every talk, 0.1 s on a quiet server and 1-1.5 s while the box is busy (measured). Handed only
+     * to the person themself (walkie/me, signed in), never written anywhere: derived from the app's secret.
+     */
+    public static function bellKey(int $uid): string
+    {
+        $k = Sensitive::enabled() ? Sensitive::key() : (string) config('app.key');
+
+        return hash_hmac('sha256', 'walkie-bell-key:' . $uid, $k, true);
+    }
+
+    /** AES-256-GCM, base64(12-byte IV | ciphertext | 16-byte tag) - what the portal and the phone open. */
+    public static function sealFor(string $key, string $plain): string
+    {
+        $iv = random_bytes(12);
+        $tag = '';
+        $ct = openssl_encrypt($plain, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16);
+
+        return $ct === false ? '' : base64_encode($iv . $ct . $tag);
+    }
+
+    /**
+     * Ring these people's doorbells (an open portal tab notices within half a second). $talk (optional) gives, per
+     * person, the live talk to put in the ring ("<ms>.<sealed json>"); without it the ring is the bare time and the
+     * tab asks walkie/inbox, as before.
+     */
+    public static function ring(array $uids, ?callable $talk = null): void
     {
         $dir = self::liveRoot() . '/b';
         if (! is_dir($dir)) @mkdir($dir, 0775, true);
         $v = (string) (int) (microtime(true) * 1000);
         foreach (array_unique(array_map('intval', $uids)) as $u) {
             if ($u <= 0) continue;
+            $body = $v;
+            if ($talk && ($row = $talk($u)) !== null) {
+                $sealed = self::sealFor(self::bellKey($u), (string) json_encode(['ts' => (int) $v, 'live' => $row], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                if ($sealed !== '') $body = $v . '.' . $sealed;
+            }
             $f = $dir . '/' . self::bellName($u) . '.txt';
-            @file_put_contents($f . '.tmp', $v);
+            @file_put_contents($f . '.tmp', $body);
             @rename($f . '.tmp', $f);
         }
     }

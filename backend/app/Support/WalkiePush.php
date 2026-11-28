@@ -27,7 +27,13 @@ final class WalkiePush
     public static ?array $capture = null;
 
     /** @param int[] $uids */
-    public static function wake(int $aid, array $uids, int $txId, int $speaker, string $label, bool $emergency): array
+    /**
+     * $talk (optional, 2026-11-28 latency): fn(int $uid) => the live-talk row (walkie/device/wake's shape). When given,
+     * each walkie phone's push also carries it as `lk`, sealed AES-256-GCM under that phone's own key (SHA-256 of its
+     * walkie secret, which only the phone holds - the server keeps just the hash), so the phone starts playing without
+     * first calling walkie/device/wake. Google sees ciphertext only. Phones without the code (app < 3.13.5) ignore it.
+     */
+    public static function wake(int $aid, array $uids, int $txId, int $speaker, string $label, bool $emergency, ?callable $talk = null): array
     {
         $from = Walkie::firstName($speaker);
         $title = ($emergency ? '🚨 ' : '📻 ') . 'Walkie-talkie from ' . $from;
@@ -43,13 +49,22 @@ final class WalkiePush
         $msgs = [];
         if ($ok) {
             $walkie = DB::table('walkie_devices')->whereIn('user_id', $ok)->where('platform', 'android')->whereNotNull('push_token')
-                ->get(['user_id', 'push_token']);
+                ->get(['user_id', 'push_token', 'secret_hash']);
             $wTokens = [];
+            $prefs = $talk ? DB::table('walkie_prefs')->whereIn('user_id', $ok)->get(['user_id', 'sounds', 'vibrate'])->keyBy('user_id') : collect();
             foreach ($walkie as $d) {
                 $wTokens[(string) $d->push_token] = true;
+                $data = ['kt_walkie' => '1', 'tx' => (string) $txId, 'from' => $from, 'ch' => $label, 'em' => $emergency ? '1' : '0'];
+                $dk = $talk && is_string($d->secret_hash) && strlen($d->secret_hash) === 64 ? hex2bin($d->secret_hash) : false;
+                if ($dk !== false && $talk) {
+                    $p = $prefs[(int) $d->user_id] ?? null;
+                    $lk = Walkie::sealFor($dk, (string) json_encode(['t' => $talk((int) $d->user_id),
+                        'snd' => $p === null || $p->sounds === null ? true : (bool) $p->sounds,
+                        'vib' => $p === null || $p->vibrate === null ? true : (bool) $p->vibrate], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                    if ($lk !== '') $data['lk'] = $lk;
+                }
                 $msgs[] = ['user' => (int) $d->user_id, 'kind' => 'walkie', 'message' => ['token' => (string) $d->push_token,
-                    'android' => ['priority' => 'HIGH', 'ttl' => '30s'],
-                    'data' => ['kt_walkie' => '1', 'tx' => (string) $txId, 'from' => $from, 'ch' => $label, 'em' => $emergency ? '1' : '0']]];
+                    'android' => ['priority' => 'HIGH', 'ttl' => '30s'], 'data' => $data]];
             }
             $fcm = app(FcmService::class);
             $others = DB::table('device_tokens')->whereIn('user_id', $ok)->whereIn('platform', ['android', 'ios'])->get(['user_id', 'token']);
