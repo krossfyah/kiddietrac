@@ -169,6 +169,10 @@
   // Educators can view + edit their own centre's weekly menu (the backend scopes
   // it via assertCentreAccess). The rest of operations stays director/admin-only.
   Shell.registerScreen('educator:menu', bridge('KT.V22p53', 'renderMenu'));
+  // Substitutes take open cover here (2026-11-28): anyone on the agency's substitute pool, whatever their role.
+  ['educator','home_visitor','centre_director','agency_admin','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':cover-requests', bridge('KT.V22p53', 'renderCoverRequests'));
+  });
   // Parents get the read-only published menu for their child's centre.
   Shell.registerScreen('guardian:menu', bridge('KT.V22p53', 'renderParentMenu'));
 

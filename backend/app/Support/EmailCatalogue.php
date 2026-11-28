@@ -191,6 +191,15 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
+                'key' => 'substitute-cover-needed', 'audience' => 'staff',
+                'name' => 'Cover needed (substitute list)',
+                'fires' => 'When a director or admin posts an open shift on Substitutes, or a taken shift opens again (released or given back).',
+                'to' => 'Each active person on the substitute list who covers that centre and chose By email (by first name)',
+                'subject' => 'Cover needed: {when} at {centre}',
+                'source' => 'Support/SubstituteMail.php',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'billing-reminder', 'audience' => 'platform',
                 'name' => 'KiddieTrac invoice overdue (to the agency)',
                 'fires' => 'When a KiddieTrac subscription invoice to an agency is overdue, on the platform reminder schedule.',

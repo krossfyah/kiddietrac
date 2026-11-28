@@ -113,6 +113,7 @@ final class EmailOverrides
         'TourMail@rescheduled' => 'tour-rescheduled',
         'TourMail@cancelled' => 'tour-cancelled',
         'TourMail@thanks' => 'tour-thank-you',
+        'SubstituteMail@request' => 'substitute-cover-needed',
         'BillingNoticeMail@tuitionIncrease' => 'tuition-increase-notice',
         'AccountLedgerController@emailStatement' => 'account-statement',
         'CentreOffboardController@notifyClosure' => 'provider-closed',

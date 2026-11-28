@@ -731,6 +731,7 @@
           { hash: 'hr',                label: 'HR dashboard',           icon: '🧑‍💼' },
           { hash: 'hr-people',         label: 'People',                 icon: '👥', hrFold: true },
           { hash: 'time-off',          label: 'Time off',               icon: '🌴', alt: 'hr-time-off' },
+          { hash: 'cover-requests',    label: 'Cover shifts',           icon: '🤚' },   // substitute pool: open cover to take (2026-11-28)
           { hash: 'hr-absence',        label: 'Absence & lateness',     icon: '🤒', hrFold: true },
           { hash: 'schedule',          label: 'Rota & shifts',          icon: '🗒️', alt: 'hr-rota' },
           { hash: 'timesheets',        label: 'Clock-ins & timesheets', icon: '🕘', alt: 'hr-timesheets' },
@@ -831,6 +832,7 @@
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
           { hash: 'announcements', label: 'News',          icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'time-off',      label: 'Time off',      icon: '🌴' },
+          { hash: 'cover-requests', label: 'Cover shifts',  icon: '🤚' },   // substitute pool: open cover to take (2026-11-28)
           // 2026-08-30: the canned Reports screen, scoped server-side to this
           // educator's own rooms and their own clock-ins.
           { hash: 'reports',       label: 'Reports',       icon: '📊' },
@@ -1567,6 +1569,7 @@
     'hr-payroll': 'Expense and mileage claims.',
     'my-hr': 'Your onboarding checklist, courses, reviews and goals.',
     'substitutes': 'Cover for absent staff.',
+    'cover-requests': 'Shifts that need a substitute, to take.',
     'payroll': 'Pay runs and hours.',
     'workforce-funding': 'Ontario WEG and workforce compensation: wage components, the 32-day check and the year-end report.',
     'background-checks': 'Criminal record and background screening for every staff member.',

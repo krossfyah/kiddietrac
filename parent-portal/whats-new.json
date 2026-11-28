@@ -2,6 +2,20 @@
     "updated": "2026-11-28",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-28",
+            "icon": "🙋",
+            "title": "Substitute list and Cover shifts",
+            "body": "Keep a substitute list (who, which centres, how they are told, active or not), post a shift that needs cover, and see who took it. People on the list are told by app or email and take the shift themselves under Cover shifts: first come, first served, or confirmed by a director if your agency prefers. With KiddieTrac HR, a filled shift goes straight onto the rota.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-28",
             "icon": "🏖",

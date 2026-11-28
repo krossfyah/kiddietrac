@@ -3,73 +3,81 @@ title: Substitutes
 category: Staff Management
 order: 44
 roles: agency_admin, platform_admin, centre_director
-screens: substitutes
+screens: substitutes, cover-requests
 ---
 # Substitutes
 
-The Substitutes screen is where you manage cover when an educator is away. It shows your on-call substitute pool in the order you contact them, the most recent cover requests and whether each one has been filled, and lets you post an open shift that notifies the substitutes who cover that centre at once.
+The Substitutes screen arranges cover when someone is away. You keep a **substitute list** (who can cover, which
+centres, how they are told), post a shift that needs cover, and see who took it. The people on the list take shifts
+themselves under **Cover shifts**.
 
 [[open: #substitutes | Open Substitutes]]
 
-**Where it is:** sidebar → **Operations** → **Substitutes**. The screen opens as **Substitute teachers**.
+**Where to find it:** side menu → **Operations** → **Substitutes**. The screen opens under **🙋 Substitutes**.
 
-## Checking your substitute pool
+## Who can be a substitute
 
-1. Open **Operations** → **Substitutes**.
-2. On the left, read **Pool**. The number beside it is how many active substitutes you have.
-3. Each row shows the substitute's **Name** and **Priority**. Priority 1 is the first person to call, then 2, and so on.
-4. If the table says **No substitutes added yet.**, nobody is in the pool yet, and posting a shift will not notify anyone.
+There is no separate substitute account. A substitute is one of your own staff (an educator, home visitor or
+director) whom you add to the list. Someone who leaves (account closed, role switched off, or HR file marked as left)
+drops off the list by themselves and is never told about cover again.
 
-> ℹ️ The pool lists active substitutes only. Someone who has been taken off the pool no longer appears and is not notified.
+## Adding someone to the substitute list
 
-## Posting an open shift
+1. Press **+ Add substitute**. A popup opens.
+2. Choose the **Person** from your staff.
+3. Tick the **Centres they cover**. An agency admin can leave them all unticked for every centre; a director ticks their own centres.
+4. Choose **How they are told about cover**: **In the app**, **By email**, or both.
+5. Set the **Order to ask** (1 = first), and add **Qualifications** and **When they can work** if they help.
+6. Leave **Active** ticked. Untick it to keep someone on the list without telling them about cover.
+7. Press **Save**.
 
-1. On the right, under **Recent requests**, press **+ Post open shift**. The **New substitute request** dialog opens.
-2. In **Centre**, choose the centre the shift is at. The list holds only the centres you may post for; if you work at one centre it is already chosen.
-3. Pick the **Shift date**.
-4. Set the **Start** and **End** times.
-5. Optionally type a **Reason**, for example sick, personal or vacation.
-6. Press **Post + notify**. The dialog closes, the request appears at the top of **Recent requests**, and a toast says how many were told, for example "Shift posted. 3 substitutes told."
+To change someone, open the row's **⋮** menu and choose **Edit**. **🗑 Remove** takes them off the list; cover they
+already took stays theirs.
 
-The active substitutes who cover that centre get a **Substitute needed** notification in their bell (and on their phone if they use the KiddieTrac app) with the centre name, the date and the times, asking them to contact the centre if they can take the shift. A pool member with no centres listed covers every centre; one listed for other centres only is not told. You are not notified about your own post, and the notice has no link, because substitutes cannot open this screen.
+## Posting a shift that needs cover
 
-To close the dialog without posting, press **Cancel**.
+1. Press **+ Post open shift**.
+2. Choose the **Centre** and, if you know it, the **Room**.
+3. Enter the **Date**, **Start** and **End**, a **Reason** and any **Notes for the substitute**.
+4. Press **Post and tell substitutes**. Everyone active on the list who covers that centre is told, the way they chose.
+   The message shows how many were told.
 
-## Following up on requests
+## When someone takes it
 
-1. Look at **Recent requests**. The number beside it is how many requests are listed (up to the last 100).
-2. Each row shows the shift **Date** with the centre name under it, the **Status** (**Open**, **Filled**, **Cancelled** or **Expired**) and **Filled by**.
-3. A request in amber is still open; a request in green is filled, and **Filled by** shows who took it.
-4. If an urgent shift is still open close to its start time, phone the substitutes in **Priority** order.
+- **First come, first served** (the usual way): the first person to press **Take this shift** gets it. The status
+  becomes **Filled** and you are told who took it.
+- **A director confirms each substitute**: an agency admin can tick this at the top of **Cover requests**. Then a
+  taken shift shows **Claimed - to confirm** until a director opens the row's **⋮** menu and chooses **✅ Confirm**.
 
-> 💡 For shifts that any of your own staff can pick up, use the open-shift board in **Rota & shifts** instead.
+From the row's **⋮** menu you can also:
+
+- **↩️ Release** the person who took it. The shift opens again and the list is told.
+- **🚫 Cancel request** when cover is no longer needed. Whoever took it is told.
+
+> 💡 **With KiddieTrac HR:** when the request names a room, a filled shift goes straight onto the rota as a shift for
+> the substitute in that room. Releasing or cancelling takes it off the rota again.
+
+## Taking cover yourself
+
+If you are on the list yourself, open **Cover shifts** in the side menu. It works the same way as for educators: see
+[[cover-shifts]].
 
 ## Who can do what
 
-| Role | What they can do |
+| Role | Can |
 |---|---|
-| Agency admin | See the pool and every request, and post open shifts for any centre. |
-| Centre director | Sees only the requests for their own centres and the pool members who cover them (or cover every centre). Posts shifts only for the centres they work in. |
-| Platform admin | The same as an agency admin, in the agency they are working in. |
-| Substitutes in the pool | Get a notification for each new request at a centre they cover. |
-| Parents | Never see this screen. |
+| Agency admin | Everything, for every centre, including the "director confirms" switch. |
+| Centre director | Their own centres: add and change people kept to those centres, post, confirm, release and cancel. |
+| Platform admin | The agency chosen in the agency switcher. |
+| Educator, home visitor | Take cover under **Cover shifts** when they are on the list. |
 
-Substitutes are part of the staff scheduling features of your plan. If your plan does not include them, the lists stay empty.
+## FAQs and when something goes wrong
 
-## FAQs and troubleshooting
+??? I posted a shift and nobody was told. | Nobody active on the list covers that centre. Add someone, or tick that centre for someone already on the list.
+??? I cannot edit or remove someone. | They also cover centres you do not direct, or every centre. Ask an agency admin.
+??? Someone cannot take a shift. | **Cover shifts** shows them why: they do not cover that centre, it has started, they are already working then, or (with HR) they marked themselves unavailable.
+??? Can a substitute give a shift back? | Yes, before it starts. The shift opens again, the list is told, and you get a notice.
 
-??? The pool says "No substitutes added yet." | There are no active substitutes in your agency's pool, so posting a shift notifies nobody. Contact KiddieTrac support to set up your pool.
-??? Recent requests says "No requests yet." | Nobody has posted an open shift yet. Press **+ Post open shift** to post the first one.
-??? I pressed Post + notify and got a message instead. | Every field except **Reason** is needed, and the screen says what is missing: "Choose the centre that needs cover.", "Choose the date of the shift.", "Enter the start and end time of the shift." or "The shift has to end after it starts." Fix that field and press **Post + notify** again.
-??? I get "You are not placed at a centre yet, so there is nowhere to post a shift for." | Your account is not linked to a centre in this agency. Ask your agency admin to add you to your centre.
-??? The toast says "No substitutes in your pool cover this centre yet, so nobody was told." | The shift was posted, but nobody in the pool covers that centre. Phone your substitutes, or ask your agency admin to add the centre to a pool member.
-??? Who is notified when I post a shift? | Only the active substitutes in your pool who cover that centre. Your other staff and families are not told.
-??? Both lists are empty but we do use substitutes. | Your plan may not include staff scheduling. Ask your agency admin to check your plan.
+## Related screens
 
-## Related
-
-[[open: #schedule | Rota & shifts]]
-[[open: #time-off | Time off]]
-
-- [[hr-open-shifts]]
-- [[time-off]]
+[[open: #cover-requests | Cover shifts]] [[open: #time-off | Time off]]

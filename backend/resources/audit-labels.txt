@@ -642,6 +642,12 @@ post operations/room-rotations | Planned a room rotation
 post operations/sub-requests | Asked for a substitute
 post operations/sub-requests/{id}/claim | Took a substitute shift
 post operations/substitutes | Saved a substitute
+put operations/substitutes/settings | Changed whether substitute cover needs a director to confirm
+delete operations/substitutes/{id} | Took someone off the substitute list
+post operations/sub-requests/{id}/confirm | Confirmed a substitute for a shift
+post operations/sub-requests/{id}/release | Released a substitute from a shift
+post operations/sub-requests/{id}/cancel | Cancelled a cover request
+post me/cover-requests/{id}/withdraw | Gave back a substitute shift
 patch parent-issues/{id} | Updated a parent concern
 post parent-issues/{id}/messages | Replied to a parent concern
 post parent/absences | Reported an absence

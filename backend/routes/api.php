@@ -3696,16 +3696,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/operations/field-trips/{id}', [\App\Http\Controllers\Api\OperationsController::class, 'deleteFieldTrip']);
         Route::get  ('/operations/field-trips/{id}',  [\App\Http\Controllers\Api\OperationsController::class, 'showFieldTrip'])->where('id','[0-9]+');   // trip details view (2026-10-24)
         Route::get  ('/operations/field-trips/{id}/permissions', [\App\Http\Controllers\Api\OperationsController::class, 'listPermissionsForTrip']);
-        Route::get  ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'listSubstitutes']);
-        Route::post ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'upsertSubstitute']);
-        Route::get  ('/operations/sub-requests',      [\App\Http\Controllers\Api\OperationsController::class, 'listSubRequests']);
-        Route::post ('/operations/sub-requests',      [\App\Http\Controllers\Api\OperationsController::class, 'createSubRequest']);
+        // Substitutes: the pool + cover requests (2026-11-28, App\Support\SubstituteCover). Directors: their own centres.
+        Route::get  ('/operations/substitutes',       [\App\Http\Controllers\Api\SubstitutesController::class, 'pool']);
+        Route::post ('/operations/substitutes',       [\App\Http\Controllers\Api\SubstitutesController::class, 'savePool']);
+        Route::put  ('/operations/substitutes/settings', [\App\Http\Controllers\Api\SubstitutesController::class, 'saveSettings']);
+        Route::delete('/operations/substitutes/{id}', [\App\Http\Controllers\Api\SubstitutesController::class, 'removePool'])->whereNumber('id');
+        Route::get  ('/operations/sub-requests',      [\App\Http\Controllers\Api\SubstitutesController::class, 'requests']);
+        Route::post ('/operations/sub-requests',      [\App\Http\Controllers\Api\SubstitutesController::class, 'create']);
+        Route::post ('/operations/sub-requests/{id}/confirm', [\App\Http\Controllers\Api\SubstitutesController::class, 'confirm'])->whereNumber('id');
+        Route::post ('/operations/sub-requests/{id}/release', [\App\Http\Controllers\Api\SubstitutesController::class, 'release'])->whereNumber('id');
+        Route::post ('/operations/sub-requests/{id}/cancel',  [\App\Http\Controllers\Api\SubstitutesController::class, 'cancel'])->whereNumber('id');
         Route::get  ('/operations/inspection',        [\App\Http\Controllers\Api\OperationsController::class, 'getInspectionChecklist']);
         Route::patch('/operations/inspection/{id}',   [\App\Http\Controllers\Api\OperationsController::class, 'updateChecklistItem']);
         Route::get  ('/operations/signatures/{child}', [\App\Http\Controllers\Api\OperationsController::class, 'listSignatures']);
     });
-    // parent claims open sub request
-    Route::post('/operations/sub-requests/{id}/claim', [\App\Http\Controllers\Api\OperationsController::class, 'claimSubRequest']);
+    // A substitute (staff in the agency's substitute pool) sees and takes open cover (2026-11-28). Was open to any
+    // signed-in account, parents included, with no pool or centre check.
+    Route::middleware(KT_PROVIDER_ROLES)->group(function () {
+        Route::get ('/me/cover-requests',                 [\App\Http\Controllers\Api\SubstitutesController::class, 'mine']);
+        Route::post('/me/cover-requests/{id}/withdraw',   [\App\Http\Controllers\Api\SubstitutesController::class, 'withdraw'])->whereNumber('id');
+        Route::post('/operations/sub-requests/{id}/claim', [\App\Http\Controllers\Api\SubstitutesController::class, 'claim'])->whereNumber('id');
+    });
 
     // v22p55 photo feed + feedback + doc extractions list
     Route::get ('/photos/feed',        [\App\Http\Controllers\Api\PhotoFeedController::class, 'feed']);

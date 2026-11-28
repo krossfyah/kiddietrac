@@ -1269,87 +1269,221 @@
   }
 
   // ============================ Substitutes ============================
+  /* SUBSTITUTES (2026-11-28, App\Support\SubstituteCover): the pool (who, which centres, how to reach them, active),
+     cover requests with who took them (Confirm / Release / Cancel), and the agency's "a director confirms" switch.
+     Substitutes take cover on #cover-requests (renderCoverRequests below). */
+  const subSay = (m, k) => { if (window.KT && KT.toast) KT.toast(m, k || 'success', 7000); };
+  const subErr = (e, fb) => subSay((e && e.message) || fb, 'error');
+  const SUB_TINT = { open: '#D97706', claimed: '#7C3AED', filled: '#047857', cancelled: '#64748B', expired: '#64748B' };
+  const subPill = (r) => `<span style="color:${SUB_TINT[r.status] || '#64748B'};font-weight:700;">${esc(r.status_label || r.status)}</span>`;
+  const subTh = (t, w) => `<th style="text-align:left;padding:8px 6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;text-transform:uppercase;${w ? 'width:' + w + ';' : ''}">${t}</th>`;
+  const subTd = (h, x) => `<td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;vertical-align:top;${x || ''}">${h}</td>`;
+  const subOpenId = () => { const m = /[?&]open=(\d+)/.exec(location.hash); return m ? +m[1] : 0; };
+  const subField = (label, html) => `<label style="display:block;margin:0 0 10px;font-size:13px;font-weight:600;color:#334155;">${label}<div style="margin-top:4px;">${html}</div></label>`;
+  const subInput = 'width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;';
+
   async function renderSubstitutes(main) {
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const [pool, requests] = await Promise.all([
-      Api.get('/operations/substitutes').catch(() => ({ data: [] })),
-      Api.get('/operations/sub-requests').catch(() => ({ data: [] })),
-    ]);
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <h2 style="margin:0 0 6px;color:#1F6080;">Substitute teachers</h2>
-      <p style="color:#6B7280;font-size:14px;">Manage your on-call pool and post open shifts.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px;">
-        <div>
-          <h3 style="font-size:14px;color:#374151;">Pool (${(pool.data || []).length})</h3>
-          <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;table-layout:fixed;">
-            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Name</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:90px;">Priority</th></tr></thead>
-            <tbody>${(pool.data || []).map(p => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(p.user_name)}</td><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${p.contact_priority}</td></tr>`).join('') || '<tr><td colspan="2" style="padding:14px;color:#64748B;font-size:13px;">No substitutes added yet.</td></tr>'}</tbody>
-          </table>
+    let pool, reqs;
+    try {
+      [pool, reqs] = await Promise.all([Api.get('/operations/substitutes'), Api.get('/operations/sub-requests')]);
+    } catch (e) {
+      main.innerHTML = `<div style="padding:24px;color:#B91C1C;">${esc((e && e.message) || 'Substitutes could not be loaded.')}</div>`;
+      return;
+    }
+    const members = pool.data || [], rows = reqs.data || [], st = pool.settings || {};
+    const again = () => renderSubstitutes(main);
+    const card = 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-top:16px;';
+    main.innerHTML = `<div style="padding:20px 24px;">
+      <h2 style="margin:0 0 4px;color:#1F6080;">🙋 Substitutes</h2>
+      <p style="color:#64748B;font-size:14px;margin:0;">Your substitute list, and shifts that need cover. The people on the list who cover a centre are told when it needs someone, and take the shift under <b>Cover shifts</b>.</p>
+      <div style="${card}">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:15px;color:#0F172A;flex:1;">Cover requests (${rows.length})</h3>
+          <button type="button" id="sr-new" class="btn btn-primary" style="padding:6px 14px;border-radius:8px;">+ Post open shift</button>
         </div>
-        <div>
-          <h3 style="font-size:14px;color:#374151;">Recent requests (${(requests.data || []).length})</h3>
-          <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;table-layout:fixed;">
-            <thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:110px;">Date</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;width:90px;">Status</th><th style="text-align:left;padding:6px;border-bottom:1px solid #E5E7EB;font-size:11px;color:#6B7280;">Filled by</th></tr></thead>
-            <tbody>${(requests.data || []).map(r => `<tr><td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.shift_date)}${r.centre_name ? `<div style="font-size:11.5px;color:#64748B;">${esc(r.centre_name)}</div>` : ''}</td>
-              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;"><span style="color:${r.status === 'filled' ? '#047857' : '#D97706'};font-weight:600;">${esc(SUB_STATUS[r.status] || 'Open')}</span></td>
-              <td style="padding:8px 6px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(r.assigned_name || '')}</td></tr>`).join('') || '<tr><td colspan="3" style="padding:14px;color:#64748B;font-size:13px;">No requests yet.</td></tr>'}</tbody>
-          </table>
-          <button id="sr-new" style="margin-top:12px;background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">+ Post open shift</button>
+        <label style="display:flex;align-items:center;gap:8px;margin:10px 0 4px;font-size:13px;color:#334155;" ${pool.can_manage_settings ? '' : 'data-kttip="Only an agency admin can change this"'}>
+          <input type="checkbox" id="sr-confirm" ${st.require_confirm ? 'checked' : ''} ${pool.can_manage_settings ? '' : 'disabled'}>
+          A director confirms each substitute before the shift is theirs (otherwise the first person to take it gets it)
+        </label>
+        <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;margin-top:8px;">
+          <thead><tr>${subTh('When', '210px')}${subTh('Centre')}${subTh('Reason')}${subTh('Status', '150px')}${subTh('Taken by')}${subTh('', '60px')}</tr></thead>
+          <tbody>${rows.map(r => `<tr data-sr="${r.id}" style="${r.id === subOpenId() ? 'background:#F0F9FF;' : ''}">
+            ${subTd(esc(r.when))}
+            ${subTd(esc(r.centre_name) + (r.room_name ? `<div style="font-size:11.5px;color:#64748B;">${esc(r.room_name)}</div>` : ''))}
+            ${subTd(esc(r.reason || ''))}
+            ${subTd(subPill(r) + (r.on_rota ? '<div style="font-size:11.5px;color:#64748B;">On the rota</div>' : ''))}
+            ${subTd(esc(r.assigned_name || ''))}
+            ${subTd(`<button type="button" class="sr-view" data-id="${r.id}">View</button>`
+              + (r.status === 'claimed' ? `<button type="button" class="sr-confirm" data-id="${r.id}">✅ Confirm</button>` : '')
+              + (['claimed', 'filled'].includes(r.status) && !r.started ? `<button type="button" class="sr-release" data-id="${r.id}">↩️ Release</button>` : '')
+              + (r.status !== 'cancelled' && !r.started ? `<button type="button" class="sr-cancel" data-id="${r.id}">🚫 Cancel request</button>` : ''))}
+          </tr>`).join('') || `<tr><td colspan="6" style="padding:14px;color:#64748B;font-size:13px;">No cover requests yet.</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div style="${card}">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <h3 style="margin:0;font-size:15px;color:#0F172A;flex:1;">Substitute list (${members.length})</h3>
+          <button type="button" id="sp-new" class="btn btn-primary" style="padding:6px 14px;border-radius:8px;">+ Add substitute</button>
         </div>
+        <table data-kt-filtered="1" style="width:100%;border-collapse:collapse;margin-top:8px;">
+          <thead><tr>${subTh('Name')}${subTh('Covers')}${subTh('Told by', '120px')}${subTh('Order', '70px')}${subTh('Status', '90px')}${subTh('', '60px')}</tr></thead>
+          <tbody>${members.map(p => `<tr style="${+p.active ? '' : 'background:#F8FAFC;color:#64748B;'}">
+            ${subTd(esc(p.name) + (p.qualifications ? `<div style="font-size:11.5px;color:#64748B;">${esc(p.qualifications)}</div>` : ''))}
+            ${subTd(p.centre_names && p.centre_names.length ? esc(p.centre_names.join(', ')) : 'All centres')}
+            ${subTd([+p.notify_app ? 'App' : '', +p.notify_email ? 'Email' : ''].filter(Boolean).join(' + ') || 'Not told')}
+            ${subTd(esc(p.contact_priority))}
+            ${subTd(+p.active ? '<span style="color:#047857;font-weight:700;">Active</span>' : 'Inactive')}
+            ${subTd(p.may_edit ? `<button type="button" class="sp-edit" data-id="${p.id}">Edit</button><button type="button" class="sp-remove" data-id="${p.id}">🗑 Remove</button>` : '<span style="font-size:11.5px;color:#64748B;">Agency admin</span>')}
+          </tr>`).join('') || `<tr><td colspan="6" style="padding:14px;color:#64748B;font-size:13px;">Nobody is on the substitute list yet. Press <b>+ Add substitute</b>.</td></tr>`}</tbody>
+        </table>
       </div>
     </div>`;
-    document.getElementById('sr-new').onclick = () => openSubRequestModal();
-  }
-  // Status words people read, not the stored values (2026-11-27).
-  const SUB_STATUS = { open: 'Open', filled: 'Filled', cancelled: 'Cancelled', canceled: 'Cancelled', expired: 'Expired' };
-  async function openSubRequestModal() {
-    /* The centres this person may post for (operations/my-centres is scoped: a director gets their own centres,
-       an agency admin the agency's). A typed "Centre ID" number used to be asked for here. */
-    const mine = await Api.get('/operations/my-centres').catch(() => ({ centres: [] }));
-    const centres = (mine && mine.centres) || [];
-    if (!centres.length) { if (window.KT && KT.toast) KT.toast('You are not placed at a centre yet, so there is nowhere to post a shift for.', 'info', 7000); return; }
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:440px;width:92%;">
-      <h3>New substitute request</h3>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Centre <select id="sr-cid" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">${centres.length > 1 ? '<option value="">Choose a centre…</option>' : ''}${centres.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Shift date <input id="sr-date" type="date" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Start <input id="sr-start" type="time" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">End <input id="sr-end" type="time" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Reason <input id="sr-reason" placeholder="sick / personal / vacation" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <div style="margin-top:18px;text-align:right;">
-        <button id="sr-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
-        <button id="sr-save" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Post + notify</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#sr-cancel').onclick = () => m.remove();
-    m.querySelector('#sr-save').onclick = async (ev) => {
-      /* Check before sending and say what went wrong (2026-11-27): the post had no error handling, so a missing
-         field or a refusal failed with nothing on screen. */
-      const say = (msg, kind) => { if (window.KT && KT.toast) KT.toast(msg, kind || 'info', 7000); };
-      const body = {
-        centre_id: +m.querySelector('#sr-cid').value,
-        shift_date: m.querySelector('#sr-date').value,
-        shift_start: m.querySelector('#sr-start').value,
-        shift_end: m.querySelector('#sr-end').value,
-        reason: m.querySelector('#sr-reason').value,
-      };
-      if (!body.centre_id) { say('Choose the centre that needs cover.'); return; }
-      if (!body.shift_date) { say('Choose the date of the shift.'); return; }
-      if (!body.shift_start || !body.shift_end) { say('Enter the start and end time of the shift.'); return; }
-      if (body.shift_end <= body.shift_start) { say('The shift has to end after it starts.'); return; }
-      const btn = ev && ev.currentTarget; if (btn) btn.disabled = true;
-      try {
-        const res = await Api.post('/operations/sub-requests', body);
-        m.remove();
-        const n = (res && res.notified) || 0;
-        say(n ? `Shift posted. ${n} substitute${n === 1 ? '' : 's'} told.` : 'Shift posted. No substitutes in your pool cover this centre yet, so nobody was told.', n ? 'success' : 'info');
-        renderSubstitutes(document.querySelector('main') || document.getElementById('main'));
-      } catch (e) {
-        if (btn) btn.disabled = false;
-        say((e && e.message) || 'The shift could not be posted. Please try again.', 'error');
-      }
+    const byId = (list, id) => list.find(x => +x.id === +id);
+    main.querySelector('#sr-new').onclick = () => openSubRequestModal(pool, again);
+    main.querySelector('#sp-new').onclick = () => openPoolModal(pool, null, again);
+    const conf = main.querySelector('#sr-confirm');
+    if (conf && !conf.disabled) conf.onchange = async () => {
+      try { await Api.put('/operations/substitutes/settings', { require_confirm: conf.checked }); subSay('Saved'); }
+      catch (e) { conf.checked = !conf.checked; subErr(e, 'This could not be saved.'); }
     };
+    main.querySelectorAll('.sp-edit').forEach(b => b.onclick = () => openPoolModal(pool, byId(members, b.dataset.id), again));
+    main.querySelectorAll('.sp-remove').forEach(b => b.onclick = async () => {
+      const p = byId(members, b.dataset.id);
+      if (!await KT.confirm({ title: 'Take ' + p.name + ' off the substitute list?', description: 'They stop being told about cover. Cover they already took stays theirs.', okLabel: 'Remove' })) return;
+      try { await Api.delete('/operations/substitutes/' + p.id); subSay('Removed'); again(); } catch (e) { subErr(e, 'They could not be removed.'); }
+    });
+    main.querySelectorAll('.sr-view').forEach(b => b.onclick = () => viewSubRequest(byId(rows, b.dataset.id), again));
+    const act = (cls, path, q, done) => main.querySelectorAll(cls).forEach(b => b.onclick = async () => {
+      const r = byId(rows, b.dataset.id);
+      if (q && !await KT.confirm(q(r))) return;
+      try { const res = await Api.post('/operations/sub-requests/' + r.id + '/' + path, {}); subSay(done(res || {})); again(); }
+      catch (e) { subErr(e, 'That did not work. Please try again.'); }
+    });
+    act('.sr-confirm', 'confirm', null, (res) => 'Confirmed.' + (res.shift_id ? ' The shift is on the rota.' : ''));
+    act('.sr-release', 'release', (r) => ({ title: 'Release ' + (r.assigned_name || 'this substitute') + '?', description: 'The shift is no longer theirs and opens again for the substitute list.', okLabel: 'Release' }),
+      (res) => 'Released. ' + (res.notified ? res.notified + ' told it is open again.' : 'It is open again.'));
+    act('.sr-cancel', 'cancel', (r) => ({ title: 'Cancel this cover request?', description: r.when + (r.assigned_name ? '. ' + r.assigned_name + ' is told it is no longer needed.' : ''), okLabel: 'Cancel request' }), () => 'Cancelled.');
+    const open = subOpenId() && byId(rows, subOpenId());
+    if (open) viewSubRequest(open, again);
+  }
+
+  function viewSubRequest(r, again) {
+    const box = document.createElement('div');
+    const line = (k, v) => v ? `<tr><td style="padding:5px 14px 5px 0;color:#64748B;font-size:13px;white-space:nowrap;">${k}</td><td style="padding:5px 0;font-size:13.5px;">${v}</td></tr>` : '';
+    box.innerHTML = `<table style="border-collapse:collapse;">${line('When', esc(r.when))}${line('Centre', esc(r.centre_name))}${line('Room', esc(r.room_name))}
+      ${line('Reason', esc(r.reason))}${line('Notes', esc(r.notes))}${line('Status', subPill(r))}${line('Taken by', esc(r.assigned_name))}
+      ${line('On the rota', r.on_rota ? 'Yes' : '')}${line('Posted by', esc(r.requested_by))}</table>`;
+    const actions = [{ label: 'Close' }];
+    KT.Shell.Modal.open({ title: 'Cover request', body: box, actions });
+  }
+
+  async function openPoolModal(pool, p, again) {
+    const centres = pool.centres || [];
+    const cands = pool.candidates || [];
+    if (!p && !cands.length) { subSay('Everyone on your staff is already on the list.', 'info'); return; }
+    const box = document.createElement('div');
+    const have = new Set((p && p.centre_ids) || []);
+    box.innerHTML = (p ? `<div style="font-weight:700;margin-bottom:10px;">${esc(p.name)}</div>`
+        : subField('Person', `<select id="sp-user" style="${subInput}"><option value="">Choose someone from your staff…</option>${cands.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>`))
+      + subField('Centres they cover' + (pool.scoped ? '' : ' (none ticked = every centre)'), `<div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-weight:500;">${centres.map(c => `<label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" class="sp-c" value="${c.id}" ${have.has(+c.id) ? 'checked' : ''}>${esc(c.name)}</label>`).join('')}</div>`)
+      + subField('How they are told about cover', `<div style="display:flex;gap:16px;font-weight:500;"><label><input type="checkbox" id="sp-app" ${!p || +p.notify_app ? 'checked' : ''}> In the app</label><label><input type="checkbox" id="sp-email" ${!p || +p.notify_email ? 'checked' : ''}> By email</label></div>`)
+      + subField('Order to ask (1 = first)', `<input id="sp-prio" type="number" min="1" max="10" value="${esc((p && p.contact_priority) || 5)}" style="${subInput}max-width:120px;">`)
+      + subField('Qualifications', `<input id="sp-qual" maxlength="2000" value="${esc((p && p.qualifications) || '')}" placeholder="RECE, first aid…" style="${subInput}">`)
+      + subField('When they can work', `<input id="sp-avail" maxlength="1000" value="${esc((p && p.availability_notes) || '')}" placeholder="Mornings, not Fridays…" style="${subInput}">`)
+      + `<label style="display:flex;gap:8px;align-items:center;font-size:13px;"><input type="checkbox" id="sp-active" ${!p || +p.active ? 'checked' : ''}> Active (inactive people are kept on the list but not told)</label>`;
+    KT.Shell.Modal.open({
+      title: p ? 'Edit substitute' : 'Add substitute', body: box,
+      actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async () => {
+        const uid = p ? p.user_id : +box.querySelector('#sp-user').value;
+        if (!uid) { subSay('Choose the person.', 'info'); return false; }
+        const body = { user_id: +uid, centres: [...box.querySelectorAll('.sp-c:checked')].map(x => +x.value),
+          notify_app: box.querySelector('#sp-app').checked, notify_email: box.querySelector('#sp-email').checked,
+          contact_priority: +box.querySelector('#sp-prio').value || 5, qualifications: box.querySelector('#sp-qual').value.trim() || null,
+          availability_notes: box.querySelector('#sp-avail').value.trim() || null, active: box.querySelector('#sp-active').checked };
+        if (pool.scoped && !body.centres.length) { subSay('Tick the centres they cover.', 'info'); return false; }
+        try { await Api.post('/operations/substitutes', body); subSay('Saved'); again(); }
+        catch (e) { subErr(e, 'This could not be saved.'); return false; }
+      } }],
+    });
+  }
+
+  async function openSubRequestModal(pool, again) {
+    const centres = pool.centres || [], rooms = pool.rooms || [];
+    if (!centres.length) { subSay('You are not placed at a centre yet, so there is nowhere to post a shift for.', 'info'); return; }
+    const box = document.createElement('div');
+    box.innerHTML = subField('Centre', `<select id="sr-cid" style="${subInput}">${centres.length > 1 ? '<option value="">Choose a centre…</option>' : ''}${centres.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>`)
+      + subField('Room' + (pool.hr_on ? ' (puts the shift on the rota when someone takes it)' : ''), `<select id="sr-room" style="${subInput}"></select>`)
+      + `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">${subField('Date', `<input id="sr-date" type="date" style="${subInput}">`)}${subField('Start', `<input id="sr-start" type="time" style="${subInput}">`)}${subField('End', `<input id="sr-end" type="time" style="${subInput}">`)}</div>`
+      + subField('Reason', `<input id="sr-reason" maxlength="120" placeholder="Sick, vacation, training…" style="${subInput}">`)
+      + subField('Notes for the substitute', `<textarea id="sr-notes" maxlength="2000" rows="3" style="${subInput}min-height:70px;"></textarea>`);
+    const fillRooms = () => {
+      const cid = +box.querySelector('#sr-cid').value;
+      box.querySelector('#sr-room').innerHTML = '<option value="">No particular room</option>' + rooms.filter(r => +r.centre_id === cid).map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+    };
+    box.querySelector('#sr-cid').onchange = fillRooms; fillRooms();
+    KT.Shell.Modal.open({
+      title: 'Post an open shift', body: box,
+      actions: [{ label: 'Cancel' }, { label: 'Post and tell substitutes', primary: true, handler: async () => {
+        const v = (id) => box.querySelector(id).value;
+        const body = { centre_id: +v('#sr-cid'), room_id: +v('#sr-room') || null, shift_date: v('#sr-date'), shift_start: v('#sr-start'), shift_end: v('#sr-end'),
+          reason: v('#sr-reason').trim() || null, notes: v('#sr-notes').trim() || null };
+        if (!body.centre_id) { subSay('Choose the centre that needs cover.', 'info'); return false; }
+        if (!body.shift_date || !body.shift_start || !body.shift_end) { subSay('Enter the date, start and end of the shift.', 'info'); return false; }
+        if (body.shift_end <= body.shift_start) { subSay('The shift has to end after it starts.', 'info'); return false; }
+        try {
+          const res = await Api.post('/operations/sub-requests', body);
+          const n = (res && res.notified) || 0;
+          subSay(n ? `Shift posted. ${n} substitute${n === 1 ? '' : 's'} told.` : 'Shift posted. Nobody on your substitute list covers this centre yet, so nobody was told.', n ? 'success' : 'info');
+          again();
+        } catch (e) { subErr(e, 'The shift could not be posted. Please try again.'); return false; }
+      } }],
+    });
+  }
+
+  /* COVER SHIFTS (2026-11-28): what a substitute sees - open cover at the centres they cover (Take it), and the cover
+     they took (Give it back, before it starts). The "Cover needed" notice and email open #cover-requests?open=ID. */
+  async function renderCoverRequests(main) {
+    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
+    let d;
+    try { d = await Api.get('/me/cover-requests'); }
+    catch (e) { main.innerHTML = `<div style="padding:24px;color:#B91C1C;">${esc((e && e.message) || 'Cover shifts could not be loaded.')}</div>`; return; }
+    const again = () => renderCoverRequests(main);
+    const pick = subOpenId();
+    const card = 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-top:16px;';
+    const item = (r, btn) => `<div data-cr="${r.id}" style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;padding:12px;border:1px solid ${r.id === pick ? '#38BDF8' : '#E2E8F0'};border-radius:12px;margin-top:10px;${r.id === pick ? 'background:#F0F9FF;' : ''}">
+        <div style="flex:1;min-width:220px;"><div style="font-weight:700;color:#0F172A;">${esc(r.when)}</div>
+          <div style="font-size:13px;color:#334155;">${esc(r.centre_name)}${r.room_name ? ' · ' + esc(r.room_name) : ''}</div>
+          ${r.reason ? `<div style="font-size:12.5px;color:#64748B;">${esc(r.reason)}</div>` : ''}
+          ${r.notes ? `<div style="font-size:12.5px;color:#334155;margin-top:4px;white-space:pre-wrap;">${esc(r.notes)}</div>` : ''}
+          ${r.why_not ? `<div style="font-size:12.5px;color:#B45309;margin-top:4px;">${esc(r.why_not)}.</div>` : ''}</div>
+        <div>${btn}</div></div>`;
+    main.innerHTML = `<div style="padding:20px 24px;">
+      <h2 style="margin:0 0 4px;color:#1F6080;">🤚 Cover shifts</h2>
+      <p style="color:#64748B;font-size:14px;margin:0;">Shifts that need a substitute at the centres you cover. ${d.require_confirm ? 'When you take one, a director confirms it.' : 'The first person to take a shift gets it.'}</p>
+      ${!d.in_pool ? `<div style="${card}color:#334155;">You are not on your agency's substitute list, so no cover is offered to you here. Ask your director if you would like to be added.</div>` : ''}
+      <div style="${card}"><h3 style="margin:0;font-size:15px;color:#0F172A;">Your cover (${(d.mine || []).length})</h3>
+        ${(d.mine || []).map(r => item(r, `<div style="font-size:12.5px;font-weight:700;color:${r.status === 'filled' ? '#047857' : '#7C3AED'};margin-bottom:6px;">${r.status === 'filled' ? 'Yours' : 'Waiting for a director'}</div>` + (r.started ? '' : `<button type="button" class="cr-give" data-id="${r.id}">Give it back</button>`))).join('')
+          || '<div style="font-size:13px;color:#64748B;margin-top:8px;">You have not taken any cover yet.</div>'}</div>
+      ${d.in_pool ? `<div style="${card}"><h3 style="margin:0;font-size:15px;color:#0F172A;">Open shifts (${(d.open || []).length})</h3>
+        ${(d.open || []).map(r => item(r, `<button type="button" class="btn btn-primary cr-take" data-id="${r.id}" ${r.why_not ? 'disabled' : ''} style="padding:6px 14px;border-radius:8px;">Take this shift</button>`)).join('')
+          || '<div style="font-size:13px;color:#64748B;margin-top:8px;">No shifts need cover right now. You will be told when one does.</div>'}</div>` : ''}
+    </div>`;
+    main.querySelectorAll('.cr-take').forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const res = await Api.post('/operations/sub-requests/' + b.dataset.id + '/claim', {});
+        subSay(res && res.status === 'claimed' ? 'Taken. A director will confirm it.' : 'The shift is yours.' + (res && res.on_rota ? ' It is on the rota.' : ''));
+      } catch (e) { subErr(e, 'The shift could not be taken. Please try again.'); }
+      again();
+    });
+    main.querySelectorAll('.cr-give').forEach(b => b.onclick = async () => {
+      if (!await KT.confirm({ title: 'Give this shift back?', description: 'It opens again for the rest of the substitute list, and your director is told.', okLabel: 'Give it back' })) return;
+      try { await Api.post('/me/cover-requests/' + b.dataset.id + '/withdraw', {}); subSay('Given back.'); again(); } catch (e) { subErr(e, 'That did not work. Please try again.'); }
+    });
+    const el = pick && main.querySelector(`[data-cr="${pick}"]`);
+    if (el) el.scrollIntoView({ block: 'center' });
+    else if (pick && d.in_pool) subSay('That shift has already been taken or is no longer needed.', 'info');
   }
 
   // ============================ Inspection checklist ============================
@@ -1927,7 +2061,7 @@
   // Expose
   window.KT = window.KT || {};
   window.KT.V22p53 = {
-    renderMenu, renderParentMenu, renderAllergyAlerts, renderFieldTrips, renderSubstitutes,
+    renderMenu, renderParentMenu, renderAllergyAlerts, renderFieldTrips, renderSubstitutes, renderCoverRequests,
     renderInspection, renderCwelcc, renderRetention, renderForecast,
     renderAnomalies, renderExpiryCalendar,
   };
