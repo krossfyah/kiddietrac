@@ -616,6 +616,8 @@ final class PermissionMap
         'PATCH api/v1/admin/suppliers/{supplier}' => 'expenses.manage',
         'PATCH api/v1/admin/time-off/{id}' => 'staff.schedule',
         'PATCH api/v1/admin/tours/{id}' => 'marketing.manage',
+        'GET api/v1/admin/tours/settings' => 'marketing.manage',
+        'PUT api/v1/admin/tours/settings' => 'marketing.manage',
         'PATCH api/v1/admin/users/{user}' => 'staff.edit',
         'PATCH api/v1/admin/users/{user}/pay' => 'staff.edit',
         'PATCH api/v1/admin/users/{user}/punches/{punch}' => 'staff.edit',

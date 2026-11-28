@@ -108,6 +108,11 @@ final class EmailOverrides
         'AnnouncementMail@build' => 'announcement-notice',
         'FamilyNoticeMail@formRequest' => 'form-request',
         'FamilyNoticeMail@invoiceCopy' => 'invoice-copy-self',
+        // Tour emails to the prospective family (2026-11-28).
+        'TourMail@confirmed' => 'tour-confirmed',
+        'TourMail@rescheduled' => 'tour-rescheduled',
+        'TourMail@cancelled' => 'tour-cancelled',
+        'TourMail@thanks' => 'tour-thank-you',
         'BillingNoticeMail@tuitionIncrease' => 'tuition-increase-notice',
         'AccountLedgerController@emailStatement' => 'account-statement',
         'CentreOffboardController@notifyClosure' => 'provider-closed',

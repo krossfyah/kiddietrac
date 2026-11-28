@@ -1591,6 +1591,34 @@
     linkCard.appendChild(csvBtn);
     wrap.appendChild(linkCard);
 
+    /* TOUR EMAILS (2026-11-28): confirmed / new time / cancelled always offer to email the family; the thank-you
+       after a completed tour is the agency's choice (App\Support\TourNotice). Admins change it; directors see it. */
+    var mailCard = Dom.el('div', { style: cardStyle + 'margin-top:12px;padding:12px 18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:#334155;' });
+    wrap.appendChild(mailCard);
+    var tourSettings = { thank_you_email: false };
+    Api.get('/admin/tours/settings').then(function (r) {
+      tourSettings = (r && r.settings) || tourSettings;
+      Dom.clear(mailCard);
+      var lab = Dom.el('label', { style: 'display:flex;align-items:center;gap:8px;cursor:' + (r && r.can_manage ? 'pointer' : 'default') + ';' });
+      var cb = Dom.el('input', { type: 'checkbox' });
+      cb.checked = !!tourSettings.thank_you_email;
+      cb.disabled = !(r && r.can_manage);
+      lab.appendChild(cb);
+      lab.appendChild(Dom.el('span', { style: 'font-weight:600;' }, 'Send a thank-you email after a completed tour'));
+      mailCard.appendChild(Dom.el('span', { style: 'font-weight:700;color:#1F6080;' }, '✉️ Family emails'));
+      mailCard.appendChild(lab);
+      mailCard.appendChild(Dom.el('span', { style: 'color:#64748B;font-size:12px;' }, (r && r.can_manage) ? 'Confirmed, new time and cancelled tours always offer to email the family.' : 'Your agency admin chooses this. Confirmed, new time and cancelled tours always offer to email the family.'));
+      cb.addEventListener('change', function () {
+        Api.put('/admin/tours/settings', { thank_you_email: cb.checked }).then(function (x) {
+          tourSettings = (x && x.settings) || tourSettings;
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Saved', 'success');
+        }).catch(function (e) {
+          cb.checked = !cb.checked;
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast((e && e.message) || 'Could not save. Please try again.', 'error');
+        });
+      });
+    }).catch(function () { mailCard.remove(); });
+
     // Summary KPI row (explicit grid + tiles)
     var kpiRow = Dom.el('div', { style: 'margin-top:18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;' });
     wrap.appendChild(kpiRow);
@@ -1633,7 +1661,7 @@
         listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, activeFilter ? ('No ' + activeFilter.replace('_', ' ') + ' tours.') : 'No tour requests yet. Share your public link above to start collecting bookings.'));
         return;
       }
-      rows.forEach(function (t) { listWrap.appendChild(renderTourRow(t, container)); });
+      rows.forEach(function (t) { listWrap.appendChild(renderTourRow(t, container, tourSettings)); });
     }
 
     Api.get('/admin/tours').then(function (data) {
@@ -1670,13 +1698,85 @@
     });
   }
 
-  function renderTourRow(t, container) {
+  /* Would this change email the family? (the same rule as App\Support\TourNotice::kindFor) */
+  function tourMailKind(t, status, moved, settings) {
+    if (status !== t.status) {
+      if (status === 'confirmed') return 'confirmed';
+      if (status === 'cancelled') return 'cancelled';
+      if (status === 'completed') return settings && settings.thank_you_email ? 'thanks' : null;
+      if (status === 'requested' && moved) return 'rescheduled';
+      return null;
+    }
+    return moved && (status === 'requested' || status === 'confirmed') ? 'rescheduled' : null;
+  }
+  var TOUR_MAIL_WORDS = { confirmed: 'a confirmation', rescheduled: 'the new time', cancelled: 'a cancellation note', thanks: 'a thank-you for visiting' };
+
+  /* One save for a status change or a new time: asks whether to email the family (ticked by default) when the change
+     calls for an email, then says what really happened to that email (sent, or why not). */
+  function saveTour(t, container, body, settings) {
+    var status = body.status || t.status;
+    var moved = !!(body.tour_local && body.tour_local !== t.tour_local);
+    var kind = tourMailKind(t, status, moved, settings);
+    var go = function (notify) {
+      body.status = status;
+      body.notify = !!notify;
+      return Api.patch('/admin/tours/' + t.id, body).then(function (r) {
+        var em = r && r.email;
+        var msg = 'Tour updated.';
+        if (em && em.sent) msg = 'Tour updated. ' + (t.parent_name || 'The family') + ' was emailed.';
+        else if (em && !em.sent) msg = 'Tour updated. The family was not emailed: ' + (em.reason || 'it could not be sent.');
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, em && !em.sent ? 'info' : 'success', 7000);
+        renderTours(container);
+      });
+    };
+    if (!kind || !t.parent_email) return go(false);
+    var box = Dom.el('div', {});
+    box.appendChild(Dom.el('p', { style: 'margin:0 0 12px;font-size:14px;color:#334155;line-height:1.5;' }, 'We can email ' + (t.parent_name || 'the family') + ' ' + TOUR_MAIL_WORDS[kind] + ' from your centre.'));
+    var lab = Dom.el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#0F172A;cursor:pointer;' });
+    var cb = Dom.el('input', { type: 'checkbox' });
+    cb.checked = true;
+    lab.appendChild(cb);
+    lab.appendChild(Dom.el('span', {}, 'Email the family at ' + t.parent_email));
+    box.appendChild(lab);
+    return new Promise(function (resolve) {
+      KT.Shell.Modal.open({
+        title: status !== t.status ? 'Mark tour ' + status.replace('_', ' ') : 'New tour time',
+        body: box,
+        onClose: function () { resolve(); },
+        actions: [
+          { label: 'Cancel' },
+          { label: 'Save', primary: true, handler: function () { return go(cb.checked); } },
+        ],
+      });
+    });
+  }
+
+  function openTourTime(t, container, settings) {
+    var box = Dom.el('div', {});
+    box.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;' }, 'New date and time (the centre\'s time)'));
+    var inp = Dom.el('input', { type: 'datetime-local', value: t.tour_local || '', style: 'width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;' });
+    box.appendChild(inp);
+    KT.Shell.Modal.open({
+      title: 'New tour time',
+      body: box,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Next', primary: true, handler: function () {
+          if (!inp.value) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Choose the new date and time.', 'info'); return false; }
+          if (inp.value === t.tour_local) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast('That is the time it already has.', 'info'); return false; }
+          setTimeout(function () { saveTour(t, container, { tour_local: inp.value, status: t.status === 'cancelled' || t.status === 'no_show' || t.status === 'completed' ? 'confirmed' : t.status }, settings); }, 0);
+        } },
+      ],
+    });
+  }
+
+  function renderTourRow(t, container, settings) {
     var statusColors = { requested: '#F59E0B', confirmed: '#1F6080', completed: '#16A34A', no_show: '#DC2626', cancelled: '#6B7280' };
     var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6;' });
     row.appendChild(Dom.el('div', { style: 'width:8px;height:48px;border-radius:4px;background:' + (statusColors[t.status] || '#E5E7EB') + ';flex-shrink:0;' }));
     var body = Dom.el('div', { style: 'flex:1;min-width:0;' });
     body.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#111827;' }, (t.parent_name || 'Unnamed') + ' · ' + (t.centre_name || '—')));
-    body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, 'Tour ' + fmt(t.tour_at) + ' · ' + (t.parent_email || 'no email') + (t.parent_phone ? ' · ' + t.parent_phone : '') + (t.child_age_months ? ' · child ' + t.child_age_months + ' mo' : '')));
+    body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, 'Tour ' + (t.tour_label || fmt(t.tour_at)) + ' · ' + (t.parent_email || 'no email') + (t.parent_phone ? ' · ' + t.parent_phone : '') + (t.child_age_months ? ' · child ' + t.child_age_months + ' mo' : '')));
     if (t.preferred_start_date) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#1F6080;margin-top:2px;font-weight:600;' }, '📅 Wants to start: ' + fmtDateOnly(t.preferred_start_date)));
     if (t.notes) body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#374151;margin-top:4px;' }, '“' + t.notes + '”'));
     row.appendChild(body);
@@ -1687,9 +1787,20 @@
       sel.appendChild(opt);
     });
     sel.addEventListener('change', function () {
-      Api.patch('/admin/tours/' + t.id, { status: sel.value }).then(function () { renderTours(container); });
+      var p = saveTour(t, container, { status: sel.value }, settings);
+      // Cancelled the popup or the save failed: the picker goes back to what is saved.
+      Promise.resolve(p).then(function () { sel.value = t.status; }, function (e) {
+        sel.value = t.status;
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast((e && e.message) || 'Could not update the tour.', 'error');
+      });
     });
     row.appendChild(sel);
+    // Row action (collapsed into the ⋮ by kt-row-actions on this data-kt-list).
+    var acts = Dom.el('div', { style: 'flex-shrink:0;' });
+    var moveBtn = Dom.el('button', { type: 'button', title: 'Give this tour a new time' }, '🗓 New time');
+    moveBtn.addEventListener('click', function () { openTourTime(t, container, settings); });
+    acts.appendChild(moveBtn);
+    row.appendChild(acts);
     return row;
   }
 

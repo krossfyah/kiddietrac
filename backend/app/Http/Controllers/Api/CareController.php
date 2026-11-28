@@ -1192,6 +1192,17 @@ final class CareController extends Controller
             ->orderByDesc('tb.tour_at')
             ->limit(200)
             ->get(['tb.*', 'c.name as centre_name']);
+        // The visit in the centre's own clock (2026-11-28): tour_at is UTC, and the screen read it as the device's time.
+        foreach ($rows as $r) {
+            try {
+                $loc = \Carbon\Carbon::parse($r->tour_at, 'UTC')->setTimezone(\App\Support\AgencyTime::tzForCentre((int) $r->centre_id));
+                $r->tour_local = $loc->format('Y-m-d\TH:i');
+                $r->tour_label = $loc->format('M j, Y, g:i A');
+            } catch (\Throwable $e) {
+                $r->tour_local = null;
+                $r->tour_label = (string) $r->tour_at;
+            }
+        }
         return response()->json(['tours' => $rows]);
     }
 
@@ -1212,11 +1223,54 @@ final class CareController extends Controller
         // Scoped by agency AND the caller's centres as well as id: a booking in another tenant, at another director's
         // centre or with no centre (for a director) simply is not found, rather than being found and refused. Found
         // first, then written: update() counts CHANGED rows, so saving the same status used to answer 404.
-        abort_unless($this->toursQuery($agencyId, $scope)->where('tb.id', $id)->exists(), 404, 'Tour booking not found.');
+        $before = $this->toursQuery($agencyId, $scope)->where('tb.id', $id)->first(['tb.*']);
+        abort_unless($before, 404, 'Tour booking not found.');
+        /* A new time typed on the Tours screen is the CENTRE's clock (2026-11-28): stored as UTC like every booking. */
+        $extra = $request->validate(['tour_local' => ['sometimes', 'nullable', 'date_format:Y-m-d\TH:i'], 'notify' => ['sometimes', 'boolean']]);
+        if (! empty($extra['tour_local'])) {
+            $data['tour_at'] = \Carbon\Carbon::createFromFormat('Y-m-d\TH:i', $extra['tour_local'], \App\Support\AgencyTime::tzForCentre((int) $before->centre_id))
+                ->utc()->format('Y-m-d H:i:s');
+        } elseif (isset($data['tour_at'])) {
+            $data['tour_at'] = \Carbon\Carbon::parse($data['tour_at'])->utc()->format('Y-m-d H:i:s');
+        }
         $data['updated_at'] = now();
         $this->toursQuery($agencyId, $scope)->where('tb.id', $id)->update($data);
 
-        return response()->json(['message' => 'Tour updated']);
+        /* TELL THE FAMILY (2026-11-28, App\Support\TourNotice): confirmed / new time / cancelled, and a thank-you after
+           a completed visit when the agency turned it on. The person can untick "Email the family" (notify=false). */
+        $after = DB::table('tour_bookings')->where('id', $id)->first();
+        $kind = \App\Support\TourNotice::kindFor($before, $after);
+        $email = null;
+        if ($kind && ($extra['notify'] ?? true)) {
+            $email = \App\Support\TourNotice::send($kind, $after, $kind === 'rescheduled' ? (string) $before->tour_at : null) + ['kind' => $kind];
+        }
+        \App\Support\Audit::write(['user_id' => $request->user()->id, 'agency_id' => $agencyId, 'action' => 'tour.updated', 'entity_type' => 'tour_booking', 'entity_id' => $id,
+            'payload' => json_encode(['status' => [$before->status, $after->status], 'moved' => $before->tour_at !== $after->tour_at, 'email' => $email ? ['kind' => $kind, 'status' => $email['status']] : null])]);
+
+        return response()->json(['message' => 'Tour updated', 'email' => $email, 'would_email' => $kind]);
+    }
+
+    /** GET /admin/tours/settings  ·  PUT {thank_you_email} (agency admins). The thank-you email after a completed tour. */
+    public function tourSettings(Request $request): JsonResponse
+    {
+        $s = $this->tourScope($request);
+        abort_unless($s, 403, 'Not authorized.');
+        $canManage = $s[1] === null;
+
+        return response()->json(['settings' => \App\Support\TourNotice::settings($s[0]), 'can_manage' => $canManage]);
+    }
+
+    public function saveTourSettings(Request $request): JsonResponse
+    {
+        $s = $this->tourScope($request);
+        abort_unless($s && $s[1] === null, 403, 'Only an agency admin can change this.');
+        $d = $request->validate(['thank_you_email' => ['required', 'boolean']]);
+        $was = \App\Support\TourNotice::settings($s[0]);
+        $now = \App\Support\TourNotice::saveSettings($s[0], $d);
+        \App\Support\Audit::write(['user_id' => $request->user()->id, 'agency_id' => $s[0], 'action' => 'tour.settings_saved', 'entity_type' => 'agency', 'entity_id' => $s[0],
+            'payload' => json_encode(['was' => $was, 'now' => $now])]);
+
+        return response()->json(['settings' => $now]);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

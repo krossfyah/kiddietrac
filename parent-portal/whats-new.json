@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🚪",
+            "title": "Tour emails to families",
+            "body": "When you confirm, move or cancel a tour on the Tours screen, the family can now get an email about it (you choose each time). Admins can also turn on a thank-you email after a completed tour.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "💬",
             "title": "Clearer chat on phones",
             "body": "Your own messages in team chats are now a soft, easy-to-read teal. Every message has a clear + to react and an arrow to reply (or swipe the message right on a phone). The help ? sits in the same spot on every page banner, and the quick-request + no longer floats over open chats.",
