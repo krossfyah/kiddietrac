@@ -757,60 +757,228 @@
   }
 
   // ============================ Tuition increases =================================
+  /* Scheduled -> Notified -> Applied (2026-11-28). The scheduler (billing:tuition-increases) tells families on the
+     notice day and writes the new rates on the effective date, in the agency's timezone. Here: a real form with a
+     Type picker and a live preview of who is affected and old -> new, edit/delete while Scheduled, a View popup with
+     what was sent / changed, and the agency's notice rule. */
+  const TI_STATUS = {
+    scheduled: ['Scheduled', 'kt-pill-warning'], notified: ['Notified', 'kt-pill-info'],
+    applied: ['Applied', 'kt-pill-success'], overdue: ['Overdue', 'kt-pill-danger'],
+  };
+  const isAgencyAdminUi = () => /\brole-(agency-admin|platform-admin)\b/.test(document.body.className || '');
+  const isDirectorUi = () => /\brole-centre-director\b/.test(document.body.className || '');
+  const tiAmount = (t) => t.increase_type === 'flat' ? fmtMoney(t.amount) + ' a month' : (+t.amount) + '%';
+  const fieldCss = 'width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;box-sizing:border-box;font:inherit;font-size:13.5px;';
+  const labelCss = 'display:block;font-size:12.5px;font-weight:700;color:#334155;margin:0 0 4px;';
+
   async function renderTuitionIncreases(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/billing/tuition-increases').catch(() => ({ data: [] }));
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+    let r;
+    try { r = await Api.get('/billing/tuition-increases'); }
+    catch (e) { main.innerHTML = '<div style="padding:24px;color:#B91C1C;">' + esc((e && e.message) || 'Could not load tuition increases.') + '</div>'; return; }
+    const rows = r.data || [];
+    main.innerHTML = `<div style="padding:24px;">
       <div class="kt-page-hero">
         <h2>📈 Tuition increases</h2>
-        <p>Schedule a percent or flat increase. Families auto-notified ahead of effective date.</p>
-        <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="ti-new">+ Schedule increase</button></div>
+        <p>Plan a percent or flat increase. Families are told ${r.notice_days} days before it starts (your agency's rule), and their tuition changes on the date by itself.</p>
+        <div class="kt-hero-actions">
+          ${isAgencyAdminUi() ? '<button class="kt-btn kt-btn-ghost" id="ti-rules" type="button">⚙ Notice rule</button>' : ''}
+          <button class="kt-btn kt-btn-ghost" id="ti-new" type="button">+ Schedule increase</button>
+        </div>
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Effective</th><th>Centre</th><th>Type</th><th>Amount</th><th>Notify</th><th>Status</th></tr></thead>
-          <tbody>${(r.data || []).map(t => `<tr>
+          <thead><tr><th>Effective</th><th>Centre</th><th>Increase</th><th>Families told</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows.map(t => {
+            const st = TI_STATUS[t.status] || TI_STATUS.scheduled;
+            const told = t.notification_sent_at ? `${t.notified_families} on ${fmtDate(String(t.notification_sent_at))}` : `On ${fmtDate(t.notice_date)} (${t.notify_families_days_before} days before)`;
+            return `<tr>
             <td><strong>${fmtDate(t.effective_date)}</strong></td>
             <td>${esc(t.centre_name || 'All centres')}</td>
-            <td>${esc(t.increase_type)}</td>
-            <td><strong>${t.increase_type === 'percent' ? t.amount + '%' : fmtMoney(t.amount)}</strong></td>
-            <td>${t.notify_families_days_before} days before</td>
-            <td>${t.applied_at ? '<span class="kt-pill kt-pill-success">Applied</span>' : t.notification_sent_at ? '<span class="kt-pill kt-pill-info">Notified</span>' : '<span class="kt-pill kt-pill-warning">Scheduled</span>'}</td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No tuition increases scheduled.</td></tr>'}</tbody>
+            <td><strong>${esc(tiAmount(t))}</strong>${t.increase_type === 'flat' ? '' : ' <span style="color:#64748B;">percent</span>'}</td>
+            <td>${esc(told)}</td>
+            <td><span class="kt-pill ${st[1]}">${st[0]}</span>${t.status === 'applied' ? `<div style="font-size:11.5px;color:#64748B;margin-top:2px;">${t.applied_count} fees changed</div>` : ''}</td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button type="button" data-ti-view="${t.id}" title="View">View</button>
+              ${t.can_edit ? `<button type="button" data-ti-edit="${t.id}" title="Edit">Edit</button>` : ''}
+              ${t.can_apply ? `<button type="button" data-ti-apply="${t.id}" title="Apply now">Apply now</button>` : ''}
+              ${t.can_delete ? `<button type="button" data-ti-del="${t.id}" title="Delete">Delete</button>` : ''}
+            </td>
+          </tr>`; }).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No tuition increases scheduled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('ti-new').onclick = async () => {
-      /* Which centre (2026-11-27): the increase went in agency-wide whatever the caller's scope. The list comes from
-         /admin/centres, which already gives a director only their own centres; only an agency-wide caller (who sees
-         more than a director would) is offered "All centres". The server checks it again. */
-      const _cr = await Api.get('/admin/centres').catch(() => ({}));
-      const centres = (_cr.centres || _cr.data || []).filter(c => !c.deleted_at);
-      const isDirector = /\brole-centre-director\b/.test(document.body.className || '');
-      const centreOpts = (isDirector ? [] : [{ value: '', label: 'All centres' }])
-        .concat(centres.map(c => ({ value: String(c.id), label: c.name })));
-      // One dialog for what used to be three prompts in a row.
-      const v = await KT.prompt({
-        title: 'Schedule a tuition increase',
-        description: 'Families are told before it takes effect; their tuition changes from that date.',
-        fields: [
-          { key: 'centre', label: 'Centre', type: 'select', options: centreOpts, value: centreOpts.length ? centreOpts[0].value : '' },
-          { key: 'eff', label: 'Effective date', type: 'date' },
-          { key: 'amount', label: 'Amount (number)', type: 'number', step: 'any' },
-          { key: 'type', label: 'Type: "percent" or "flat"', value: 'percent' },
-        ],
-        okLabel: 'Schedule increase',
-      });
-      if (!v) return;
-      const eff = v.eff, amount = v.amount, type = v.type;
-      if (!eff || !amount) return;
-      Api.post('/billing/tuition-increases', {
-        centre_id: v.centre ? parseInt(v.centre, 10) : null,
-        effective_date: eff, amount: parseFloat(amount), increase_type: type || 'percent',
-      }).then(() => renderTuitionIncreases(main))
-        .catch(e => KT.Dom.toast((e && e.message) || 'Could not schedule the increase.', 'error'));
+    const again = () => renderTuitionIncreases(main.isConnected ? main : (document.getElementById('appMain') || main));
+    const byId = (id) => rows.find(x => String(x.id) === String(id));
+    main.querySelector('#ti-new').onclick = () => openIncreaseForm(null, r.notice_days, again);
+    const rb = main.querySelector('#ti-rules');
+    if (rb) rb.onclick = () => openNoticeRule(r.notice_days, again);
+    main.querySelectorAll('[data-ti-view]').forEach(b => b.onclick = () => openIncreaseView(b.dataset.tiView));
+    main.querySelectorAll('[data-ti-edit]').forEach(b => b.onclick = () => openIncreaseForm(byId(b.dataset.tiEdit), r.notice_days, again));
+    main.querySelectorAll('[data-ti-del]').forEach(b => b.onclick = async () => {
+      const t = byId(b.dataset.tiDel);
+      const ok = await KT.confirm({ title: 'Delete this increase?', description: `The ${tiAmount(t)} increase from ${fmtDate(t.effective_date)} will be removed. Families have ${t.notification_sent_at ? 'already been told; tell them it is cancelled' : 'not been told yet'}.`, okLabel: 'Delete' });
+      if (!ok) return;
+      try { await Api.delete('/billing/tuition-increases/' + t.id); KT.Dom.toast('Increase deleted', 'success'); again(); }
+      catch (e) { KT.Dom.toast((e && e.message) || 'Could not delete the increase.', 'error'); }
+    });
+    main.querySelectorAll('[data-ti-apply]').forEach(b => b.onclick = async () => {
+      const t = byId(b.dataset.tiApply);
+      const ok = await KT.confirm({ title: 'Apply this increase now?', description: `Its date (${fmtDate(t.effective_date)}) has passed. ${t.notification_sent_at ? '' : 'Families will be told first, then '}the new tuition is written to their fees from now on. Invoices already raised do not change.`, okLabel: 'Apply now' });
+      if (!ok) return;
+      try { const x = await Api.post('/billing/tuition-increases/' + t.id + '/apply', {}); KT.Dom.toast(`Applied: ${x.fees_changed} fees changed`, 'success'); again(); }
+      catch (e) { KT.Dom.toast((e && e.message) || 'Could not apply the increase.', 'error'); }
+    });
+  }
+
+  function affectedHtml(a, type) {
+    const fams = a.families || [];
+    if (!fams.length && !(a.plans || []).length) {
+      return '<div style="padding:14px;color:#64748B;font-size:13px;background:#F8FAFC;border-radius:8px;">No families or tuition plans would change: nobody enrolled here has a monthly tuition above $0.</div>';
+    }
+    const kids = fams.reduce((n, f) => n + f.children.length, 0);
+    const rowsHtml = fams.map(f => f.children.map((c, i) => `<tr>
+        <td>${i === 0 ? '<strong>' + esc(f.family_name) + '</strong>' + (f.centre_name ? `<div style="font-size:11.5px;color:#64748B;">${esc(f.centre_name)}</div>` : '') : ''}</td>
+        <td>${esc(c.name)}</td><td style="text-align:right;">${fmtMoney(c.old)}</td><td style="text-align:right;"><strong>${fmtMoney(c.new)}</strong></td></tr>`).join('')).join('');
+    const plans = (a.plans || []).map(p => `<tr><td colspan="2">📋 ${esc(p.name)} <span style="color:#64748B;">(${esc(p.frequency || '')} plan)</span></td><td style="text-align:right;">${fmtMoney(p.old)}</td><td style="text-align:right;"><strong>${fmtMoney(p.new)}</strong></td></tr>`).join('');
+    const skipped = (a.skipped_plans || []).length
+      ? `<div style="font-size:12px;color:#92400E;margin-top:8px;">A flat amount is added to monthly fees only, so ${a.skipped_plans.length} ${a.skipped_plans.length === 1 ? 'plan' : 'plans'} (${esc(a.skipped_plans.map(p => p.name + ', ' + p.frequency).join('; '))}) will not change.</div>` : '';
+    return `<div style="font-size:12.5px;color:#334155;margin:0 0 6px;"><strong>${fams.length}</strong> ${fams.length === 1 ? 'family' : 'families'}, <strong>${kids}</strong> ${kids === 1 ? 'child' : 'children'}${(a.plans || []).length ? `, <strong>${a.plans.length}</strong> tuition ${a.plans.length === 1 ? 'plan' : 'plans'}` : ''}. Monthly tuition, old → new:</div>
+      <table style="width:100%;font-size:13px;"><thead><tr><th>Family</th><th>Child / plan</th><th style="text-align:right;">Now</th><th style="text-align:right;">New</th></tr></thead><tbody>${rowsHtml}${plans}</tbody></table>${skipped}`;
+  }
+
+  async function openIncreaseForm(existing, noticeDays, after) {
+    const Shell = window.KT && KT.Shell;
+    const _cr = await Api.get('/admin/centres').catch(() => ({}));
+    const centres = (_cr.centres || _cr.data || []).filter(c => !c.deleted_at);
+    const opts = (isDirectorUi() ? [] : [{ v: '', l: 'All centres' }]).concat(centres.map(c => ({ v: String(c.id), l: c.name })));
+    const cur = existing || { centre_id: null, increase_type: 'percent', amount: '', effective_date: '', notify_families_days_before: noticeDays, notes: '' };
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(860px,100%);';
+    wrap.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;">
+        <div><label style="${labelCss}" for="ti-centre">Centre</label>
+          <select id="ti-centre" style="${fieldCss}">${opts.map(o => `<option value="${esc(o.v)}"${String(cur.centre_id || '') === o.v ? ' selected' : ''}>${esc(o.l)}</option>`).join('')}</select></div>
+        <div><label style="${labelCss}" for="ti-eff">New tuition starts on</label>
+          <input id="ti-eff" type="date" value="${esc(String(cur.effective_date || '').slice(0, 10))}" style="${fieldCss}"></div>
+        <div><span style="${labelCss}">Type</span>
+          <div role="radiogroup" style="display:flex;gap:6px;">
+            <label style="flex:1;display:flex;gap:6px;align-items:center;border:1px solid #CBD5E1;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;"><input type="radio" name="ti-type" value="percent"${cur.increase_type !== 'flat' ? ' checked' : ''}> Percent (%)</label>
+            <label style="flex:1;display:flex;gap:6px;align-items:center;border:1px solid #CBD5E1;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;"><input type="radio" name="ti-type" value="flat"${cur.increase_type === 'flat' ? ' checked' : ''}> Flat amount ($ a month)</label>
+          </div></div>
+        <div><label style="${labelCss}" for="ti-amt" id="ti-amt-l">Increase</label>
+          <input id="ti-amt" type="number" min="0" step="0.01" inputmode="decimal" value="${esc(cur.amount)}" placeholder="e.g. 3.5" style="${fieldCss}"></div>
+        <div><label style="${labelCss}" for="ti-days">Tell families this many days before</label>
+          <input id="ti-days" type="number" min="0" max="365" step="1" value="${esc(cur.notify_families_days_before)}" style="${fieldCss}"></div>
+        <div><label style="${labelCss}" for="ti-notes">Note for families (optional)</label>
+          <input id="ti-notes" maxlength="2000" value="${esc(cur.notes || '')}" placeholder="e.g. Our annual cost-of-living adjustment." style="${fieldCss}"></div>
+      </div>
+      <div id="ti-when" style="font-size:12.5px;margin:12px 0 8px;min-height:16px;"></div>
+      <div id="ti-prev" style="border-top:1px solid #E2E8F0;padding-top:10px;"><div style="color:#64748B;font-size:13px;">Fill in the date and the increase to see who is affected.</div></div>
+      <div id="ti-err" role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:8px;"></div>`;
+    const q = (s) => wrap.querySelector(s);
+    const body = () => ({
+      centre_id: q('#ti-centre').value ? parseInt(q('#ti-centre').value, 10) : null,
+      effective_date: q('#ti-eff').value,
+      increase_type: (wrap.querySelector('input[name="ti-type"]:checked') || {}).value || 'percent',
+      amount: q('#ti-amt').value === '' ? null : parseFloat(q('#ti-amt').value),
+      notify_families_days_before: q('#ti-days').value === '' ? null : parseInt(q('#ti-days').value, 10),
+      notes: q('#ti-notes').value.trim() || null,
+    });
+    // Client-side checks with the same wording as the server's.
+    const check = (b) => {
+      if (!b.effective_date) return 'Choose the date the new tuition starts.';
+      if (b.amount == null || isNaN(b.amount)) return 'Enter the increase.';
+      if (b.amount <= 0) return 'The increase must be more than zero.';
+      if (b.increase_type === 'percent' && b.amount > 50) return 'A percent increase can be at most 50%. Check the amount, or choose Flat amount.';
+      if (b.increase_type === 'flat' && b.amount > 5000) return 'A flat increase can be at most $5,000 a month. Check the amount.';
+      if (b.notify_families_days_before != null && (b.notify_families_days_before < 0 || b.notify_families_days_before > 365)) return 'Notice must be between 0 and 365 days.';
+      const today = (KT.agencyToday && KT.agencyToday()) || '';
+      if (today && b.effective_date <= today) return 'The new tuition must start after today.';
+      return '';
     };
+    let seq = 0, timer = null;
+    const preview = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const b = body(); const why = check(b); const my = ++seq;
+        const amtL = q('#ti-amt-l'); if (amtL) amtL.textContent = b.increase_type === 'flat' ? 'Increase ($ a month)' : 'Increase (%)';
+        if (why) { q('#ti-err').textContent = (b.effective_date && b.amount != null) ? why : ''; q('#ti-when').textContent = ''; return; }
+        q('#ti-err').textContent = '';
+        q('#ti-prev').innerHTML = '<div style="color:#64748B;font-size:13px;">Working out who is affected…</div>';
+        try {
+          const p = (await Api.post('/billing/tuition-increases/preview', b)).data;
+          if (my !== seq || !wrap.isConnected) return;
+          q('#ti-when').innerHTML = p.short_notice
+            ? `<span style="color:#92400E;">⚠ ${p.notice_days} days' notice would mean telling families on ${fmtDate(p.notice_date)}, which has passed. They will be told as soon as you save (${p.days_of_notice} days before).</span>`
+            : `<span style="color:#334155;">📣 Families are told on <strong>${fmtDate(p.notice_date)}</strong>; the new tuition starts on <strong>${fmtDate(b.effective_date)}</strong>.</span>`;
+          q('#ti-prev').innerHTML = affectedHtml(p, b.increase_type);
+        } catch (e) {
+          if (my !== seq || !wrap.isConnected) return;
+          q('#ti-prev').innerHTML = '';
+          q('#ti-err').textContent = (e && e.message) || 'Could not work out who is affected.';
+        }
+      }, 350);
+    };
+    wrap.addEventListener('input', preview);
+    wrap.addEventListener('change', preview);
+    Shell.Modal.open({
+      title: existing ? '📈 Edit tuition increase' : '📈 Schedule a tuition increase', body: wrap, large: true,
+      actions: [{ label: 'Cancel' }, { label: existing ? 'Save changes' : 'Schedule increase', primary: true, busyLabel: 'Saving…', handler: async () => {
+        const b = body(); const why = check(b);
+        if (why) { q('#ti-err').textContent = why; return false; }
+        try {
+          if (existing) await Api.patch('/billing/tuition-increases/' + existing.id, b);
+          else await Api.post('/billing/tuition-increases', b);
+        } catch (e) { q('#ti-err').textContent = (e && e.message) || 'Could not save the increase.'; return false; }
+        KT.Dom.toast(existing ? 'Increase updated' : 'Increase scheduled', 'success');
+        after();
+        return true;
+      } }],
+    });
+    if (existing) preview();
+  }
+
+  async function openIncreaseView(id) {
+    const Shell = window.KT && KT.Shell;
+    let r;
+    try { r = await Api.get('/billing/tuition-increases/' + id); }
+    catch (e) { KT.Dom.toast((e && e.message) || 'Could not open the increase.', 'error'); return; }
+    const t = r.data, a = r.affected || {};
+    const st = TI_STATUS[t.status] || TI_STATUS.scheduled;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(860px,100%);';
+    const fact = (k, v) => `<div><div style="font-size:11.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.04em;">${k}</div><div style="font-size:14px;margin-top:2px;">${v}</div></div>`;
+    wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px;">
+        ${fact('Status', `<span class="kt-pill ${st[1]}">${st[0]}</span>`)}
+        ${fact('Centre', esc(t.centre_name || 'All centres'))}
+        ${fact('Increase', esc(tiAmount(t)))}
+        ${fact('Starts', fmtDate(t.effective_date))}
+        ${fact('Families told', t.notification_sent_at ? `${t.notified_families} on ${fmtDate(String(t.notification_sent_at))}` : 'On ' + fmtDate(t.notice_date))}
+        ${t.applied_at ? fact('Applied', `${t.applied_count} fees on ${fmtDate(String(t.applied_at))}`) : ''}
+      </div>
+      ${t.notes ? `<div style="font-size:13px;color:#334155;background:#F8FAFC;border-radius:8px;padding:8px 10px;margin-bottom:12px;">${esc(t.notes)}</div>` : ''}
+      <div style="font-size:12px;color:#64748B;margin-bottom:6px;">${a.from_record ? (t.applied_at ? 'What was changed:' : 'What families were told:') : 'Who it will reach, from today’s fees:'}</div>
+      ${affectedHtml(a, t.increase_type)}`;
+    Shell.Modal.open({ title: '📈 Tuition increase', body: wrap, large: true, actions: [{ label: 'Close' }] });
+  }
+
+  function openNoticeRule(days, after) {
+    const Shell = window.KT && KT.Shell;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(460px,90vw);';
+    wrap.innerHTML = `<label style="${labelCss}" for="ti-rule-days">Tell families this many days before a tuition increase</label>
+      <input id="ti-rule-days" type="number" min="0" max="365" step="1" value="${esc(days)}" style="${fieldCss}">
+      <div style="font-size:12px;color:#64748B;margin-top:6px;">The starting value for each new increase (you can change it on the increase). Increases already scheduled keep their own.</div>
+      <div id="ti-rule-err" role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:8px;"></div>`;
+    Shell.Modal.open({ title: '⚙ Tuition increase notice', body: wrap, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async () => {
+      const v = parseInt(wrap.querySelector('#ti-rule-days').value, 10);
+      if (isNaN(v) || v < 0 || v > 365) { wrap.querySelector('#ti-rule-err').textContent = 'Notice must be between 0 and 365 days.'; return false; }
+      try { await Api.patch('/admin/billing-setup', { tuition_notice_days: v }); }
+      catch (e) { wrap.querySelector('#ti-rule-err').textContent = (e && e.message) || 'Could not save the rule.'; return false; }
+      KT.Dom.toast('Notice rule saved', 'success'); after(); return true;
+    } }] });
   }
 
   // ============================ Re-enrollment campaigns =================================

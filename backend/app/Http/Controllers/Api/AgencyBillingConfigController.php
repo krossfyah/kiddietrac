@@ -129,6 +129,12 @@ final class AgencyBillingConfigController extends Controller
             // Each new invoice is also an announcement in the paying guardian's News (2026-10-31). On unless switched off.
             'announce_invoices'         => ($bs['announce_invoices'] ?? true) !== false,
             'due_window_days'           => $bs['due_window_days'] ?? \App\Support\ParentBilling::DEFAULT_WINDOW_DAYS,
+            /* The automated billing features' own rules (2026-11-28, App\Support\BillingRules): tuition increase notice,
+               vacation hold credit, re-enrolment reminder. Edited from each screen's Rules button. */
+            'tuition_notice_days'       => \App\Support\BillingRules::tuitionNoticeDays($agencyId),
+            'vacation_credit_mode'      => \App\Support\BillingRules::vacationCredit($agencyId)['mode'],
+            'vacation_credit_value'     => \App\Support\BillingRules::vacationCredit($agencyId)['value'],
+            'reenrol_reminder_days'     => \App\Support\BillingRules::reenrolReminderDays($agencyId),
         ]]);
     }
 
@@ -162,6 +168,10 @@ final class AgencyBillingConfigController extends Controller
             'invoice_show_card'          => 'nullable|boolean',
             'announce_invoices'          => 'nullable|boolean',
             'due_window_days'            => 'nullable|integer|min:0|max:120',
+            'tuition_notice_days'        => 'nullable|integer|min:0|max:365',
+            'vacation_credit_mode'       => 'nullable|in:none,percent,flat',
+            'vacation_credit_value'      => 'nullable|numeric|min:0|max:1000',
+            'reenrol_reminder_days'      => 'nullable|integer|min:0|max:90',
         ]);
 
         $cols = [];
@@ -172,7 +182,7 @@ final class AgencyBillingConfigController extends Controller
         $settings = [];
         if ($row && $row->settings) { $x = json_decode($row->settings, true); if (is_array($x)) $settings = $x; }
         $bs = $settings['billing_setup'] ?? [];
-        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'invoice_issue_lead_days', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'eft_surcharge_percent', 'accepted_payment_methods', 'interac_email', 'interac_requests', 'invoice_show_card', 'announce_invoices', 'due_window_days'] as $k) {
+        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'invoice_issue_lead_days', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'eft_surcharge_percent', 'accepted_payment_methods', 'interac_email', 'interac_requests', 'invoice_show_card', 'announce_invoices', 'due_window_days', 'tuition_notice_days', 'vacation_credit_mode', 'vacation_credit_value', 'reenrol_reminder_days'] as $k) {
             if (array_key_exists($k, $d)) $bs[$k] = in_array($k, ['invoice_show_card', 'announce_invoices'], true) ? (bool) $d[$k] : $d[$k];
         }
         // The Interac e-Transfer tab (2026-11-11). Plain text only: it is shown to families as written.
@@ -188,6 +198,9 @@ final class AgencyBillingConfigController extends Controller
             if (($bs['interac_autodeposit'] ?? null) === false && (($bs['interac_question'] ?? '') === '' || ($bs['interac_answer'] ?? '') === '')) {
                 return response()->json(['message' => 'Without Autodeposit, families need the security question and its answer.', 'errors' => ['interac_question' => ['Add the question and the answer, or choose Autodeposit.']]], 422);
             }
+        }
+        if (($bs['vacation_credit_mode'] ?? null) === 'percent' && (float) ($bs['vacation_credit_value'] ?? 0) > 100) {
+            return response()->json(['message' => 'A vacation credit can be at most 100% of the daily fee.', 'errors' => ['vacation_credit_value' => ['At most 100.']]], 422);
         }
         $settings['billing_setup'] = $bs;
         $cols['settings'] = json_encode($settings);

@@ -272,6 +272,10 @@ Schedule::command('invoices:apply-late-fees')
 // v22p51 — append these inside the closure in routes/console.php
 
 Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
+/* Tuition increases (2026-11-28, App\Support\TuitionIncreases): families told on the notice day, new rates written on
+   the effective date. Hourly because each agency's day starts in its own timezone; every step is recorded, so a
+   run with nothing due does nothing. */
+Schedule::command('billing:tuition-increases')->hourlyAt(17)->withoutOverlapping(30)->onOneServer();
 
 /* Payment-schedule invoices become live on the first of their own month.
 

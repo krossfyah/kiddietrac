@@ -108,6 +108,7 @@ final class EmailOverrides
         'AnnouncementMail@build' => 'announcement-notice',
         'FamilyNoticeMail@formRequest' => 'form-request',
         'FamilyNoticeMail@invoiceCopy' => 'invoice-copy-self',
+        'BillingNoticeMail@tuitionIncrease' => 'tuition-increase-notice',
         'AccountLedgerController@emailStatement' => 'account-statement',
         'CentreOffboardController@notifyClosure' => 'provider-closed',
         'ManagedFormController@emailFormPackage' => 'forms-to-sign',

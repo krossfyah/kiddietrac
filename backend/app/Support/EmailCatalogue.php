@@ -318,6 +318,15 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
+                'key' => 'tuition-increase-notice', 'audience' => 'parents',
+                'name' => 'Tuition change notice',
+                'fires' => 'On a tuition increase\'s notice day (the agency\'s notice rule, default 30 days before it starts).',
+                'to' => 'Each guardian of an affected family (by first name), with their own children\'s old and new tuition',
+                'subject' => 'Tuition change from {date} — {agency}',
+                'source' => 'Support/BillingNoticeMail.php',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'drip', 'audience' => 'parents',
                 'name' => 'A note from us',
                 'fires' => 'Scheduled drip sequence, where one is configured.',

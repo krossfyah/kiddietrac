@@ -78,6 +78,10 @@ La plupart des centres relevant de la LGEPE (CCEYA) ont une politique de « frai
 
 À la fin de l’année, votre direction peut générer un reçu annuel indiquant le total des frais payés. Utile pour votre déclaration de revenus canadienne (à réclamer à la ligne de la déduction pour frais de garde d’enfants). Adressez-vous à votre direction en janvier ou en février.
 
+## Quand les frais de garde changent
+
+Si votre centre augmente ses frais, vous êtes prévenu à l'avance : vous recevez une notification et un courriel **Changement des frais de garde à partir du (date)** qui indique, pour chacun de vos enfants, les frais mensuels actuels et ceux à partir de cette date. Seuls les montants de votre famille sont affichés. À cette date, vos frais changent d'eux-mêmes et les factures suivantes montrent le nouveau montant. Les factures déjà reçues ne changent pas. Des questions? Répondez au courriel ou écrivez à votre centre dans l'application.
+
 ## À consulter aussi
 
 - **Payer vos factures et le prélèvement automatique** — paiement en ligne par carte ou compte bancaire et paiement mensuel automatique, si votre centre l’a activé

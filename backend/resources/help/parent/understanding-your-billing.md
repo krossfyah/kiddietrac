@@ -78,6 +78,10 @@ Most CCEYA centres have an "attendance fee" policy where you still pay even if y
 
 At year-end, your director can generate an annual receipt showing total fees paid. Useful for Canadian tax filing (claim under the Child Care Expense Deduction line). Ask your director in January or February.
 
+## When tuition changes
+
+If your centre raises its tuition, you are told before it happens: you get a notification and an email **Tuition change from (date)** that lists each of your children with their monthly tuition now and from that date. Only your own family's amounts are shown. On that date your tuition changes by itself, and invoices from then on show the new amount. Invoices you already have do not change. Questions? Reply to the email or message your centre in the app.
+
 ## Related
 
 - **Paying invoices and autopay** — online card/bank payment and automatic monthly payment, where your centre has enabled it

@@ -298,6 +298,10 @@ post billing/prorate-preview | Previewed a pro-rated fee
 post billing/schedule | Set a family's billing schedule
 delete billing/schedule/{familyId} | Turned off a family's billing schedule
 post billing/tuition-increases | Scheduled a fee increase
+post billing/tuition-increases/preview | Previewed who a tuition increase affects
+patch billing/tuition-increases/{id} | Changed a scheduled tuition increase
+delete billing/tuition-increases/{id} | Deleted a tuition increase
+post billing/tuition-increases/{id}/apply | Applied an overdue tuition increase
 post billing/vacation-holds | Asked for a vacation hold
 post billing/vacation-holds/for-family | Added a vacation hold for a family
 patch billing/vacation-holds/{id} | Decided a vacation hold

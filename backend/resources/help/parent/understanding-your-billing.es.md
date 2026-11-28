@@ -78,6 +78,10 @@ La mayoría de los centros regidos por la CCEYA tiene una política de «cuota d
 
 Al final del año, su director puede generar un recibo anual con el total de cuotas pagadas. Es útil para la declaración de impuestos en Canadá (se reclama en la línea de la deducción por gastos de cuidado infantil). Pídalo a su director en enero o febrero.
 
+## Cuando cambia la colegiatura
+
+Si su centro aumenta la colegiatura, se le avisa antes: recibe una notificación y un correo **Cambio de colegiatura a partir del (fecha)** con cada uno de sus hijos y su colegiatura mensual actual y desde esa fecha. Solo se muestran los montos de su familia. Ese día su colegiatura cambia sola y las facturas siguientes muestran el nuevo monto. Las facturas que ya tiene no cambian. ¿Preguntas? Responda el correo o escriba a su centro en la aplicación.
+
 ## Relacionado
 
 - **Pago de facturas y pago automático** — pago en línea con tarjeta o cuenta bancaria y pago mensual automático, si su centro lo ha activado

@@ -167,6 +167,7 @@ final class BillingV2Controller extends Controller
     // ===================================
     // Tuition increase scheduling
     // ===================================
+    /* Scheduled -> Notified -> Applied, run by billing:tuition-increases (App\Support\TuitionIncreases, 2026-11-28). */
     public function listIncreases(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -179,46 +180,219 @@ final class BillingV2Controller extends Controller
             ->where('ti.agency_id', $agencyId)
             ->where(fn ($w) => $w->whereNull('ti.centre_id')->orWhereIn('ti.centre_id', $visible ?: [0]))
             ->orderByDesc('ti.effective_date')->select('ti.*', 'c.name as centre_name')->get();
-        return response()->json(['data' => $rows]);
+        $today = \App\Support\AgencyTime::today($agencyId);
+        $T = \App\Support\TuitionIncreases::class;
+        $rows = $rows->map(function ($t) use ($today, $scope, $T) {
+            $t->increase_type = $T::type($t->increase_type);
+            $t->status = $T::status($t, $today);
+            $t->notice_date = $T::noticeDate((string) $t->effective_date, (int) $t->notify_families_days_before);
+            // Changed only while nothing has gone out; a director never changes an agency-wide one.
+            $mine = \App\Support\CentreScope::canWrite($scope, $t->centre_id ? (int) $t->centre_id : null);
+            $t->can_edit = $mine && $t->status === 'scheduled';
+            $t->can_delete = $mine && in_array($t->status, ['scheduled', 'overdue'], true);
+            $t->can_apply = $mine && $t->status === 'overdue';
+            return $t;
+        });
+        return response()->json(['data' => $rows, 'today' => $today,
+            'notice_days' => \App\Support\BillingRules::tuitionNoticeDays($agencyId)]);
+    }
+
+    /** Before saving: which families, which children, old -> new. Same rules as the scheduler, from today's fees. */
+    public function previewIncrease(Request $request): JsonResponse
+    {
+        [$agencyId, $d, $centreId, $err] = $this->increaseInput($request, null);
+        if ($err) return $err;
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $aff = \App\Support\TuitionIncreases::affected($agencyId, $centreId, $d['increase_type'], (float) $d['amount'], $d['effective_date'], $scope);
+        $days = (int) $d['notify_families_days_before'];
+        $today = \App\Support\AgencyTime::today($agencyId);
+        $noticeOn = \App\Support\TuitionIncreases::noticeDate($d['effective_date'], $days);
+        return response()->json(['data' => $aff + [
+            'notice_date' => $noticeOn,
+            'notice_days' => $days,
+            // Told later than promised if the notice day has already passed.
+            'short_notice' => $noticeOn < $today,
+            'days_of_notice' => (int) \Illuminate\Support\Carbon::parse($today)->diffInDays(\Illuminate\Support\Carbon::parse($d['effective_date'])),
+        ]]);
     }
 
     public function scheduleIncrease(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'centre_id' => 'nullable|integer',
-            'effective_date' => 'required|date|after:today',
-            'increase_type' => 'required|in:percent,flat',
-            'amount' => 'required|numeric|min:0',
-            'notify_families_days_before' => 'nullable|integer|min:0|max:365',
-            'notes' => 'nullable|string|max:2000',
-        ]);
-        $agencyId = $this->resolveAgencyId($request);
-        /* Authorise the destination (2026-11-27): centre_id was written unchecked (any agency's centre), and a director
-           with no centre_id created an AGENCY-WIDE increase. A director must name one of their own open centres (their
-           only one is used when they have just one); an agency admin may name any open centre of this agency or none. */
-        $scope = \App\Support\CentreScope::ids($request, $agencyId);
-        $centreId = isset($data['centre_id']) && $data['centre_id'] ? (int) $data['centre_id'] : null;
-        if ($centreId === null && $scope !== null && count($scope) === 1) {
-            $centreId = (int) $scope[0];
-        }
-        if ($centreId !== null && ! in_array($centreId, \App\Support\Live::centreIds($agencyId), true)) {
-            return response()->json(['message' => 'That centre is not open in this agency.'], 422);
-        }
-        if (! \App\Support\CentreScope::canWrite($scope, $centreId)) {
-            return response()->json(['message' => $centreId === null ? 'Choose one of your centres for this increase.' : 'You can only schedule increases for your own centres.'], $centreId === null ? 422 : 403);
-        }
+        [$agencyId, $d, $centreId, $err] = $this->increaseInput($request, null);
+        if ($err) return $err;
         $id = DB::table('tuition_increases')->insertGetId([
             'agency_id' => $agencyId,
             'centre_id' => $centreId,
-            'effective_date' => $data['effective_date'],
-            'increase_type' => $data['increase_type'],
-            'amount' => $data['amount'],
-            'notify_families_days_before' => $data['notify_families_days_before'] ?? 60,
-            'notes' => $data['notes'] ?? null,
+            'effective_date' => $d['effective_date'],
+            'increase_type' => $d['increase_type'],
+            'amount' => $d['amount'],
+            'notify_families_days_before' => $d['notify_families_days_before'],
+            'notes' => $d['notes'] ?? null,
+            'created_by_id' => $request->user()->id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
         return response()->json(['id' => $id], 201);
+    }
+
+    /** One increase: who was told / what changed (from the record), or who it will reach (from today's fees). */
+    public function showIncrease(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $t = DB::table('tuition_increases as ti')->leftJoin('centres as c', 'c.id', '=', 'ti.centre_id')
+            ->where('ti.id', $id)->where('ti.agency_id', $agencyId)->select('ti.*', 'c.name as centre_name')->first();
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! $t || ! \App\Support\CentreScope::canRead($scope, $t->centre_id ? (int) $t->centre_id : null, true)) {
+            return response()->json(['message' => 'That increase was not found.'], 404);
+        }
+        $T = \App\Support\TuitionIncreases::class;
+        $t->increase_type = $T::type($t->increase_type);
+        $t->status = $T::status($t, \App\Support\AgencyTime::today($agencyId));
+        $t->notice_date = $T::noticeDate((string) $t->effective_date, (int) $t->notify_families_days_before);
+        $phase = $t->applied_at ? 'applied' : ($t->notification_sent_at ? 'notice' : null);
+        if ($phase) {
+            $q = DB::table('tuition_increase_items as i')->leftJoin('families as f', 'f.id', '=', 'i.family_id')
+                ->leftJoin('children as ch', 'ch.id', '=', 'i.child_id')->leftJoin('fee_plans as p', 'p.id', '=', 'i.fee_plan_id')
+                ->where('i.tuition_increase_id', $id)->where('i.phase', $phase);
+            // A director sees only their own centres' families on an agency-wide increase.
+            if ($scope !== null) $q->where(fn ($w) => $w->whereNull('i.family_id')->orWhereIn('f.centre_id', $scope ?: [0]));
+            $rows = $q->orderBy('f.family_name')->get(['i.family_id', 'f.family_name', 'ch.first_name', 'ch.preferred_name', 'i.fee_plan_id', 'p.name as plan_name', 'i.old_amount', 'i.new_amount']);
+            $fams = [];
+            $plans = [];
+            foreach ($rows as $r) {
+                if ($r->fee_plan_id) { $plans[] = ['name' => (string) $r->plan_name, 'old' => (float) $r->old_amount, 'new' => (float) $r->new_amount]; continue; }
+                $fid = (int) $r->family_id;
+                $fams[$fid] ??= ['family_id' => $fid, 'family_name' => (string) $r->family_name, 'children' => []];
+                $fams[$fid]['children'][] = ['name' => trim((string) ($r->preferred_name ?: $r->first_name)) ?: 'Child', 'old' => (float) $r->old_amount, 'new' => (float) $r->new_amount];
+            }
+            $aff = ['families' => array_values($fams), 'plans' => $plans, 'skipped_plans' => [], 'from_record' => true];
+        } else {
+            $aff = $T::affected($agencyId, $t->centre_id ? (int) $t->centre_id : null, $t->increase_type, (float) $t->amount, substr((string) $t->effective_date, 0, 10), $scope) + ['from_record' => false];
+        }
+        return response()->json(['data' => $t, 'affected' => $aff]);
+    }
+
+    /** Edit while Scheduled (nothing sent yet). */
+    public function updateIncrease(Request $request, int $id): JsonResponse
+    {
+        $t = $this->ownIncrease($request, $id);
+        if ($t instanceof JsonResponse) return $t;
+        if (\App\Support\TuitionIncreases::status($t) !== 'scheduled') {
+            return response()->json(['message' => 'Families have already been told about this increase, so it can no longer be changed.'], 422);
+        }
+        [, $d, $centreId, $err] = $this->increaseInput($request, $t);
+        if ($err) return $err;
+        DB::table('tuition_increases')->where('id', $id)->whereNull('notification_sent_at')->update([
+            'centre_id' => $centreId,
+            'effective_date' => $d['effective_date'],
+            'increase_type' => $d['increase_type'],
+            'amount' => $d['amount'],
+            'notify_families_days_before' => $d['notify_families_days_before'],
+            'notes' => $d['notes'] ?? null,
+            'updated_by_id' => $request->user()->id,
+            'updated_at' => now(),
+        ]);
+        return response()->json(['status' => 'updated']);
+    }
+
+    /** Delete while Scheduled, or an Overdue one nobody applied. */
+    public function deleteIncrease(Request $request, int $id): JsonResponse
+    {
+        $t = $this->ownIncrease($request, $id);
+        if ($t instanceof JsonResponse) return $t;
+        $st = \App\Support\TuitionIncreases::status($t, \App\Support\AgencyTime::today((int) $t->agency_id));
+        if ($t->applied_at || ($t->notification_sent_at && $st !== 'overdue')) {
+            return response()->json(['message' => $t->applied_at
+                ? 'This increase has already been applied to families\' fees, so it cannot be deleted.'
+                : 'Families have already been told about this increase, so it cannot be deleted.'], 422);
+        }
+        DB::table('tuition_increase_items')->where('tuition_increase_id', $id)->delete();
+        DB::table('tuition_increases')->where('id', $id)->delete();
+        return response()->json(['status' => 'deleted']);
+    }
+
+    /** An Overdue increase (its date passed and the scheduler would not apply it late): tell families, then apply. */
+    public function applyIncreaseNow(Request $request, int $id): JsonResponse
+    {
+        $t = $this->ownIncrease($request, $id);
+        if ($t instanceof JsonResponse) return $t;
+        if (\App\Support\TuitionIncreases::status($t, \App\Support\AgencyTime::today((int) $t->agency_id)) !== 'overdue') {
+            return response()->json(['message' => 'Only an overdue increase can be applied by hand. Others apply themselves on their date.'], 422);
+        }
+        $told = $t->notification_sent_at ? 0 : \App\Support\TuitionIncreases::notify($id);
+        $changed = \App\Support\TuitionIncreases::apply($id);
+        return response()->json(['status' => 'applied', 'families_told' => $told, 'fees_changed' => $changed]);
+    }
+
+    /** @return object|JsonResponse the increase, if it is in this agency and the caller may change it */
+    private function ownIncrease(Request $request, int $id)
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $t = DB::table('tuition_increases')->where('id', $id)->where('agency_id', $agencyId)->first();
+        if (! $t) return response()->json(['message' => 'That increase was not found.'], 404);
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! \App\Support\CentreScope::canWrite($scope, $t->centre_id ? (int) $t->centre_id : null)) {
+            return response()->json(['message' => $t->centre_id ? 'You can only change increases for your own centres.' : 'Only an agency admin can change an increase for all centres.'], 403);
+        }
+        return $t;
+    }
+
+    /**
+     * The shared checks for preview / schedule / edit, with friendly messages.
+     * @return array{0:int, 1:array, 2:?int, 3:?JsonResponse}
+     */
+    private function increaseInput(Request $request, ?object $existing): array
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $v = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'centre_id' => 'nullable|integer',
+            'effective_date' => 'required|date_format:Y-m-d',
+            'increase_type' => 'required|in:percent,flat',
+            'amount' => 'required|numeric|gt:0',
+            'notify_families_days_before' => 'nullable|integer|min:0|max:365',
+            'notes' => 'nullable|string|max:2000',
+        ], [
+            'effective_date.required' => 'Choose the date the new tuition starts.',
+            'effective_date.date_format' => 'Choose the date the new tuition starts.',
+            'increase_type.required' => 'Choose a percent or a flat amount.',
+            'increase_type.in' => 'Choose a percent or a flat amount.',
+            'amount.required' => 'Enter the increase.',
+            'amount.numeric' => 'The increase must be a number, without % or $.',
+            'amount.gt' => 'The increase must be more than zero.',
+            'notify_families_days_before.*' => 'Notice must be between 0 and 365 days.',
+        ]);
+        if ($v->fails()) {
+            return [$agencyId, [], null, response()->json(['message' => $v->errors()->first(), 'errors' => $v->errors()], 422)];
+        }
+        $d = $v->validated();
+        if ($d['increase_type'] === 'percent' && (float) $d['amount'] > 50) {
+            return [$agencyId, [], null, response()->json(['message' => 'A percent increase can be at most 50%. Check the amount, or choose Flat amount.'], 422)];
+        }
+        if ($d['increase_type'] === 'flat' && (float) $d['amount'] > 5000) {
+            return [$agencyId, [], null, response()->json(['message' => 'A flat increase can be at most $5,000 a month. Check the amount.'], 422)];
+        }
+        $today = \App\Support\AgencyTime::today($agencyId);
+        if ($d['effective_date'] <= $today) {
+            return [$agencyId, [], null, response()->json(['message' => 'The new tuition must start after today.', 'errors' => ['effective_date' => ['Must be after today.']]], 422)];
+        }
+        $d['notify_families_days_before'] = isset($d['notify_families_days_before'])
+            ? (int) $d['notify_families_days_before']
+            : ($existing ? (int) $existing->notify_families_days_before : \App\Support\BillingRules::tuitionNoticeDays($agencyId));
+        /* Authorise the destination (2026-11-27): centre_id was written unchecked (any agency's centre), and a director
+           with no centre_id created an AGENCY-WIDE increase. A director must name one of their own open centres (their
+           only one is used when they have just one); an agency admin may name any open centre of this agency or none. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $centreId = ! empty($d['centre_id']) ? (int) $d['centre_id'] : null;
+        if ($centreId === null && $scope !== null && count($scope) === 1) {
+            $centreId = (int) $scope[0];
+        }
+        if ($centreId !== null && ! in_array($centreId, \App\Support\Live::centreIds($agencyId), true)) {
+            return [$agencyId, [], null, response()->json(['message' => 'That centre is not open in this agency.'], 422)];
+        }
+        if (! \App\Support\CentreScope::canWrite($scope, $centreId)) {
+            return [$agencyId, [], null, response()->json(['message' => $centreId === null ? 'Choose one of your centres for this increase.' : 'You can only schedule increases for your own centres.'], $centreId === null ? 422 : 403)];
+        }
+        return [$agencyId, $d, $centreId, null];
     }
 
     // ===================================

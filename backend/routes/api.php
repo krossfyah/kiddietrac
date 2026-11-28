@@ -3796,6 +3796,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch ('/billing/vacation-holds/{id}',  [\App\Http\Controllers\Api\BillingV2Controller::class, 'decideHold']);
         Route::get   ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'listIncreases']);
         Route::post  ('/billing/tuition-increases',    [\App\Http\Controllers\Api\BillingV2Controller::class, 'scheduleIncrease']);
+        // Tuition increases that notify and apply themselves (2026-11-28, App\Support\TuitionIncreases).
+        Route::post  ('/billing/tuition-increases/preview', [\App\Http\Controllers\Api\BillingV2Controller::class, 'previewIncrease']);
+        Route::get   ('/billing/tuition-increases/{id}', [\App\Http\Controllers\Api\BillingV2Controller::class, 'showIncrease'])->whereNumber('id');
+        Route::patch ('/billing/tuition-increases/{id}', [\App\Http\Controllers\Api\BillingV2Controller::class, 'updateIncrease'])->whereNumber('id');
+        Route::delete('/billing/tuition-increases/{id}', [\App\Http\Controllers\Api\BillingV2Controller::class, 'deleteIncrease'])->whereNumber('id');
+        Route::post  ('/billing/tuition-increases/{id}/apply', [\App\Http\Controllers\Api\BillingV2Controller::class, 'applyIncreaseNow'])->whereNumber('id');
         Route::post  ('/billing/prorate-preview',      [\App\Http\Controllers\Api\BillingV2Controller::class, 'proratePreview']);
         Route::get   ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'listCampaigns']);
         Route::post  ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'createCampaign']);
