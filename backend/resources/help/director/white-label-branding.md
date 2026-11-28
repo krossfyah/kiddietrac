@@ -13,7 +13,7 @@ screens: admin-branding
 
 ## Where it is
 
-**Agency overview → ✏️ Edit agency → Open Branding →**. Platform admins can also use **Reseller → Branding**. Either way, the screen works on the agency you are currently viewing.
+**Agency overview → ✏️ Edit agency → Open Branding →**. Platform admins can also use **Platform › Branding**. Either way, the screen works on the agency you are currently viewing.
 
 [[open: #admin-branding | Open Branding]]
 
@@ -128,8 +128,23 @@ The invoice *From* block pulls your **agency name, address, phone, and support e
 
 [[open: #admin-branding?tab=invoices | Open Branding → Invoices]]
 
+## Who can do what
+
+| Role | What they can do |
+|---|---|
+| Agency admin | Changes their own agency's logo, colour, invoices, contact and legal links, email delivery, payslip wording and region. Sees the white-label licence status but cannot change it. |
+| Platform admin | Everything above for the agency they are viewing, switches the white-label licence (**Show "Powered by Kiddietrac"**) and edits **🍂 Seasonal email headers**. |
+| Centre directors and other staff | Do not see this screen. |
+
+## FAQs and when something goes wrong
+
 ??? I uploaded our logo but the portal still shows KiddieTrac. | Your logo only replaces KiddieTrac in the portal and app when your agency has the white-label licence. Without it, the logo is used on invoices, emails and forms.
 ??? Can I change the white-label licence myself? | No. It is part of your plan, so only a platform admin can switch it.
 ??? Can I change the light colour behind the sidebar and tabs? | Yes, with the white-label licence. Use Soft tint on the White-label & logo tab, or leave it on automatic for a soft shade of your brand colour.
+??? Which button saves which tab? | **Save changes** saves the White-label & logo, Invoices and Contact & legal tabs together; the other tabs have their own save buttons. Save before you leave the screen.
+
+## Related screens
+
+[[open: #dashboard | Agency overview]] [[open: #admin-branding?tab=invoices | Branding → Invoices]]
 
 See also: [Invoice style and numbering](invoice-numbering-and-style) · [Billing setup & settings](billing-setup) · [Reference IDs](reference-ids)

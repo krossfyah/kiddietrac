@@ -3,7 +3,6 @@ roles: agency_admin, platform_admin
 title: Platform admin (overview)
 category: Administration
 order: 35
-screens: ~reseller, ~reseller-onboard, ~reseller-billing, ~reseller-support, ~reseller-brand, ~reseller-agencies, ~resellers, ~server-health, ~platform-careers, ~usage-spend, ~ai-usage, ~platform-sales, ~maintenance, ~compliance-evidence, ~sales-quotes, ~sales-email, ~sales-plans, ~sales-demo
 ---
 # Platform admin (overview)
 

@@ -10,7 +10,7 @@ roles: agency_admin, platform_admin
 
 [[open: #sales-library | Ouvrir le Dépôt de fichiers]]
 
-## Qui peut l’utiliser
+## Qui peut faire quoi
 
 **Les administrateurs de la plateforme (superadmins) seulement.** Elle se trouve dans la section **💼 Ventes** de la barre latérale, que seul un administrateur de la plateforme possède, et c’est aussi une tuile de l’écran d’accueil des Ventes pour eux.
 
@@ -50,7 +50,7 @@ Quelques types de fichiers qu’un serveur Web pourrait exécuter (par exemple `
 
 ## La barre de téléversement
 
-Pendant le téléversement d’un fichier, une barre foncée descend du haut de l’écran et affiche **Téléversement en cours** et le nom du fichier, le pourcentage et la quantité envoyée. Elle se termine par **Téléversement terminé** ou **Échec du téléversement**.
+Pendant le téléversement d’un fichier, une barre foncée descend du haut de l’écran et affiche **Téléversement en cours** et le nom du fichier, le pourcentage et la quantité envoyée. Elle se termine par **Done**. Si un téléversement échoue, la barre se ferme et l’écran affiche son propre message expliquant pourquoi.
 
 Cette barre n’est pas propre à cet écran. Tous les téléversements du portail l’affichent, y compris les pièces jointes de discussion, les photos, les fichiers d’incident et les documents électroniques. Lorsque le navigateur ne peut pas indiquer la taille, la barre affiche une bande animée au lieu d’un pourcentage.
 
@@ -74,11 +74,17 @@ Chaque ligne a le menu **⋮** habituel :
 
 Le téléversement, le déplacement et la suppression d’un fichier, ainsi que la création ou la suppression d’un dossier, écrivent chacun une ligne d’audit qui nomme le fichier ou le dossier. Ce sont des événements de niveau plateforme, non liés à une agence.
 
-## Questions courantes
+## FAQ et quand quelque chose ne va pas
 
 ??? Un représentant des ventes peut-il voir ces fichiers? | Non. L’entrée de navigation, la tuile et le serveur s’arrêtent tous aux administrateurs de la plateforme.
 ??? Supprimer un dossier fait-il perdre les fichiers qu’il contient? | Non. Ils retournent dans Tous les fichiers.
 ??? Quelle est la taille maximale d’un fichier? | 25 Mo.
+??? « That file type cannot be stored here. » | Le fichier est d’un type qu’un serveur Web pourrait exécuter (comme .php ou .sh). Enregistrez-le plutôt en PDF ou dans une archive zip de documents.
+??? Le dépôt de fichiers n’apparaît pas dans mon menu. | Seuls les administrateurs de la plateforme l’ont, dans la section **💼 Sales**. Les représentants et les administrateurs d’agence ne le voient jamais.
+
+## Écrans liés
+
+[[open: #sales | Pipeline des ventes]] [[open: #platform-overview | Aperçu de la plateforme]]
 
 Voir aussi : [Administrateur de la plateforme (aperçu)](platform-admin-overview),
 [Ouvrir et imprimer des documents](opening-and-printing-documents).

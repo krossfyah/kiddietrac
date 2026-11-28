@@ -16,7 +16,7 @@ d’identifiants. Chacun a son propre onglet.
 ## Où le trouver
 
 **Aperçu de l’agence → ✏️ Modifier l’agence → Ouvrir l’image de marque →**. Les administrateurs
-de la plateforme peuvent aussi passer par **Revendeur → Image de marque**. Dans les deux cas,
+de la plateforme peuvent aussi passer par **Platform › Image de marque**. Dans les deux cas,
 l’écran porte sur l’agence que vous consultez.
 
 [[open: #admin-branding | Ouvrir l’image de marque]]
@@ -168,8 +168,23 @@ vraies factures, l’**aperçu** des formulaires, et les formulaires et annonces
 
 [[open: #admin-branding?tab=invoices | Ouvrir Image de marque → Factures]]
 
+## Qui peut faire quoi
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur d'agence | Modifie le logo, la couleur, les factures, les coordonnées et liens légaux, l'envoi des courriels, le texte des talons de paie et la région de sa propre agence. Voit le statut de la licence marque blanche sans pouvoir le changer. |
+| Administrateur de la plateforme | Tout ce qui précède pour l'agence consultée, active ou désactive la licence marque blanche (**Show "Powered by Kiddietrac"**) et modifie les **🍂 Seasonal email headers**. |
+| Direction de centre et autre personnel | Ne voient pas cet écran. |
+
+## FAQ et quand quelque chose ne va pas
+
 ??? J’ai téléversé notre logo, mais le portail affiche toujours KiddieTrac. | Votre logo ne remplace KiddieTrac dans le portail et l’application que si votre agence a la licence marque blanche. Sans elle, le logo est utilisé sur les factures, les courriels et les formulaires.
 ??? Puis-je modifier moi-même la licence marque blanche? | Non. Elle fait partie de votre forfait; seul un administrateur de la plateforme peut la modifier.
 ??? Puis-je changer la couleur claire derrière la barre latérale et les onglets? | Oui, avec la licence marque blanche. Utilisez Soft tint (teinte douce) dans l’onglet Marque blanche et logo, ou laissez le mode automatique pour une nuance douce de votre couleur de marque.
+??? Quel bouton enregistre quel onglet? | **Enregistrer les modifications** enregistre ensemble les onglets Marque blanche et logo, Factures et Coordonnées et mentions légales; les autres onglets ont leur propre bouton. Enregistrez avant de quitter l'écran.
+
+## Écrans liés
+
+[[open: #dashboard | Aperçu de l’agence]] [[open: #admin-branding?tab=invoices | Image de marque → Factures]]
 
 Voir aussi : [Style et numérotation des factures](invoice-numbering-and-style) · [Configuration de la facturation](billing-setup) · [Identifiants de référence](reference-ids)

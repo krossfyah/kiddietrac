@@ -7,56 +7,66 @@ screens: admin-roles
 ---
 # Custom roles and permissions
 
-KiddieTrac ships with built-in (system) roles: Agency admin, Centre director, Educator, Home visitor, Parent / Guardian, and Auditor (Platform admin sits above agencies). See [[roles-and-responsibilities]] for what each one does. For most agencies these are enough — they cover the staff types most childcare operations actually have.
+**Roles & permissions** shows what each role in your agency can do, as a list of permissions grouped by area. KiddieTrac's built-in roles (Agency admin, Centre director, Educator, Home visitor, Parent / Guardian, Auditor and the others) are listed with a grey **SYSTEM** badge. When your agency needs a different set, for example a Lead Educator or a Bookkeeper, you create a **CUSTOM** role and tick the permissions it should have. See [[roles-and-responsibilities]] for what each built-in role does.
 
-When you need to model staff structures that don't map cleanly to those — say a Lead Educator who can sign lesson plans but not invoices, or a Bookkeeper who can run reports but not modify centres — you create a **custom role** with a tailored permission matrix.
+[[open: #admin-roles | Open Roles & permissions]]
 
-## Where to find it
+## Reading a role
 
-Sidebar → **Settings → Roles & permissions**. You'll see a two-column screen: role list on the left, permission matrix on the right.
+1. Open **Settings › Roles & permissions** (🛂 in the menu).
+2. Pick a role in the **Roles** list on the left. Each shows how many permissions it has and, for custom roles, whether it covers **one centre** or the **whole agency**. Agency admin opens first.
+3. Read the panel on the right: the role's name, its description and, under **Permissions**, every permission grouped by area (Centres, Families & children, Staff, Daily care, Attendance & kiosk, Medical, Communications, Invoicing & billing, Reports, Agency settings and more). Each permission shows its key, such as `centres.edit`, and what it allows.
+4. Read the count at the bottom ("… / … permissions selected"): how many are ticked out of all permissions.
 
-## Reading the matrix
+> ℹ️ Built-in roles are managed by KiddieTrac and show what each role can do today. Their boxes are greyed out for agency admins.
 
-The right pane shows the currently selected role's name, description, and a grid of 56 permission keys grouped into categories — Centres, Families & children, Parent scope, Staff, Rooms, Invoicing & billing, Reports, Incidents, Medical, Observations & curriculum, Attendance & kiosk, Late pickups, Tasks, Home visits, Documents (incl. Forms Manager), Communications (incl. Email templates), Events & RSVPs, Help & training, and Agency settings.
+## Creating a custom role from a built-in one
 
-Each permission has a short label in monospace (e.g. `centres.edit`) and a plain-language description (e.g. "Edit centre settings and branding"). Tick the box for any permission the role should have.
+1. Pick the built-in role closest to what you need, for example **Educator**.
+2. Press **Copy as custom role**.
+3. Type the role name (for example "Lead Educator") and press **Create**. The new role starts with the same permissions.
+4. Tick or untick permissions. Use **Toggle all** beside an area to tick or clear the whole area at once.
+5. Press **Save changes**. A **Role saved** message appears and the count in the list updates.
 
-Below each category, click **Toggle all** to flip every permission in that category at once — useful for "this role gets everything in this area, nothing in others".
+## Creating a custom role from scratch
 
-## System roles vs custom roles
+1. Press **+ New** at the top of the **Roles** list.
+2. Type a name and press **Create**.
+3. Pick **Based on** (the built-in role it is closest to, or **— none —**).
+4. Pick **Covers**: **One centre** or **Whole agency**. Whole agency is only for roles based on Agency admin; for any other base the screen says so and keeps **One centre**.
+5. Tick its permissions, add an optional description, and press **Save changes**.
 
-System roles (badged grey **SYSTEM**) can have their permissions tuned but not their name, key, or existence changed — they're referenced by the underlying code. Custom roles (badged blue **CUSTOM**) are fully editable and deletable.
+## Renaming or deleting a custom role
 
-## Creating a custom role
+1. Pick the custom role and click its name at the top to edit it.
+2. Press **Save changes**.
+3. To remove it, press **🗑 Delete role** at the bottom and confirm. The role is archived; anyone given it would need another role.
 
-1. Click **+ New** at the top of the role list.
-2. Type a name (e.g. "Lead Educator").
-3. The new role appears with no permissions checked. Tick the ones it should have.
-4. Click **Save changes**.
+## Who can do what
 
-The role is now visible in the User management Manage modal — assign it to users the same way you'd assign a system role.
+| Role | What they can do |
+|---|---|
+| Agency admin | Reads every role; creates, edits and deletes custom roles for their agency. Cannot change built-in roles. |
+| Platform admin | Everything above, can tune built-in roles for an agency, and sees the **🔎 Permission check** tab. |
+| Centre director and others | Do not see this screen. |
 
-## Assigning a custom role to a user
+### The permission check (platform admins)
 
-User management → click **Manage** on the user → in the Roles section, select the role from the dropdown → click **Apply**. Roles are additive — adding a new role does not remove existing ones.
+The **🔎 Permission check** tab compares the permission list with what people really did, and blocks nothing. **Would block — must be zero before enforcing** lists cases the list would refuse today. Use **Turn off** or **Turn on watching** to stop or start the watch.
 
-## Data isolation across centres and agencies
+## FAQs and when something goes wrong
 
-Roles also decide **what data you can see**, independently of the permission
-matrix:
+??? Why are the boxes greyed out? | You are looking at a built-in role. Built-in roles are managed by KiddieTrac. Press **Copy as custom role** to make your own version.
+??? Does ticking a permission change what people can do today? | Not yet. The permissions are recorded and watched, but access is still decided by each person's built-in role. Use the list to document what each role should do.
+??? How do I give a custom role to a person? | Not yet: the role picker in user management offers the built-in roles only. Give the person the closest built-in role for now.
+??? "Only a role based on Agency admin can cover the whole agency." | Set **Based on** to Agency admin, or choose **One centre** in **Covers**.
+??? "Built-in roles are managed by KiddieTrac." | You tried to save a built-in role. Copy it as a custom role instead.
+??? "Could not load roles" appears. | Your session ended or no agency is selected. Pick the active agency in the top bar and refresh the page.
+??? Is anyone told when I change a role? | No. Changes are recorded in the audit log; nobody is emailed or notified.
 
-- **Agency admin / Platform admin** see every centre in their **active agency** —
-  for example the **Children** list shows all children across all of the
-  agency's centres, and the centre filter lets you narrow down.
-- **Centre director / Educator** see only **their own centre's** families,
-  children, rooms and reports.
-- Agencies are fully separated: a new agency (or a new centre in another agency)
-  starts with its own settings and **never** sees another agency's data. Switch
-  the **active agency** from the top bar if you administer more than one.
+## Related screens
 
-If you ever see "agency not found", make sure an **active agency is selected**
-in the top bar.
+[[open: #admin-users | User management]] [[open: #audit-logs | Audit log]]
 
-## Phase A note
-
-In the current version, permissions stored on custom roles are recorded but not yet enforced — every existing route check uses the original role keys. Phase B (a planned rollout) will switch those checks to consult the permission matrix. Until then, treat the matrix as documentation of what each role SHOULD be able to do — useful for audit purposes.
+- [[roles-and-responsibilities]]
+- [[audit-log]]

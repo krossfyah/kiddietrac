@@ -1,39 +1,68 @@
 ---
-roles: agency_admin, platform_admin
-title: Ajouter une nouvelle agence
-category: Administration
-order: 5
+title: Toutes les agences : ajouter et gérer des agences
 ---
-# Ajouter une nouvelle agence
+# Toutes les agences : ajouter et gérer des agences
 
-Ajouter une agence cliente est une action d’**administrateur de plateforme**. Elle se fait dans un court **assistant en 4 étapes** qui prépare d’un seul coup tout ce dont l’agence a besoin : l’agence, un premier centre et le premier accès administrateur.
+**Toutes les agences** est la liste, pour l'équipe de la plateforme, de chaque agence cliente sur KiddieTrac, avec son statut, son forfait et sa taille. D'ici, vous ajoutez une nouvelle agence avec un assistant en quatre étapes, ouvrez n'importe quelle agence pour y travailler, modifiez ses renseignements, renvoyez l'invitation de son administrateur, la suspendez ou la réactivez, et bloquez la connexion pour toute l'agence.
 
-## Par où commencer
+[[open: #platform-agencies | Ouvrir Toutes les agences]]
 
-1. En bas à gauche, cliquez sur le **sélecteur d’agence** (la pastille qui indique l’agence actuelle) et choisissez **Toutes les agences** — ou utilisez **Plateforme → Toutes les agences**.
-2. Cliquez sur **+ Créer une agence** (en haut à droite). L’assistant s’ouvre.
+## Lire la liste
 
-## Les 4 étapes (tout est obligatoire)
+1. Ouvrez **Platform › Toutes les agences**.
+2. Lisez le tableau : **Name**, **Status** (par exemple essai, active ou suspendue), **Plan** (avec son montant mensuel), **Centres**, **Families**, **Children**, **Created** et **Actions**.
+3. Appuyez sur **Open** sur une ligne pour passer à cette agence. Vous arrivez sur son écran d'accueil et son menu reflète le forfait et les modules de cette agence.
 
-1. **Plan et logo**
-   - **Plan** — choisissez **Starter (49 $)**, **Growth (149 $)** ou **Enterprise (349 $)**. Growth et Enterprise **incluent la marque blanche** (l’administrateur de l’agence configure son logo et ses couleurs à sa première connexion).
-   - **Logo de l’agence** — téléversez un PNG/SVG (2 Mo max.).
-   - **Couleur principale**.
-2. **Détails de l’agence** — nom de l’agence, adresse (ligne 1, ville, province, code postal), **pays de résidence** (détermine la devise et la conformité de l’agence), **langue par défaut**, courriel de contact et téléphone de contact.
-3. **Administrateur** — prénom, nom, courriel et téléphone du premier administrateur de l’agence.
-4. **Révision** — vérifiez tout, puis **Créer l’agence**.
+## Ajouter une nouvelle agence
 
-## Ce qui se passe à la création
+1. Appuyez sur **+ Créer une agence** (en haut à droite). L'assistant **🌐 Create new agency** s'ouvre à « Step 1 of 4 ».
+2. **Plan & logo** : choisissez le **Plan** (**Starter — $49/mo**, **Growth — $149/mo (white-label included)** ou **Enterprise — $349/mo (white-label included)**). Au besoin, appuyez sur **Téléverser un logo** (2 Mo au maximum) et réglez la **Primary colour**. Appuyez sur **Next →**.
+3. **Agency details** : remplissez **Agency name**, **Address line 1**, **Address line 2** (facultatif), **City**, **Province**, **Postal code**, **Country (residence — sets currency & compliance)**, **Default language**, **Contact email** et **Contact phone**. Appuyez sur **Next →**.
+4. **Admin** : remplissez **First name**, **Last name**, **Email** et **Phone** du premier administrateur de l'agence. Appuyez sur **Next →**.
+5. **Réviser** : vérifiez tout (utilisez **← Back** pour corriger une étape), puis appuyez sur **✓ Create agency**.
+6. Lisez la confirmation : « … is ready. Provisioned on a 30-day trial with a default centre. » Elle montre aussi le lien d'invitation de l'administrateur au cas où le courriel tarderait. Appuyez sur **Terminé**.
 
-- L’agence est créée avec un **essai de 30 jours** et un **centre par défaut** (portant le nom de l’agence et utilisant l’adresse — renommez-le ou ajoutez-en d’autres sous **Centres**).
-- L’administrateur est créé et reçoit par **courriel une invitation** à définir son mot de passe. (L’écran de confirmation affiche aussi le lien d’invitation au cas où le courriel serait retardé.)
-- Si le plan inclut la marque blanche, l’image de marque est activée automatiquement — l’administrateur termine son logo, ses couleurs et ses liens de confidentialité à sa première connexion sous **Image de marque**.
+> ℹ️ Le centre par défaut porte le nom de l'agence et utilise son adresse. L'administrateur de l'agence le renomme ou ajoute d'autres centres sous **Centres**.
 
-## Si l’administrateur n’a pas reçu le courriel d’invitation
+## Modifier une agence
 
-La livraison des courriels dépend du DNS de votre domaine (SPF/DKIM); une invitation peut donc se retrouver dans les indésirables ou ne pas arriver. Sur l’écran **Toutes les agences** :
+1. Appuyez sur **✏️** (**Modifier l’agence**) sur la ligne.
+2. Utilisez les onglets : **Détails** (nom, contact, propriétaire), **Address** (raison sociale, site Web, adresse, pays, langue par défaut), **Courriel** (le serveur de courriel sortant propre à l'agence, avec **✉️ Send test**), **Plan** et **Marque blanche** (logo, couleur principale, courriel d'assistance, **Enable**).
+3. Dans **Plan**, lisez la licence et les modules de l'agence. Appuyez sur **Manage in Licences →** pour changer le forfait, les modules ou la durée; on ne les change pas ici.
+4. Appuyez sur **Save changes**.
 
-- Cliquez sur **✉ Renvoyer** sur la ligne de l’agence pour renvoyer l’invitation — une boîte de dialogue affiche le **lien de définition du mot de passe** que vous pouvez copier et envoyer directement; l’intégration ne dépend ainsi jamais de la livraison des courriels.
-- Cliquez sur **📧 Journal des courriels** (en haut de l’écran) pour voir **tous les courriels envoyés par le système** — le destinataire, l’objet et le moment. (Cela confirme l’envoi; cela ne peut pas confirmer que la boîte de réception du destinataire l’a accepté.)
+## Renvoyer l'invitation de l'administrateur
 
-> Qui peut l’utiliser : **Administrateur de plateforme**.
+1. Appuyez sur **✉️** (**Renvoyer l'invitation**) sur la ligne.
+2. La boîte **✉ Invite sent** indique à qui le courriel a été envoyé et montre le lien de création du mot de passe.
+3. Appuyez sur **Copier le lien** si vous voulez l'envoyer autrement, puis sur **Terminé**.
+
+## Suspendre ou bloquer une agence
+
+1. Appuyez sur **⏸️** (**Suspend**) et confirmez « Users will lose dashboard access immediately. » Appuyez sur **▶️** (**Resume**) pour redonner l'accès.
+2. Appuyez sur **🚷** (**Sign-in lock**), ajoutez une note et appuyez sur **Lock sign-in** pour empêcher tout le personnel et tous les parents de cette agence de se connecter. **Unlock sign-in**, dans la même boîte, lève le blocage.
+
+## Qui peut faire quoi
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur de la plateforme | Tout ce qui se trouve sur cet écran. |
+| Revendeur | Ajoute des agences sous sa propre marque dans **Intégrer une agence**, pas ici. |
+| Administrateur d'agence | Ne voit pas cet écran; voit seulement sa propre agence sous **My agency**. |
+
+## FAQ et quand quelque chose ne va pas
+
+??? L'assistant indique « Required: … ». | Un champ obligatoire de cette étape est vide. Remplissez les champs nommés et appuyez de nouveau sur **Next →**.
+??? « Could not create the agency » avec un message. | Lisez le message (par exemple le courriel de l'administrateur est déjà utilisé), appuyez sur **← Back to review**, corrigez et appuyez de nouveau sur **✓ Create agency**.
+??? L'administrateur n'a jamais reçu l'invitation. | Appuyez sur **✉️** (**Renvoyer l'invitation**) et envoyez-lui le lien vous-même avec **Copier le lien**. Vérifiez **Audit log › 📧 Email log** pour confirmer que le courriel est parti.
+??? « Upload failed » ou « Max 2 MB » sous le logo. | Utilisez un PNG, JPG ou WebP de moins de 2 Mo. Vous pouvez aussi ajouter le logo plus tard dans l'onglet **Marque blanche**.
+??? Pourquoi ne puis-je pas changer le forfait en modifiant l'agence? | Le forfait et les modules viennent de la licence de l'agence. Utilisez **Manage in Licences →**.
+??? Que reçoivent les familles et le personnel quand une agence est suspendue? | Aucun courriel n'est envoyé; ils ne peuvent simplement plus accéder au tableau de bord jusqu'à la réactivation.
+
+## Écrans liés
+
+[[open: #licences | Licences]] [[open: #resellers | Revendeurs]] [[open: #audit-logs | Journal d'audit]]
+
+- [[managing-resellers]]
+- [[white-label-branding]]
+- [[plan-and-add-ons]]

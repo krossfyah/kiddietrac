@@ -1,39 +1,68 @@
 ---
-roles: agency_admin, platform_admin
-title: Añadir una nueva agencia
-category: Administration
-order: 5
+title: Todas las agencias: añadir y administrar agencias
 ---
-# Añadir una nueva agencia
+# Todas las agencias: añadir y administrar agencias
 
-Añadir una agencia cliente es una acción de **administrador de plataforma**. Se realiza en un breve **asistente de 4 pasos** que prepara de una vez todo lo que la agencia necesita: la agencia, un primer centro y el primer acceso de administrador.
+**Todas las agencias** es la lista, para el equipo de la plataforma, de cada agencia cliente en KiddieTrac, con su estado, plan y tamaño. Desde aquí añade una agencia nueva con un asistente de cuatro pasos, abre cualquier agencia para trabajar dentro de ella, edita sus datos, reenvía la invitación de su administrador, la suspende o reactiva, y bloquea el inicio de sesión de toda la agencia.
 
-## Por dónde empezar
+[[open: #platform-agencies | Abrir Todas las agencias]]
 
-1. En la parte inferior izquierda, haga clic en el **selector de agencia** (la píldora que muestra la agencia actual) y elija **Todas las agencias**, o use **Plataforma → Todas las agencias**.
-2. Haga clic en **+ Crear agencia** (arriba a la derecha). Se abre el asistente.
+## Leer la lista
 
-## Los 4 pasos (todo es obligatorio)
+1. Abra **Platform › Todas las agencias**.
+2. Lea la tabla: **Name**, **Status** (por ejemplo prueba, activa o suspendida), **Plan** (con su monto mensual), **Centres**, **Families**, **Children**, **Created** y **Actions**.
+3. Pulse **Open** en una fila para pasar a esa agencia. Llega a su pantalla de inicio y su menú refleja el plan y los complementos de esa agencia.
 
-1. **Plan y logotipo**
-   - **Plan** — elija **Starter (49 $)**, **Growth (149 $)** o **Enterprise (349 $)**. Growth y Enterprise **incluyen marca blanca** (el administrador de la agencia configura su logotipo y colores en el primer inicio de sesión).
-   - **Logotipo de la agencia** — suba un PNG/SVG (máx. 2 MB).
-   - **Color principal**.
-2. **Datos de la agencia** — nombre de la agencia, dirección (línea 1, ciudad, provincia, código postal), **país de residencia** (fija la moneda y el cumplimiento normativo de la agencia), **idioma predeterminado**, correo electrónico de contacto y teléfono de contacto.
-3. **Administrador** — nombre, apellido, correo electrónico y teléfono del primer administrador de la agencia.
-4. **Revisión** — compruebe todo y después **Crear agencia**.
+## Añadir una agencia nueva
 
-## Qué ocurre al crearla
+1. Pulse **+ Crear agencia** (arriba a la derecha). El asistente **🌐 Create new agency** se abre en «Step 1 of 4».
+2. **Plan & logo**: elija el **Plan** (**Starter — $49/mo**, **Growth — $149/mo (white-label included)** o **Enterprise — $349/mo (white-label included)**). Si quiere, pulse **Subir logotipo** (hasta 2 MB) y ajuste el **Primary colour**. Pulse **Next →**.
+3. **Agency details**: complete **Agency name**, **Address line 1**, **Address line 2** (opcional), **City**, **Province**, **Postal code**, **Country (residence — sets currency & compliance)**, **Default language**, **Contact email** y **Contact phone**. Pulse **Next →**.
+4. **Admin**: complete **First name**, **Last name**, **Email** y **Phone** del primer administrador de la agencia. Pulse **Next →**.
+5. **Revisar**: compruebe todo (use **← Back** para corregir un paso) y pulse **✓ Create agency**.
+6. Lea la confirmación: «… is ready. Provisioned on a 30-day trial with a default centre.» También muestra el enlace de invitación del administrador por si el correo se retrasa. Pulse **Hecho**.
 
-- La agencia se crea con una **prueba de 30 días** y un **centro predeterminado** (con el nombre de la agencia y usando su dirección; cámbielo de nombre o añada más en **Centros**).
-- El administrador se crea y recibe por **correo electrónico una invitación** para establecer su contraseña. (La pantalla de confirmación también muestra el enlace de invitación por si el correo se retrasa.)
-- Si el plan incluye marca blanca, la marca se activa automáticamente: el administrador termina su logotipo, colores y enlaces de privacidad en el primer inicio de sesión, en **Marca**.
+> ℹ️ El centro predeterminado lleva el nombre de la agencia y usa su dirección. El administrador de la agencia lo renombra o añade más centros en **Centres**.
 
-## Si el administrador no recibió el correo de invitación
+## Editar una agencia
 
-La entrega del correo depende del DNS de su dominio (SPF/DKIM), por lo que una invitación puede acabar en el spam o no llegar. En la pantalla **Todas las agencias**:
+1. Pulse **✏️** (**Editar agencia**) en la fila.
+2. Use las pestañas: **Detalles** (nombre, contacto, propietario), **Address** (razón social, sitio web, dirección, país, idioma predeterminado), **Correo** (el servidor de correo saliente propio de la agencia, con **✉️ Send test**), **Plan** y **Marca blanca** (logotipo, color principal, correo de soporte, **Enable**).
+3. En **Plan**, lea la licencia y los complementos de la agencia. Pulse **Manage in Licences →** para cambiar el plan, los complementos o el plazo; aquí no se cambian.
+4. Pulse **Save changes**.
 
-- Haga clic en **✉ Reenviar** en la fila de la agencia para reenviar la invitación: un cuadro de diálogo muestra el **enlace para establecer la contraseña**, que puede copiar y enviar directamente, de modo que la incorporación nunca dependa de la entrega del correo.
-- Haga clic en **📧 Registro de correos** (en la parte superior de la pantalla) para ver **todos los correos que envió el sistema**: a quién, el asunto y cuándo. (Esto confirma el envío; no puede confirmar que la bandeja de entrada del destinatario lo aceptara.)
+## Reenviar la invitación del administrador
 
-> Quién puede usarlo: **Administrador de plataforma**.
+1. Pulse **✉️** (**Reenviar invitación**) en la fila.
+2. El cuadro **✉ Invite sent** muestra a quién se envió el correo y el enlace para crear la contraseña.
+3. Pulse **Copiar enlace** si quiere enviarlo de otra forma, y luego **Hecho**.
+
+## Suspender o bloquear una agencia
+
+1. Pulse **⏸️** (**Suspend**) y confirme «Users will lose dashboard access immediately.» Pulse **▶️** (**Resume**) para devolver el acceso.
+2. Pulse **🚷** (**Sign-in lock**), añada una nota y pulse **Lock sign-in** para que nadie del personal ni ningún padre de esa agencia pueda iniciar sesión. **Unlock sign-in**, en el mismo cuadro, quita el bloqueo.
+
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la plataforma | Todo lo que hay en esta pantalla. |
+| Distribuidor | Añade agencias con su propia marca en **Dar de alta una agencia**, no aquí. |
+| Administrador de agencia | No ve esta pantalla; solo ve su propia agencia en **My agency**. |
+
+## Preguntas frecuentes y cuando algo sale mal
+
+??? El asistente dice «Required: …». | Falta un campo obligatorio en ese paso. Complete los campos indicados y pulse **Next →** de nuevo.
+??? «Could not create the agency» con un mensaje. | Lea el mensaje (por ejemplo, el correo del administrador ya está en uso), pulse **← Back to review**, corríjalo y pulse **✓ Create agency** otra vez.
+??? El administrador nunca recibió la invitación. | Pulse **✉️** (**Reenviar invitación**) y envíele usted el enlace con **Copiar enlace**. Revise **Audit log › 📧 Email log** para confirmar que el correo salió.
+??? «Upload failed» o «Max 2 MB» bajo el logotipo. | Use un PNG, JPG o WebP de menos de 2 MB. También puede añadir el logotipo más tarde en la pestaña **Marca blanca**.
+??? ¿Por qué no puedo cambiar el plan al editar? | El plan y los complementos vienen de la licencia de la agencia. Use **Manage in Licences →**.
+??? ¿Qué reciben las familias y el personal cuando se suspende una agencia? | No se envía ningún correo; simplemente no pueden entrar al panel hasta que la reactive.
+
+## Pantallas relacionadas
+
+[[open: #licences | Licencias]] [[open: #resellers | Distribuidores]] [[open: #audit-logs | Registro de auditoría]]
+
+- [[managing-resellers]]
+- [[white-label-branding]]
+- [[plan-and-add-ons]]

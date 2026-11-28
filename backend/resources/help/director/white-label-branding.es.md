@@ -16,7 +16,7 @@ propia pestaña.
 ## Dónde está
 
 **Resumen de la agencia → ✏️ Editar agencia → Abrir Marca →**. Los administradores de la
-plataforma también pueden usar **Distribuidor → Marca**. En ambos casos, la pantalla trabaja
+plataforma también pueden usar **Platform › Marca**. En ambos casos, la pantalla trabaja
 sobre la agencia que esté viendo.
 
 [[open: #admin-branding | Abrir Marca]]
@@ -161,8 +161,23 @@ dirección de su agencia si el envío de correos está configurado).
 
 [[open: #admin-branding?tab=invoices | Abrir Marca → Facturas]]
 
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de agencia | Cambia el logotipo, el color, las facturas, los datos de contacto y enlaces legales, el envío de correos, el texto de los recibos de nómina y la región de su propia agencia. Ve el estado de la licencia de marca blanca, pero no puede cambiarlo. |
+| Administrador de la plataforma | Todo lo anterior para la agencia que está viendo, activa o desactiva la licencia de marca blanca (**Show "Powered by Kiddietrac"**) y edita los **🍂 Seasonal email headers**. |
+| Dirección de centro y demás personal | No ven esta pantalla. |
+
+## Preguntas frecuentes y cuando algo sale mal
+
 ??? Subí nuestro logotipo, pero el portal sigue mostrando KiddieTrac. | Su logotipo solo sustituye a KiddieTrac en el portal y la aplicación si su agencia tiene la licencia de marca blanca. Sin ella, el logotipo se usa en facturas, correos y formularios.
 ??? ¿Puedo cambiar yo mismo la licencia de marca blanca? | No. Forma parte de su plan, así que solo un administrador de la plataforma puede cambiarla.
 ??? ¿Puedo cambiar el color claro detrás de la barra lateral y las pestañas? | Sí, con la licencia de marca blanca. Use Soft tint (tono suave) en la pestaña Marca blanca y logotipo, o déjelo en automático para un tono suave del color de su marca.
+??? ¿Qué botón guarda cada pestaña? | **Guardar cambios** guarda juntas las pestañas Marca blanca y logotipo, Facturas y Contacto y aviso legal; las demás pestañas tienen su propio botón. Guarde antes de salir de la pantalla.
+
+## Pantallas relacionadas
+
+[[open: #dashboard | Resumen de la agencia]] [[open: #admin-branding?tab=invoices | Marca → Facturas]]
 
 Vea también: [Estilo y numeración de facturas](invoice-numbering-and-style) · [Configuración de facturación](billing-setup) · [Identificadores de referencia](reference-ids)

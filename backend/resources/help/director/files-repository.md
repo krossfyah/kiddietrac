@@ -13,7 +13,7 @@ agency.
 
 [[open: #sales-library | Open the Files repository]]
 
-## Who can use it
+## Who can do what
 
 **Platform admins (superadmins) only.** It sits in the **💼 Sales** section of the sidebar,
 which only a platform admin has, and it is also a tile on the Sales home screen for them.
@@ -67,7 +67,7 @@ with *"That file type cannot be stored here."*
 
 While a file uploads, a dark bar slides down from the top of the screen showing
 **Uploading** and the file name, the percentage and how much has been sent. It ends with
-**Upload complete** or **Upload failed**.
+**Done**. If an upload fails, the bar closes and the screen shows its own message saying why.
 
 The bar is not specific to this screen. Every upload in the portal draws it, including
 chat attachments, photos, incident files and e-documents. Where the browser cannot report a
@@ -100,11 +100,17 @@ Uploading, moving and removing a file, and creating or deleting a folder, each
 write an audit row naming the file or folder. These are platform-level events, not tied to
 any agency.
 
-## Common questions
+## FAQs and when something goes wrong
 
 ??? Can a sales rep see these files? | No. The nav entry, the tile and the server all stop at platform admins.
 ??? Does deleting a folder lose the files in it? | No. They move back to All files.
 ??? What is the largest file I can add? | 25 MB.
+??? "That file type cannot be stored here." | The file is a type a web server could run (such as .php or .sh). Save it as a PDF or a zip of documents instead.
+??? The Files repository is missing from my menu. | Only platform admins have it, in the **💼 Sales** section. Sales reps and agency admins never see it.
+
+## Related screens
+
+[[open: #sales | Sales pipeline]] [[open: #platform-overview | Platform overview]]
 
 See also: [Platform admin (overview)](platform-admin-overview),
 [Opening and printing documents](opening-and-printing-documents).

@@ -10,7 +10,7 @@ roles: agency_admin, platform_admin
 
 [[open: #sales-library | Abrir el Repositorio de archivos]]
 
-## Quién puede usarlo
+## Quién puede hacer qué
 
 **Solo los administradores de la plataforma (superadmins).** Está en la sección **💼 Ventas** de la barra lateral, que solo tiene un administrador de la plataforma, y además es un icono de la pantalla de inicio de Ventas para ellos.
 
@@ -50,7 +50,7 @@ Algunos tipos de archivo que un servidor web podría ejecutar (por ejemplo `.php
 
 ## La barra de carga
 
-Mientras se sube un archivo, una barra oscura baja desde la parte superior de la pantalla y muestra **Subiendo** y el nombre del archivo, el porcentaje y cuánto se ha enviado. Termina con **Subida completada** o **Error al subir**.
+Mientras se sube un archivo, una barra oscura baja desde la parte superior de la pantalla y muestra **Subiendo** y el nombre del archivo, el porcentaje y cuánto se ha enviado. Termina con **Done**. Si una subida falla, la barra se cierra y la pantalla muestra su propio mensaje con el motivo.
 
 La barra no es exclusiva de esta pantalla. Todas las subidas del portal la muestran, incluidos los adjuntos del chat, las fotos, los archivos de incidentes y los documentos electrónicos. Cuando el navegador no puede informar del tamaño, la barra muestra una franja en movimiento en lugar de un porcentaje.
 
@@ -74,11 +74,17 @@ Cada fila tiene el menú **⋮** estándar:
 
 Subir, mover y quitar un archivo, y crear o eliminar una carpeta, escriben cada uno una fila de auditoría con el nombre del archivo o de la carpeta. Son eventos de nivel de plataforma, no vinculados a ninguna agencia.
 
-## Preguntas frecuentes
+## Preguntas frecuentes y cuando algo sale mal
 
 ??? ¿Puede un representante de ventas ver estos archivos? | No. La entrada del menú, el icono y el servidor se detienen en los administradores de la plataforma.
 ??? ¿Eliminar una carpeta hace perder los archivos que contiene? | No. Vuelven a Todos los archivos.
 ??? ¿Cuál es el archivo más grande que puedo añadir? | 25 MB.
+??? «That file type cannot be stored here.» | El archivo es de un tipo que un servidor web podría ejecutar (como .php o .sh). Guárdelo como PDF o como un zip de documentos.
+??? El repositorio de archivos no aparece en mi menú. | Solo los administradores de la plataforma lo tienen, en la sección **💼 Sales**. Los representantes de ventas y los administradores de agencia nunca lo ven.
+
+## Pantallas relacionadas
+
+[[open: #sales | Embudo de ventas]] [[open: #platform-overview | Resumen de la plataforma]]
 
 Vea también: [Administrador de la plataforma (resumen)](platform-admin-overview),
 [Abrir e imprimir documentos](opening-and-printing-documents).

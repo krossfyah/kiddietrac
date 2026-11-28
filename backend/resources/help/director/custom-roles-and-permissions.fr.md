@@ -1,54 +1,68 @@
 ---
-roles: agency_admin, platform_admin
 title: Rôles personnalisés et permissions
-category: Administration
-order: 20
 ---
 # Rôles personnalisés et permissions
 
-KiddieTrac est fourni avec des rôles intégrés (système) : Administrateur de l’agence, Directeur du centre, Éducateur, Visiteur à domicile, Parent / tuteur et Auditeur (l’Admin de la plateforme se situe au-dessus des agences). Consultez [[roles-and-responsibilities]] pour savoir ce que fait chacun. Pour la plupart des agences, ces rôles suffisent : ils couvrent les types de personnel que l’on trouve dans la majorité des services de garde.
+**Rôles et permissions** montre ce que chaque rôle de votre agence peut faire, sous forme de liste de permissions regroupées par domaine. Les rôles intégrés de KiddieTrac (Agency admin, Centre director, Educator, Home visitor, Parent / Guardian, Auditor et les autres) portent un badge gris **SYSTEM**. Quand votre agence a besoin d'un autre ensemble, par exemple une éducatrice responsable ou un commis comptable, vous créez un rôle **CUSTOM** et cochez les permissions qu'il doit avoir. Voir [[roles-and-responsibilities]] pour le rôle de chaque rôle intégré.
 
-Lorsque vous devez modéliser des structures de personnel qui ne correspondent pas clairement à ces rôles — par exemple une Éducatrice principale qui peut signer les plans de leçon mais pas les factures, ou un Comptable qui peut produire des rapports mais pas modifier les centres —, vous créez un **rôle personnalisé** avec une matrice de permissions sur mesure.
+[[open: #admin-roles | Ouvrir Rôles et permissions]]
 
-## Où le trouver
+## Lire un rôle
 
-Barre latérale → **Paramètres → Rôles et permissions**. Vous verrez un écran à deux colonnes : la liste des rôles à gauche, la matrice de permissions à droite.
+1. Ouvrez **Settings › Rôles et permissions** (🛂 dans le menu).
+2. Choisissez un rôle dans la liste **Rôles** à gauche. Chacun montre son nombre de permissions et, pour les rôles personnalisés, s'il couvre **un centre** ou **toute l'agence**. Agency admin s'ouvre en premier.
+3. Lisez le panneau de droite : le nom du rôle, sa description et, sous **Autorisations**, chaque permission regroupée par domaine (Centres, Families & children, Staff, Daily care, Attendance & kiosk, Medical, Communications, Invoicing & billing, Reports, Agency settings et plus). Chaque permission montre sa clé, comme `centres.edit`, et ce qu'elle permet.
+4. Lisez le compteur au bas (« … / … permissions selected ») : combien sont cochées sur l'ensemble des permissions.
 
-## Lire la matrice
+> ℹ️ Les rôles intégrés sont gérés par KiddieTrac et montrent ce que chaque rôle peut faire aujourd'hui. Leurs cases sont grisées pour les administrateurs d'agence.
 
-Le volet de droite affiche le nom et la description du rôle sélectionné, ainsi qu’une grille de 56 clés de permission regroupées par catégorie — Centres, Familles et enfants, Portée parent, Personnel, Salles, Facturation, Rapports, Incidents, Médical, Observations et curriculum, Présences et borne, Retards de ramassage, Tâches, Visites à domicile, Documents (y compris le Gestionnaire de formulaires), Communications (y compris les modèles de courriel), Événements et RSVP, Aide et formation, et Paramètres de l’agence.
+## Créer un rôle personnalisé à partir d'un rôle intégré
 
-Chaque permission comporte une courte étiquette en police à chasse fixe (p. ex. `centres.edit`) et une description en langage clair (p. ex. « Modifier les paramètres et l’image de marque du centre »). Cochez la case de chaque permission que le rôle doit avoir.
+1. Choisissez le rôle intégré le plus proche de vos besoins, par exemple **Educator**.
+2. Appuyez sur **Copy as custom role**.
+3. Tapez le nom du rôle (par exemple « Éducatrice responsable ») et appuyez sur **Create**. Le nouveau rôle commence avec les mêmes permissions.
+4. Cochez ou décochez des permissions. Utilisez **Toggle all** à côté d'un domaine pour tout cocher ou tout effacer d'un coup.
+5. Appuyez sur **Enregistrer les modifications**. Un message **Role saved** s'affiche et le compteur de la liste se met à jour.
 
-Sous chaque catégorie, cliquez sur **Tout basculer** pour inverser toutes les permissions de cette catégorie d’un coup — pratique pour « ce rôle a tout dans ce domaine, rien dans les autres ».
+## Créer un rôle personnalisé de zéro
 
-## Rôles système et rôles personnalisés
+1. Appuyez sur **+ Nouveau** en haut de la liste **Rôles**.
+2. Tapez un nom et appuyez sur **Create**.
+3. Choisissez **Based on** (le rôle intégré le plus proche, ou **— none —**).
+4. Choisissez **Covers** : **One centre** ou **Toute l’agence**. Toute l'agence est réservée aux rôles basés sur Agency admin; pour toute autre base, l'écran l'indique et garde **One centre**.
+5. Cochez ses permissions, ajoutez une description au besoin et appuyez sur **Enregistrer les modifications**.
 
-Les rôles système (avec l’insigne gris **SYSTÈME**) peuvent voir leurs permissions ajustées, mais leur nom, leur clé et leur existence ne peuvent pas être modifiés, car le code sous-jacent y fait référence. Les rôles personnalisés (avec l’insigne bleu **PERSONNALISÉ**) sont entièrement modifiables et supprimables.
+## Renommer ou supprimer un rôle personnalisé
 
-## Créer un rôle personnalisé
+1. Choisissez le rôle personnalisé et cliquez sur son nom en haut pour le modifier.
+2. Appuyez sur **Enregistrer les modifications**.
+3. Pour le retirer, appuyez sur **🗑 Delete role** au bas et confirmez. Le rôle est archivé; toute personne qui l'aurait eu aurait besoin d'un autre rôle.
 
-1. Cliquez sur **+ Nouveau** en haut de la liste des rôles.
-2. Saisissez un nom (p. ex. « Éducatrice principale »).
-3. Le nouveau rôle apparaît sans aucune permission cochée. Cochez celles qu’il doit avoir.
-4. Cliquez sur **Enregistrer les modifications**.
+## Qui peut faire quoi
 
-Le rôle est maintenant visible dans la fenêtre Gérer de Gestion des utilisateurs — attribuez-le aux utilisateurs comme vous le feriez pour un rôle système.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur d'agence | Lit tous les rôles; crée, modifie et supprime les rôles personnalisés de son agence. Ne peut pas changer les rôles intégrés. |
+| Administrateur de la plateforme | Tout ce qui précède, peut ajuster les rôles intégrés d'une agence et voit l'onglet **🔎 Permission check**. |
+| Direction de centre et autres | Ne voient pas cet écran. |
 
-## Attribuer un rôle personnalisé à un utilisateur
+### La vérification des permissions (administrateurs de la plateforme)
 
-Gestion des utilisateurs → cliquez sur **Gérer** pour l’utilisateur → dans la section Rôles, choisissez le rôle dans la liste déroulante → cliquez sur **Appliquer**. Les rôles sont cumulatifs : ajouter un nouveau rôle ne retire pas les rôles existants.
+L'onglet **🔎 Permission check** compare la liste des permissions avec ce que les gens ont réellement fait, sans rien bloquer. **Would block — must be zero before enforcing** liste les cas que la liste refuserait aujourd'hui. Utilisez **Turn off** ou **Turn on watching** pour arrêter ou lancer la surveillance.
 
-## Isolation des données entre centres et agences
+## FAQ et quand quelque chose ne va pas
 
-Les rôles déterminent aussi **les données que vous pouvez voir**, indépendamment de la matrice de permissions :
+??? Pourquoi les cases sont-elles grisées? | Vous regardez un rôle intégré. Les rôles intégrés sont gérés par KiddieTrac. Appuyez sur **Copy as custom role** pour créer votre propre version.
+??? Cocher une permission change-t-il ce que les gens peuvent faire aujourd'hui? | Pas encore. Les permissions sont enregistrées et surveillées, mais l'accès dépend toujours du rôle intégré de chaque personne. Servez-vous de la liste pour documenter ce que chaque rôle devrait faire.
+??? Comment donner un rôle personnalisé à une personne? | Pas encore : le choix de rôle dans la gestion des utilisateurs n'offre que les rôles intégrés. Donnez-lui pour l'instant le rôle intégré le plus proche.
+??? « Only a role based on Agency admin can cover the whole agency. » | Réglez **Based on** sur Agency admin, ou choisissez **One centre** dans **Covers**.
+??? « Built-in roles are managed by KiddieTrac. » | Vous avez essayé d'enregistrer un rôle intégré. Copiez-le plutôt en rôle personnalisé.
+??? « Could not load roles » s'affiche. | Votre session a pris fin ou aucune agence n'est choisie. Choisissez l'agence active dans la barre du haut et actualisez la page.
+??? Quelqu'un est-il avisé quand je change un rôle? | Non. Les changements sont inscrits au journal d'audit; personne ne reçoit de courriel ni de notification.
 
-- **Administrateur de l’agence / Admin de la plateforme** voient tous les centres de leur **agence active** — par exemple, la liste **Enfants** affiche tous les enfants de tous les centres de l’agence, et le filtre de centre permet de restreindre l’affichage.
-- **Directeur du centre / Éducateur** ne voient que les familles, les enfants, les salles et les rapports de **leur propre centre**.
-- Les agences sont entièrement séparées : une nouvelle agence (ou un nouveau centre d’une autre agence) démarre avec ses propres paramètres et ne voit **jamais** les données d’une autre agence. Changez d’**agence active** à partir de la barre supérieure si vous administrez plus d’une agence.
+## Écrans liés
 
-Si vous voyez « agence introuvable », assurez-vous qu’une **agence active est sélectionnée** dans la barre supérieure.
+[[open: #admin-users | Gestion des utilisateurs]] [[open: #audit-logs | Journal d'audit]]
 
-## Remarque sur la phase A
-
-Dans la version actuelle, les permissions enregistrées sur les rôles personnalisés sont consignées, mais pas encore appliquées : toutes les vérifications de routes existantes utilisent les clés de rôle d’origine. La phase B (un déploiement prévu) fera consulter la matrice de permissions par ces vérifications. D’ici là, considérez la matrice comme une documentation de ce que chaque rôle DEVRAIT pouvoir faire — utile à des fins de vérification.
+- [[roles-and-responsibilities]]
+- [[audit-log]]
