@@ -206,11 +206,12 @@ class SafeArrivalAbsentMail
         if (! $to) throw new \InvalidArgumentException('SafeArrivalAbsentMail::send needs a recipient.');
         $m = self::build($agencyId, $d);
         $subject = ($subjectPrefix ?? '') . $m['subject'];
-        AgencyMailer::forAgency($agencyId)->html($m['html'], function ($msg) use ($to, $bcc, $replyTo, $subject) {
+        $fromName = SafeArrivalFamilyText::fromName($agencyId);   // from the agency, never "KiddieTrac" (2026-11-27)
+        AgencyMailer::forAgency($agencyId)->html($m['html'], function ($msg) use ($to, $bcc, $replyTo, $subject, $fromName) {
             foreach ($to as $addr => $name) $msg->to($addr, (string) (strtok(trim((string) $name), ' ') ?: '') ?: null);
             foreach ($bcc as $addr) $msg->bcc($addr);
             if ($replyTo) $msg->replyTo($replyTo);
-            $msg->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($subject);
+            $msg->from('noreply@kiddietrac.com', $fromName)->subject($subject);
         });
     }
 }

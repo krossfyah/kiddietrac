@@ -171,10 +171,10 @@ class WebDemoPhoneController extends Controller
         if ($isParent) {
             // 1. The app's question and the text (the real wording of SafeArrivalCommand::askParents).
             $title = "🛡️ Has {$name} arrived?";
-            $body = "{$name} was expected at {$centre} around {$at} and hasn't been signed in. If they're not coming in today, please tell us in the app (Not attending today). If they're on the way, no need to reply.";
+            $body = \App\Support\SafeArrivalFamilyText::ask((int) $child->centre_id, $centre, (string) $name, $at)['body'];   // the real wording (2026-11-27)
             \App\Support\Notify::write(['user_id' => $me->id, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
                 'data' => json_encode(['link' => '#today', 'child_id' => $child->id]), 'created_at' => now()]);
-            app(SmsController::class)->sendOne($me->agency, $me->id, $me->phone, $body, 'checkin_reminder');
+            app(SmsController::class)->sendOne($me->agency, $me->id, $me->phone, \App\Support\SafeArrivalFamilyText::text((int) $me->agency, $body), 'checkin_reminder');
             // 2. No answer: the Safe Arrival phone call (SafeArrivalCall, the agency's own wording), a few seconds later.
             WebDemoPhone::$nextDelay = 12;
             $script = SafeArrivalCall::question(SafeArrivalCall::config($me->agency), SafeArrivalCall::vars($check));
@@ -202,10 +202,10 @@ class WebDemoPhoneController extends Controller
                 ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))->count();
         } catch (\Throwable $e) { $comp = 0; }
         if ($comp) {
-            $askBody = "{$name} was expected at {$centre} around {$at} and hasn't been signed in. If they're not coming in today, please tell us in the app (Not attending today). If they're on the way, no need to reply.";
+            $askBody = \App\Support\SafeArrivalFamilyText::ask((int) $child->centre_id, $centre, (string) $name, $at)['body'];
             \App\Support\Notify::write(['user_id' => $parentId, 'type' => 'safe_arrival', 'title' => "🛡️ Has {$name} arrived?", 'body' => $askBody,
                 'data' => json_encode(['link' => '#today', 'child_id' => $child->id]), 'created_at' => now()]);
-            app(SmsController::class)->sendOne($me->agency, $parentId, (string) $parent->phone, $askBody, 'checkin_reminder');
+            app(SmsController::class)->sendOne($me->agency, $parentId, (string) $parent->phone, \App\Support\SafeArrivalFamilyText::text((int) $me->agency, $askBody), 'checkin_reminder');
             WebDemoPhone::$nextDelay = 8;
             app(VoiceController::class)->callOne($me->agency, $parentId, (string) $parent->phone,
                 SafeArrivalCall::question(SafeArrivalCall::config($me->agency), SafeArrivalCall::vars($check)), SafeArrivalCall::CATEGORY, null, false, false,

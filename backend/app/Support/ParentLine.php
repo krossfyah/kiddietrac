@@ -130,7 +130,11 @@ final class ParentLine
             if ($kw === 'inbound_stop') return 'opted_out';
             if (DB::table('sms_messages')->where('to_phone', $to)->where('category', 'phone_code')->where('created_at', '>=', now()->subHour())->count() >= 3) return 'limit';
             $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
-            $body = 'KiddieTrac: your phone code is ' . $code . '. It only works on the call you are on now. If you did not just call us, you can ignore this text.';
+            /* From the parent's agency (2026-11-27, "from agency name"): one agency = its name; a parent at several = the
+               line's own name, since the call is not about one agency yet. */
+            $one = array_values(array_unique(array_map('intval', $agencyIds)));
+            $body = (count($one) === 1 ? FamilyFacingName::sender($one[0]) : 'KiddieTrac')
+                . ': your phone code is ' . $code . '. It only works on the call you are on now. If you did not just call us, you can ignore this text.';
             $r = SmsGateway::deliver(self::LINE_AGENCY, $to, $body);
             DB::table('sms_messages')->insert([
                 'agency_id' => self::LINE_AGENCY, 'direction' => 'out', 'to_user_id' => null, 'to_phone' => $to,

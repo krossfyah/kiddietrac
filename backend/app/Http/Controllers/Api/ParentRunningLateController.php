@@ -52,7 +52,8 @@ class ParentRunningLateController extends Controller
                 'child_id' => (int) $k->id,
                 'name' => trim(($k->preferred_name ?: $k->first_name) . ' ' . $k->last_name),
                 'first_name' => $k->preferred_name ?: $k->first_name,
-                'centre_name' => $k->centre_name,
+                // A home named after its provider reads "Amna's home child care": an educator to a family is a first name (2026-11-27).
+                'centre_name' => \App\Support\FamilyFacingName::place((int) $k->centre_id ?: null, (string) $k->centre_name),
                 // in = at the centre (pickup can be late); expected = not here yet (drop-off can be late)
                 'status' => $status,
                 'can_arrival' => $status === 'expected',

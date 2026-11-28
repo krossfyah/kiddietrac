@@ -62,6 +62,77 @@ final class FamilyFacingName
         return self::$agencies[$agencyId];
     }
 
+    /* WHO A FAMILY MESSAGE IS FROM, AND HOW AN EDUCATOR IS NAMED IN IT (2026-11-27, Anthony: "safe arrival messages to
+       parents should only announce first name of educator and from agency name - full sweep").
+         sender($a)          the agency, as families know it: the email From name, the "iLearn Home Childcare:" that
+                             starts a text, "a Safe Arrival call from iLearn Home Childcare". Never "KiddieTrac" for a
+                             white-label agency (its own name, else its brand).
+         textFrom($a, $t)    a text to a family, starting with the sender ("iLearn Home Childcare: Ava was expected...").
+         educator($f, $l)    an educator to a family = FIRST NAME ONLY. Strips a last name typed into the first-name box.
+         educatorOf($uid)    the same by user id; '' for a platform admin / integration / reseller (never named to a
+                             family, App\Support\AgencyOutsiders) and for a missing user. Don't invent one: no
+                             educator involved = no name.
+       kt:safe-arrival-names-check fails when a Safe Arrival family builder joins a staff member's first and last name or
+       sends from "KiddieTrac". */
+    public static function sender(?int $agencyId): string
+    {
+        $a = self::agency($agencyId);
+        if ($a !== '') {
+            return $a;
+        }
+        try {
+            $b = trim((string) Brand::name($agencyId));
+        } catch (\Throwable $e) {
+            $b = '';
+        }
+
+        return $b !== '' ? $b : 'Your child care centre';
+    }
+
+    /** "iLearn Home Childcare: Ava was expected ..." - once, even if the text already starts with the sender. */
+    public static function textFrom(?int $agencyId, string $body): string
+    {
+        $body = trim($body);
+        $s = self::sender($agencyId);
+        if ($s === '' || $body === '' || mb_stripos($body, $s . ':') === 0) {
+            return $body;
+        }
+
+        return $s . ': ' . $body;
+    }
+
+    /** An educator, to a family: the first name only ("Amna"), never the last name. */
+    public static function educator(?string $first, ?string $last = null): string
+    {
+        $f = trim((string) preg_replace('/\s+/u', ' ', (string) $first));
+        $l = trim((string) preg_replace('/\s+/u', ' ', (string) $last));
+        // "Amna Ahsan" typed into the first-name box: the last name comes off.
+        if ($l !== '' && mb_strlen($f) > mb_strlen($l) + 1
+            && mb_strtolower(mb_substr($f, -(mb_strlen($l) + 1))) === ' ' . mb_strtolower($l)) {
+            $f = trim(mb_substr($f, 0, mb_strlen($f) - mb_strlen($l) - 1));
+        }
+
+        return $f;
+    }
+
+    /** The same by user id. '' for nobody, and for a platform admin / integration / reseller account. */
+    public static function educatorOf(?int $userId): string
+    {
+        if (! $userId) {
+            return '';
+        }
+        try {
+            if (AgencyOutsiders::isOutsider((int) $userId)) {
+                return '';
+            }
+        } catch (\Throwable $e) {
+            return '';
+        }
+        $u = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first(['first_name', 'last_name']);
+
+        return $u ? self::educator((string) $u->first_name, (string) $u->last_name) : '';
+    }
+
     /** "Acme Child Care Ltd." -> "Acme Child Care". */
     public static function clean(string $agencyName): string
     {
@@ -148,7 +219,7 @@ final class FamilyFacingName
         $sup = self::key($supFirst . ' ' . ($row->supervisor_last_name ?? ''));
         if ($key !== '' && $sup !== '' && $sup === $key && trim((string) ($row->supervisor_last_name ?? '')) !== '') {
             $provider = true;
-            $first = $supFirst;
+            $first = self::educator($supFirst, (string) $row->supervisor_last_name);
         }
         if (! $provider && $key !== '' && str_contains($key, ' ')) {
             // Not on the supervisor field: is it the name of someone who works at this centre?
@@ -157,7 +228,7 @@ final class FamilyFacingName
                 ->whereNull('u.deleted_at')->distinct()->get(['u.first_name', 'u.last_name']) as $u) {
                 if (trim((string) $u->last_name) !== '' && self::key($u->first_name . ' ' . $u->last_name) === $key) {
                     $provider = true;
-                    $first = trim((string) $u->first_name);
+                    $first = self::educator((string) $u->first_name, (string) $u->last_name);
                     break;
                 }
             }

@@ -158,7 +158,7 @@ class ParentLineController extends Controller
                         . $this->redirect('msg');
                 }
                 if ($pin) {
-                    return $this->gather('check', 'Please enter your 4 digit KiddieTrac phone PIN. If you don\'t have one, stay on the line.', 4, 15)
+                    return $this->gather('check', 'Please enter your 4 digit phone PIN. If you don\'t have one, stay on the line.', 4, 15)
                         . $this->redirect('msg');
                 }
 
@@ -457,7 +457,8 @@ class ParentLineController extends Controller
         DB::table('phone_reports')->where('id', $id)->update(['status' => 'approved', 'child_id' => $childId, 'decided_by_id' => $me->id,
             'decided_at' => now(), 'outcome' => mb_substr($said, 0, 500), 'updated_at' => now()]);
         $this->clearBells($id);
-        $text = ParentLine::textOutcome($r, 'KiddieTrac: your centre confirmed your phone message. ' . preg_replace('/^Thank you\. /', '', $said));
+        $text = ParentLine::textOutcome($r, \App\Support\FamilyFacingName::textFrom((int) $r->agency_id,
+            'your centre confirmed your phone message. ' . preg_replace('/^Thank you\. /', '', $said)));   // from the agency (2026-11-27)
         ParentLine::audit($agencyId, (int) $me->id, 'phone_line.approved', $childId, 'Approved phone message #' . $id . ': ' . $said . ' (caller texted: ' . $text . ')');
 
         return response()->json(['ok' => true, 'message' => $said]);
@@ -473,7 +474,8 @@ class ParentLineController extends Controller
         DB::table('phone_reports')->where('id', $id)->update(['status' => 'declined', 'decided_by_id' => $request->user()->id,
             'decided_at' => now(), 'outcome' => 'Declined', 'updated_at' => now()]);
         $this->clearBells($id);
-        $text = ParentLine::textOutcome($r, 'KiddieTrac: your centre could not confirm your phone message about your child. Please contact the centre directly.');
+        $text = ParentLine::textOutcome($r, \App\Support\FamilyFacingName::textFrom((int) $r->agency_id,
+            'your centre could not confirm your phone message about your child. Please contact the centre directly.'));
         ParentLine::audit($agencyId, (int) $request->user()->id, 'phone_line.declined', null, 'Declined phone message #' . $id . ' (caller texted: ' . $text . ')');
 
         return response()->json(['ok' => true]);

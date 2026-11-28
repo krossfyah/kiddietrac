@@ -246,8 +246,9 @@
     // Favicon: the brand's own; KiddieTrac's only when this is not a white-label agency.
     var f = document.getElementById('fav');
     if (f) { f.href = b.favicon || (b.white_label ? 'data:,' : '/favicon.svg?v=20260901b'); }
-    document.getElementById('foot').textContent = b.name;
-    document.title = tr('Attendance') + ' · ' + b.name;
+    // Who it is from: the agency's own name (2026-11-27, "from agency name"); the logo stays the brand's.
+    document.getElementById('foot').textContent = b.from || b.name;
+    document.title = tr('Attendance') + ' · ' + (b.from || b.name);
   }
   function fail(msg) {
     app.innerHTML = '<div class="done"><div class="big">🔗</div><h1>' + esc(tr('This link can’t be used')) + '</h1><p class="sub">' + esc(trMsg(msg)) + '</p></div>';

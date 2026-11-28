@@ -236,6 +236,8 @@ final class AttendanceReply
 
         return [
             'name' => $brand['name'] ?? 'KiddieTrac',
+            // Who this is from, in words (2026-11-27, "from agency name"): the page footer and tab title.
+            'from' => FamilyFacingName::sender($agencyId),
             'logo' => $own($brand['logo_wordmark_url'] ?? null) ?: $own($brand['logo_square_url'] ?? null),
             'favicon' => $own($brand['favicon_url'] ?? null),
             'primary' => $brand['primary_color'] ?? '#1F6080',

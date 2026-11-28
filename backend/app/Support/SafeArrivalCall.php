@@ -48,16 +48,18 @@ final class SafeArrivalCall
 
     public const RESPONSES = ['1' => 'absent', '2' => 'on_the_way', '3' => 'dropped_off'];
 
-    /** The words, as shipped. {child} {child_full} {centre} {room} {time} are filled in. */
+    /** The words, as shipped. {child} {child_full} {agency} {centre} {room} {time} are filled in.
+     *  {agency} = who is calling: the agency, as families know it (FamilyFacingName::sender, 2026-11-27: "from agency name").
+     *  {centre} = the centre as before (a home named after its provider = the agency, never the provider's full name). */
     public const DEFAULTS = [
-        'intro' => 'Hello. This is a Safe Arrival call from {centre}, about {child}. {child} was expected at {time} and has not been signed in today.',
+        'intro' => 'Hello. This is a Safe Arrival call from {agency}, about {child}. {child} was expected at {time} and has not been signed in today.',
         'prompt_absent' => 'If {child} is absent today, press 1.',
         'prompt_late' => 'If {child} is on the way and arriving late, press 2.',
         'prompt_dropped' => 'If you have already dropped {child} off at the centre, press 3.',
         'reply_absent' => 'Thank you. {child} is marked absent today, and the centre has been told. Goodbye.',
         'reply_late' => 'Thank you. The centre has been told {child} is on the way. Goodbye.',
         'reply_dropped' => 'Thank you. {child} is not signed in, so the centre has been alerted to find and sign {child} in right away. If you can, please call the centre as well. Goodbye.',
-        'reply_no_answer' => 'We did not get an answer. Please open KiddieTrac or call the centre. Goodbye.',
+        'reply_no_answer' => 'We did not get an answer. Please open the app or call the centre. Goodbye.',
         'reply_already' => 'Thank you. {child} has already been accounted for today. Goodbye.',
         'reply_invalid' => 'Sorry, that was not one of the choices.',
         'offer_late' => true,
@@ -124,6 +126,7 @@ final class SafeArrivalCall
         return trim(strtr($tpl, [
             '{child}' => $vars['child'] ?? 'your child',
             '{child_full}' => $vars['child_full'] ?? ($vars['child'] ?? 'your child'),
+            '{agency}' => $vars['agency'] ?? ($vars['centre'] ?? 'your child care centre'),
             '{centre}' => $vars['centre'] ?? 'your child care centre',
             '{room}' => $vars['room'] ?? '',
             '{time}' => $vars['time'] ?? 'the usual time',
@@ -155,7 +158,8 @@ final class SafeArrivalCall
         // Who is calling, as a family hears it: a home named after its provider is announced as the agency (FamilyFacingName).
         $centre = FamilyFacingName::org($cid ?: null, $agencyId, 'your centre');
 
-        return ['child' => 'Test Child', 'child_full' => 'Test Child', 'centre' => $centre, 'room' => 'Test Room', 'time' => '9:00 AM'];
+        return ['child' => 'Test Child', 'child_full' => 'Test Child', 'agency' => FamilyFacingName::sender($agencyId), 'centre' => $centre,
+            'room' => 'Test Room', 'time' => '9:00 AM'];
     }
 
     /** The names and times for one check. */
@@ -168,7 +172,8 @@ final class SafeArrivalCall
         return [
             'child' => $name,
             'child_full' => $child ? trim($name . ' ' . $child->last_name) : $name,
-            'centre' => FamilyFacingName::org((int) $check->centre_id, (int) $check->agency_id),   // "a call from iLearn Home Childcare", never a provider's full name
+            'agency' => FamilyFacingName::sender((int) $check->agency_id),   // who is calling: "a Safe Arrival call from iLearn Home Childcare"
+            'centre' => FamilyFacingName::org((int) $check->centre_id, (int) $check->agency_id),   // never a provider's full name
             'room' => (string) DB::table('rooms')->where('id', $check->room_id)->value('name'),
             'time' => $check->expected_time ? Carbon::parse(substr((string) $check->expected_time, 0, 5), $tz)->format('g:i A') : 'the usual time',
         ];

@@ -404,24 +404,23 @@ class SafeArrivalCommand extends Command
     private function askParents(CheckEventNotifier $notifier, int $agencyId, array $row, string $tz, bool $dry): int
     {
         $name = $row['first_name'];
-        // To the family: a home named after its provider reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
-        $row['centre_name'] = \App\Support\FamilyFacingName::place((int) $row['centre_id'] ?: null, (string) $row['centre_name']);
         $at = Carbon::parse($row['expected'], $tz)->format('g:i A');
-        $title = "🛡️ Has {$name} arrived?";
-        $body = "{$name} was expected at {$row['centre_name']} around {$at} and hasn't been signed in. "
-            . "If they're not coming in today, please tell us in the app (Not attending today). "
-            . "If they're on the way, no need to reply.";
+        /* The words are App\Support\SafeArrivalFamilyText's (2026-11-27): a home named after its provider reads "Amna's home
+           child care" (first name only), and the text starts with the agency's name. */
+        $ask = \App\Support\SafeArrivalFamilyText::ask((int) $row['centre_id'] ?: null, (string) $row['centre_name'], (string) $name, $at);
+        $title = $ask['title'];
+        $body = $ask['body'];
 
         /* The TEXT ends with "Reply 1 if running late, 2 if absent today." (2026-11-25, App\Support\SmsAttendance), in
            plain GSM-7 words; the push and email keep $body. */
-        $smsBody = function (int $uid, string $phone) use ($agencyId, $row, $name, $at, $body) {
+        $smsBody = function (int $uid, string $phone) use ($agencyId, $row, $name, $ask) {
             $line = \App\Support\SmsAttendance::promptLine($agencyId, $uid, $phone, (int) $row['child_id'], (string) $name, 'safe_arrival_ask');
 
-            return $line === '' ? $body : "{$name} was expected at {$row['centre_name']} around {$at} and hasn't been signed in yet. " . $line;
+            return \App\Support\SafeArrivalFamilyText::askText($agencyId, $ask, $line);
         };
         $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $row['family_id'])->whereNull('u.deleted_at')
-            ->get(['u.id', 'u.email', 'u.phone', 'u.first_name', 'u.last_name']);
+            ->get(['u.id', 'u.email', 'u.phone', 'u.first_name']);
         $n = 0;
         foreach ($guardians as $g) {
             $prefs = $notifier->prefsFor((int) $g->id);
@@ -435,7 +434,7 @@ class SafeArrivalCommand extends Command
                     app(FcmService::class)->sendToUser((int) $g->id, $title, $body, '#today');
                 }
                 if ($prefs['email'] && $g->email) {
-                    $this->email($agencyId, (string) $g->email, trim($g->first_name . ' ' . $g->last_name), $title, $body, true,
+                    $this->email($agencyId, (string) $g->email, (string) $g->first_name, $title, $body, true,
                         (int) $row['child_id'], (int) $g->id, (string) $name);
                 }
                 if ($prefs['sms'] && $g->phone) {
@@ -583,15 +582,14 @@ class SafeArrivalCommand extends Command
     private function askParentsPickup(CheckEventNotifier $notifier, int $agencyId, array $row, string $what, bool $dry): int
     {
         $name = $row['first_name'];
-        $row['centre_name'] = \App\Support\FamilyFacingName::place((int) ($row['centre_id'] ?? 0) ?: null, (string) $row['centre_name']);   // family wording
-        $title = "🛡️ Has {$name} been picked up?";
-        $body = "Our records still show {$name} signed in at {$row['centre_name']}, past {$what}. "
-            . "If {$name} is with you, please let the centre know so they can update the record. "
-            . 'If not, please contact the centre right away.';
+        // Family wording (App\Support\SafeArrivalFamilyText, 2026-11-27): provider homes by first name, texts from the agency.
+        $ask = \App\Support\SafeArrivalFamilyText::pickup((int) ($row['centre_id'] ?? 0) ?: null, (string) $row['centre_name'], (string) $name, $what);
+        $title = $ask['title'];
+        $body = $ask['body'];
 
         $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $row['family_id'])->whereNull('u.deleted_at')
-            ->get(['u.id', 'u.email', 'u.phone', 'u.first_name', 'u.last_name']);
+            ->get(['u.id', 'u.email', 'u.phone', 'u.first_name']);
         $n = 0;
         foreach ($guardians as $g) {
             $prefs = $notifier->prefsFor((int) $g->id);
@@ -605,11 +603,11 @@ class SafeArrivalCommand extends Command
                     app(FcmService::class)->sendToUser((int) $g->id, $title, $body, '#today');
                 }
                 if ($prefs['email'] && $g->email) {
-                    $this->email($agencyId, (string) $g->email, trim($g->first_name . ' ' . $g->last_name), $title, $body, false);
+                    $this->email($agencyId, (string) $g->email, (string) $g->first_name, $title, $body, false);
                 }
                 if ($prefs['sms'] && $g->phone) {
                     app(\App\Http\Controllers\Api\SmsController::class)
-                        ->sendOne($agencyId, (int) $g->id, (string) $g->phone, $body, 'checkin_reminder');
+                        ->sendOne($agencyId, (int) $g->id, (string) $g->phone, \App\Support\SafeArrivalFamilyText::text($agencyId, $body), 'checkin_reminder');
                 }
                 $n++;
             } catch (\Throwable $e) {
@@ -636,9 +634,10 @@ class SafeArrivalCommand extends Command
             . '<strong>“Not attending today”</strong> to let the team know. That also stops these messages.</p>' : ''),
             ['eyebrow_icon' => \App\Support\SafeArrival::EMAIL_ICON, 'eyebrow' => 'SAFE ARRIVAL', 'title' => $title, 'subtitle' => 'Attendance', 'preheader' => $body]);
         $html = \App\Support\AttendanceReply::withDarkCss($html);
-        dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
-            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
-                $m->to($to, $toName ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($title);
+        $fromName = \App\Support\SafeArrivalFamilyText::fromName($agencyId);   // from the agency, never "KiddieTrac" (2026-11-27)
+        dispatch(function () use ($agencyId, $to, $toName, $html, $title, $fromName) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title, $fromName) {
+                $m->to($to, $toName ?: null)->from('noreply@kiddietrac.com', $fromName)->subject($title);
             });
         })->onQueue('mail');
     }

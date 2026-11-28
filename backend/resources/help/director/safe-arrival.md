@@ -22,6 +22,7 @@ signed in. Open it from the sidebar: **Operations** → **Safe Arrival**.
 
 1. Every 5 minutes, KiddieTrac looks at each child who is **scheduled today** at a centre that is **open today**.
 2. When a child's **expected drop-off time + the arrival threshold** passes, and they are not signed in and no absence was reported, the parents are asked once: *"Has Maya arrived?"* — through the channels each parent chose (app, email, text). They can tap **Not attending today** in the app.
+   Every message to a family comes **from your agency's name** (a text starts *"Sunny Days Child Care: Maya was expected at..."*, the email is from your agency, the call says *"a Safe Arrival call from Sunny Days Child Care"*), and an educator is only ever named by **first name** (a home named after its provider reads *"Maria's home child care"*).
 3. If the phone call is on and there's still no answer, the parents get an automated call (see below).
 4. If there is still no sign-in and no absence, the room's educators — and the directors or admins you chose — get an alert that opens this board.
 5. The moment the child is signed in, ticked in a headcount, or an absence is reported, the check closes by itself.
@@ -70,7 +71,7 @@ Whatever the parent presses, staff are told and it is written to the audit log. 
 1. In **⚙️ Settings**, open **📞 Phone call — wording and options**.
 2. Untick **Offer 2 (on the way)** or **Offer 3 (dropped off)** to leave one out (1 is always offered).
 3. Choose **Who is called** (**Each guardian in turn, primary first** or **Primary guardian only**), **Ask the question** (once, 2 or 3 times), **Wait for a key (seconds)** (5 to 30) and **Before calling the next guardian** (default 1 minute).
-4. Change the wording boxes if you like. Leave a box empty to use the standard wording shown in grey. Use **{child}**, **{child_full}**, **{centre}**, **{room}** and **{time}**.
+4. Change the wording boxes if you like. Leave a box empty to use the standard wording shown in grey. Use **{child}**, **{child_full}**, **{agency}** (who is calling: your agency's name), **{centre}**, **{room}** and **{time}**.
 5. Press **▶ Play test call to my phone** to hear it on the mobile number on your own profile, with "Test Child". Nothing is recorded. **Reset wording to standard** empties the boxes.
 6. Press **Save**.
 

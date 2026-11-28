@@ -383,7 +383,8 @@ final class SmsConsentController extends Controller
                 \App\Support\SmsInbound::record((int) $att['agency_id'], $from, $rawText, (int) $att['user_id'], 'attendance', null, $carrier, true);
                 try {
                     app(\App\Http\Controllers\Api\SmsController::class)
-                        ->sendOne((int) $att['agency_id'], (int) $att['user_id'], $from, (string) $att['reply'], 'checkin_reminder');
+                        ->sendOne((int) $att['agency_id'], (int) $att['user_id'], $from,
+                            \App\Support\FamilyFacingName::textFrom((int) $att['agency_id'], (string) $att['reply']), 'checkin_reminder');   // from the agency (2026-11-27)
                 } catch (\Throwable $e) {
                     Log::warning('SMS attendance confirmation not sent', ['from' => $from, 'error' => $e->getMessage()]);
                 }

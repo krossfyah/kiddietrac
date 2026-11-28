@@ -166,7 +166,7 @@ class CheckinReminderCommand extends Command
 
                 if ($prefs['email'] && $g->email) {
                     $this->email((int) $child->agency_id, (string) $g->email,
-                        trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? '')), $title, $body, $window, $mailData,
+                        (string) ($g->first_name ?? ''), $title, $body, $window, $mailData,
                         (int) $child->id, (int) $g->id);
                 }
 
@@ -191,12 +191,14 @@ class CheckinReminderCommand extends Command
        "Reply 1 if running late, 2 if absent today." The push and email keep $body. */
     private function smsBody(string $window, string $body, object $child, string $name, int $guardianId, string $phone): string
     {
+        // Every text starts with the agency's name (2026-11-27, App\Support\FamilyFacingName::textFrom).
         if ($window !== 'morning') {
-            return $body;
+            return \App\Support\FamilyFacingName::textFrom((int) $child->agency_id, $body);
         }
         $line = \App\Support\SmsAttendance::promptLine((int) $child->agency_id, $guardianId, $phone, (int) $child->id, $name, 'checkin_reminder');
 
-        return $line === '' ? $body : "{$name} hasn't been signed in at {$child->centre_name} today. " . $line;
+        return \App\Support\FamilyFacingName::textFrom((int) $child->agency_id,
+            $line === '' ? $body : "{$name} hasn't been signed in at {$child->centre_name} today. " . $line);
     }
 
     private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window, array $data = [],
@@ -229,10 +231,11 @@ class CheckinReminderCommand extends Command
             ]);
         $html = \App\Support\AttendanceReply::withDarkCss($html);
 
-        dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
-            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
+        $fromName = \App\Support\FamilyFacingName::sender($agencyId);   // from the agency, never "KiddieTrac" (2026-11-27)
+        dispatch(function () use ($agencyId, $to, $toName, $html, $title, $fromName) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title, $fromName) {
                 $m->to($to, $toName ?: null)
-                  ->from('noreply@kiddietrac.com', 'KiddieTrac')
+                  ->from('noreply@kiddietrac.com', $fromName)
                   ->subject($title);
             });
         })->onQueue('mail');

@@ -472,7 +472,7 @@
     var TA = FLD + 'height:auto;min-height:52px;resize:vertical;font-family:inherit;line-height:1.4;padding:7px 9px;';
     var callBox = '<details data-callbox style="margin-top:14px;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;"' + (s.call_parents ? ' open' : '') + '>'
       + '<summary style="cursor:pointer;font-weight:800;font-size:14px;color:#0F172A;">📞 Phone call — wording and options</summary>'
-      + '<div style="font-size:12px;color:#64748B;margin:8px 0 4px;line-height:1.45;">Use <b>{child}</b>, <b>{child_full}</b>, <b>{centre}</b>, <b>{room}</b> and <b>{time}</b> — they are filled in on each call. Leave a box empty to use the standard wording. The keys always mean the same thing: 1 absent, 2 on the way, 3 dropped off.</div>'
+      + '<div style="font-size:12px;color:#64748B;margin:8px 0 4px;line-height:1.45;">Use <b>{child}</b>, <b>{child_full}</b>, <b>{agency}</b> (who is calling: your agency), <b>{centre}</b>, <b>{room}</b> and <b>{time}</b> — they are filled in on each call. Leave a box empty to use the standard wording. The keys always mean the same thing: 1 absent, 2 on the way, 3 dropped off.</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:6px;">'
       + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#0F172A;"><input type="checkbox" data-c="offer_late" ' + (cs.offer_late !== false ? 'checked' : '') + '> Offer 2 (on the way)</label>'
       + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#0F172A;"><input type="checkbox" data-c="offer_dropped" ' + (cs.offer_dropped !== false ? 'checked' : '') + '> Offer 3 (dropped off)</label>'

@@ -18,6 +18,7 @@ pointé. Ouvrez-le dans le menu latéral : **Opérations** → **Safe Arrival**.
 
 1. Toutes les 5 minutes, KiddieTrac examine chaque enfant **prévu aujourd’hui** dans un centre **ouvert aujourd’hui**.
 2. Quand l’**heure d’arrivée prévue + le seuil d’arrivée** est passée, que l’enfant n’est pas pointé et qu’aucune absence n’a été signalée, on demande une fois aux parents : *« Maya est-elle arrivée ? »* — par les moyens choisis par chaque parent (application, courriel, texto). Ils peuvent toucher **Not attending today** dans l’application.
+   Chaque message à une famille vient **du nom de votre agence** (un texto commence par *« Sunny Days Child Care : Maya était attendue à... »*, le courriel vient de votre agence, l’appel dit *« un appel Safe Arrival de Sunny Days Child Care »*), et une éducatrice n’est jamais nommée que par son **prénom** (un service de garde nommé d’après sa responsable devient *« le service de garde de Maria »*).
 3. Si l’appel téléphonique est activé et qu’il n’y a toujours pas de réponse, les parents reçoivent un appel automatisé (voir plus bas).
 4. S’il n’y a toujours ni pointage ni absence, les éducateurs de la salle — et les directeurs ou administrateurs choisis — reçoivent une alerte qui ouvre ce tableau.
 5. Dès que l’enfant est pointé, coché dans un comptage, ou qu’une absence est signalée, la vérification se ferme d’elle-même.
@@ -66,7 +67,7 @@ Quelle que soit la touche, le personnel est avisé et c’est inscrit au journal
 1. Dans **⚙️ Paramètres**, ouvrez **📞 Appel téléphonique — formulation et options**.
 2. Décochez **Offer 2 (on the way)** ou **Offer 3 (dropped off)** pour retirer un choix (le 1 est toujours offert).
 3. Choisissez **Qui est appelé** (**Each guardian in turn, primary first** ou **Primary guardian only**), **Poser la question** (une, 2 ou 3 fois), **Wait for a key (seconds)** (5 à 30) et **Avant d’appeler le tuteur suivant** (1 minute par défaut).
-4. Changez les zones de texte si vous le voulez. Laissez une zone vide pour utiliser la formulation standard affichée en gris. Utilisez **{child}**, **{child_full}**, **{centre}**, **{room}** et **{time}**.
+4. Changez les zones de texte si vous le voulez. Laissez une zone vide pour utiliser la formulation standard affichée en gris. Utilisez **{child}**, **{child_full}**, **{agency}** (qui appelle : le nom de votre agence), **{centre}**, **{room}** et **{time}**.
 5. Appuyez sur **▶ Jouer l’appel d’essai sur mon téléphone** pour l’entendre au numéro de cellulaire de votre propre profil, avec « Test Child ». Rien n’est consigné. **Rétablir la formulation standard** vide les zones.
 6. Appuyez sur **Enregistrer**.
 

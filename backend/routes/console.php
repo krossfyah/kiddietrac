@@ -725,3 +725,6 @@ Schedule::call(function () {
     flock($h, LOCK_UN);
     fclose($h);
 })->name('scheduler-log-trim')->dailyAt('03:20')->timezone('America/Toronto')->onOneServer();
+
+// Safe Arrival to families: educators by first name, every text/email from the agency (2026-11-27, kt:safe-arrival-names-check).
+Schedule::command('kt:safe-arrival-names-check --quiet-ok')->dailyAt('05:53')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();

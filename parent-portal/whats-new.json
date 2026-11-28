@@ -3,6 +3,24 @@
     "entries": [
         {
             "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🛡️",
+            "title": "Safe Arrival messages come from your agency",
+            "body": "Every Safe Arrival text, email and phone call to a family now comes from your agency's name (a text starts \"Your Agency: Maya was expected at...\"), and educators are only ever named by first name. In the call wording you can use {agency} for who is calling.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Les messages Safe Arrival viennent de votre agence",
+            "body_fr": "Chaque texto, courriel et appel Safe Arrival à une famille vient maintenant du nom de votre agence (un texto commence par « Votre agence : Maya était attendue à... »), et les éducatrices ne sont nommées que par leur prénom. Dans le texte de l’appel, utilisez {agency} pour dire qui appelle.",
+            "title_es": "Los mensajes de Safe Arrival llegan de su agencia",
+            "body_es": "Cada texto, correo y llamada de Safe Arrival a una familia ahora llega con el nombre de su agencia (un texto empieza «Su agencia: Maya debía llegar a...»), y a las educadoras solo se las nombra por su nombre de pila. En el texto de la llamada puede usar {agency} para decir quién llama.",
+            "title_hi": "Safe Arrival संदेश अब आपकी एजेंसी के नाम से",
+            "body_hi": "परिवारों को हर Safe Arrival टेक्स्ट, ईमेल और फ़ोन कॉल अब आपकी एजेंसी के नाम से जाता है (टेक्स्ट ऐसे शुरू होता है \"आपकी एजेंसी: Maya को ... पहुँचना था\"), और शिक्षकों का नाम केवल पहले नाम से लिया जाता है। कॉल की शब्दावली में कॉल करने वाले के लिए {agency} इस्तेमाल करें।"
+        },
+        {
+            "type": "improved",
             "date": "2026-11-28",
             "icon": "🍽️",
             "title": "A clearer card when you log a moment, with Undo",
