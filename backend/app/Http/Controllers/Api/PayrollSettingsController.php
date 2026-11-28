@@ -178,6 +178,8 @@ final class PayrollSettingsController extends Controller
             'agency_name' => $row->name,
             'payroll' => self::read($agencyId),
             'payslip_terms_default' => \App\Support\Payroll\PayslipPdf::TERMS['en'],
+            // Payslip passwords (PayslipLock): the rule, and who cannot get the usual password (no date of birth / no last name).
+            'payslip_password' => ['rule' => \App\Support\Payroll\PayslipLock::hint('last', 'dob'), 'gaps' => \App\Support\Payroll\PayslipLock::gaps($agencyId)],
             'next_payday' => self::nextPayday($agencyId),
             // Who may be copied on payslip emails: this agency's admins and centre directors.
             'bcc_choices' => array_values(\App\Support\PayslipNotices::bccChoices($agencyId)),

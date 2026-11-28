@@ -220,6 +220,7 @@
     }
     paintBreaks(main);
     paintTerms(main, p, data.payslip_terms_default || '');
+    paintLock(main, data.payslip_password || null);
   }
 
   /* PAYSLIP TERMS AND CONDITIONS (2026-11-27, App\Support\Payroll\PayslipPdf): printed at the foot of every payslip PDF,
@@ -263,6 +264,34 @@
     }
     box.querySelector('#pt-save').onclick = function () { save(box.querySelector('#pt_text').value); };
     box.querySelector('#pt-reset').onclick = function () { save(''); };
+  }
+
+  /* PAYSLIP PASSWORDS (2026-11-27, App\Support\Payroll\PayslipLock): every payslip PDF a person downloads or is emailed is
+     password-protected with iLearn's rule. The card says the rule and lists who cannot get the usual password (no date of
+     birth or no last name on file). Read-only: there is no switch, as iLearn has none. */
+  function paintLock(main, info) {
+    if (!info) return;
+    var gaps = info.gaps || [];
+    var box = document.createElement('div');
+    box.className = 'kt-card';
+    box.style.cssText = 'max-width:680px;margin-top:16px;';
+    box.setAttribute('data-kt-self-live', '1');
+    var list = gaps.length
+      ? '<div style="margin-top:10px;font-size:13px;color:#92400E;font-weight:600;">' + gaps.length + (gaps.length === 1 ? ' person gets' : ' people get') + ' a stand-in password</div>'
+        + '<div style="margin-top:6px;max-height:220px;overflow:auto;border:1px solid #E2E8F0;border-radius:8px;">'
+        + gaps.map(function (g) {
+          return '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 10px;border-bottom:1px solid #F1F5F9;font-size:13px;">'
+            + '<span><b>' + esc(g.name) + '</b>' + (g.ref ? ' <span style="color:#64748B;">' + esc(g.ref) + '</span>' : '') + '</span>'
+            + '<span style="color:#92400E;white-space:nowrap;">No ' + esc((g.missing || []).join(' or ')) + '</span></div>';
+        }).join('')
+        + '</div><p style="color:#64748B;font-size:12.5px;margin:8px 0 0;line-height:1.5;">Their payslips are still locked: with no date of birth the last day of the pay period stands in (December 31 for a tax slip); with no last name, the first name\'s letters. Each person is told their own format. Add the missing detail to their HR file and their next download uses the usual password.</p>'
+      : '<p style="margin:10px 0 0;font-size:13px;color:#1E8E60;">✓ Everyone paid here has a last name and a date of birth on file.</p>';
+    box.innerHTML = '<div class="kt-card-header"><h3 class="kt-card-title">🔒 Payslip passwords</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0;line-height:1.6;">Every payslip PDF a person downloads or is emailed is password-protected (AES-256), as iLearn does it, and so are T4, T4A and RL-1 copies. '
+      + 'The password: <b>' + esc(info.rule || '') + '</b> For example, Jordan Ellis born March 2, 1990 opens it with <code>ELL03021990</code>. '
+      + 'Staff are told the format, never the password. Opening a payslip in the portal (the office view) needs no password. This cannot be switched off.</p>'
+      + list;
+    main.appendChild(box);
   }
 
   /* LUNCH AND BREAKS (2026-11-05, App\Support\StaffBreaks): whether an educator's lunch and

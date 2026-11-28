@@ -23,3 +23,9 @@ Cuando un recibo está listo recibe un correo que lo dice. Por su privacidad no 
 Cada recibo de pago en PDF muestra a su empleador (con su logotipo), sus datos (nombre, ID de empleado, puesto, centro, fecha de inicio, domicilio, teléfono y correo), su SIN solo como **XXX-XXX-123**, el periodo y la fecha de pago, cómo se le paga, sus ingresos y deducciones de este pago y del año, su pago neto, sus saldos de permisos y los términos de su empleador. Lleva la marca **NO NEGOCIABLE — ESTO NO ES UN CHEQUE**: es un registro de su pago, no dinero. Revíselo, guárdelo para sus impuestos e informe a la oficina de cualquier error dentro del plazo que indican los términos.
 
 Si las deducciones no se calcularon en KiddieTrac, el recibo muestra su pago bruto y lo indica.
+
+## Abrir un recibo de pago en PDF (contraseña)
+
+Cada recibo de pago en PDF que descarga o recibe por correo está protegido con contraseña, al igual que sus T4, T4A y RL-1. La contraseña son las **3 primeras letras de su apellido en MAYÚSCULAS y luego su fecha de nacimiento como MMDDAAAA (mes, día, año)**. Por ejemplo, Jordan Ellis, nacido el 2 de marzo de 1990, escribe `ELL03021990`.
+
+Si su oficina no tiene su fecha de nacimiento, se usa el último día del período de pago (el 31 de diciembre del año fiscal para un comprobante fiscal); sin apellido en su expediente, las 3 primeras letras de su nombre. La aplicación muestra su propio formato junto a sus recibos, y el correo del recibo también lo indica. Nadie le enviará nunca la contraseña en sí. Para usar su fecha de nacimiento, pida a su oficina que la añada a su expediente.

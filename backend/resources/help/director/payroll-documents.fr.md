@@ -58,6 +58,16 @@ Le taux n’est jamais rempli pour vous : tapez-le à chaque traitement. Une per
 
 Appuyez sur **⤓ CSV** pour télécharger le rapport des heures pour les dates affichées. C’est un fichier d’heures : les personnes payées sans pointage sont à l’écran, pas dans le fichier. Voir [Exportation CSV prête pour la paie](payroll-csv).
 
+## Mots de passe des fiches de paie
+
+Chaque fiche de paie en PDF qu'une personne télécharge ou reçoit par courriel est protégée par un mot de passe, comme iLearn protège ses fiches de paie : fiches du moteur de paie, fiches créées par **Generate payroll** ou ajoutées à la main, fiches au brut seulement, relevés hebdomadaires, et copies des T4, T4A et RL-1. Le fichier est verrouillé par un chiffrement AES-256 ; une fois ouvert, il peut être imprimé et copié.
+
+- **Le mot de passe :** les 3 premières lettres du nom de famille en MAJUSCULES, puis la date de naissance au format MMJJAAAA (mois, jour, année). Par exemple, Jordan Ellis, né le 2 mars 1990, utilise `ELL03021990`.
+- **Aucune date de naissance au dossier :** le dernier jour de la période de paie la remplace (le 31 décembre de l'année d'imposition pour un feuillet fiscal). **Aucun nom de famille :** les 3 premières lettres du prénom. Une fiche de paie n'est jamais envoyée sans verrou.
+- **Le personnel reçoit le format, jamais le mot de passe**, dans la liste des fiches de paie de l'application et dans le courriel de la fiche de paie. Le courriel ne contient aucun montant.
+- **Qui est concerné :** **Payroll settings → Payslip passwords** liste toutes les personnes payées ici sans date de naissance ou sans nom de famille au dossier. Ajoutez l'information dans leur dossier RH et leur prochain téléchargement utilise le mot de passe habituel.
+- Ouvrir une fiche de paie dans le portail (la vue du bureau, pour les administrateurs et les directeurs) ne demande aucun mot de passe. Cette protection ne peut pas être désactivée.
+
 ## Qui peut faire quoi
 
 | Rôle | Ce qu’il peut faire |

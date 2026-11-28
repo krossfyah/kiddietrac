@@ -182,12 +182,16 @@ final class YearEndPdf
             . '</body></html>';
     }
 
-    public static function pdf(string $html, string $name)
+    /** $lock = PayslipLock::forPerson(..., 'year') for a person's slip (locked like a payslip, 2026-11-27); null for the agency summary. */
+    public static function pdf(string $html, string $name, ?array $lock = null)
     {
-        $pdf = new Dompdf();
+        $pdf = new Dompdf($lock ? \App\Support\Pdf\PdfSeal::options() : []);
         $pdf->loadHtml($html);
         $pdf->setPaper('letter');
         $pdf->render();
+        if ($lock) {
+            \App\Support\Pdf\PdfSeal::seal($pdf, (string) $lock['password']);
+        }
 
         return response($pdf->output(), 200, ['Content-Type' => 'application/pdf', 'Cache-Control' => 'no-store, private',
             'Content-Disposition' => 'inline; filename="' . $name . '.pdf"']);

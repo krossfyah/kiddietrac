@@ -700,14 +700,16 @@ final class PayslipPdf
         return preg_replace('/((?:' . $c . '\x{094D})*' . $c . ')\x{093F}/u', "\u{093F}$1", $s) ?? $s;
     }
 
-    public static function render(array $v, ?string $loc = null): string
+    /** The PDF bytes. With $password the file is locked (AES-256, PdfSeal); without, it is the unlocked office copy. */
+    public static function render(array $v, ?string $loc = null, ?string $password = null): string
     {
         $loc = $loc ?? MessageTranslator::pdfLocale();
         $lang = self::lang($loc);
         if ($lang === 'hi' && ! self::devanagariFont()) {
             $lang = 'en';
         }
-        $pdf = new Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans', 'chroot' => [storage_path('fonts'), resource_path('fonts'), base_path('vendor/dompdf/dompdf')]]);
+        $pdf = new Dompdf(($password !== null ? \App\Support\Pdf\PdfSeal::options() : [])
+            + ['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans', 'chroot' => [storage_path('fonts'), resource_path('fonts'), base_path('vendor/dompdf/dompdf')]]);
         $html = self::html($v, $loc);
         $pdf->loadHtml($lang === 'hi' ? self::devanagariOrder($html) : $html);
         $pdf->setPaper('letter');
@@ -721,14 +723,21 @@ final class PayslipPdf
             $font = $fm->getFont($family) ?: $fm->getFont('DejaVu Sans');
             $canvas->text($canvas->get_width() - 36 - $fm->getTextWidth($t, $font, 7.2), $canvas->get_height() - 29, $t, $font, 7.2, [0.39, 0.45, 0.55]);
         });
+        if ($password !== null) {
+            \App\Support\Pdf\PdfSeal::seal($pdf, $password);
+        }
 
         return (string) $pdf->output();
     }
 
-    public static function response(array $v, string $filename, string $disposition = 'inline')
+    /**
+     * The payslip as an HTTP response. $lock is PayslipLock::forDoc()/forPerson() for every copy a person downloads or is
+     * emailed (iLearn's rule, every agency), or false ONLY for the office view, so no caller can forget the choice.
+     */
+    public static function response(array $v, string $filename, array|false $lock, string $disposition = 'inline')
     {
-        return response(self::render($v), 200, ['Content-Type' => 'application/pdf',
-            'Content-Disposition' => $disposition . '; filename="' . $filename . '"']);
+        return response(self::render($v, null, $lock === false ? null : (string) $lock['password']), 200, ['Content-Type' => 'application/pdf',
+            'Content-Disposition' => $disposition . '; filename="' . $filename . '"', 'Cache-Control' => 'no-store, private']);
     }
 
     /* ── helpers ──────────────────────────────────────────────────────────── */

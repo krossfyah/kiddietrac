@@ -58,6 +58,16 @@ La tarifa nunca se llena sola: escríbala en cada nómina. Quien ya tiene un rec
 
 Pulse **⤓ CSV** para descargar el informe de horas de las fechas mostradas. Es un archivo de horas: las personas pagadas sin fichajes están en pantalla, no en el archivo. Vea [Exportación CSV lista para nómina](payroll-csv).
 
+## Contraseñas de los recibos de pago
+
+Cada recibo de pago en PDF que una persona descarga o recibe por correo está protegido con contraseña, como iLearn protege sus recibos: recibos del motor de nómina, recibos de **Generate payroll** o añadidos a mano, recibos solo con el bruto, estados semanales y copias de T4, T4A y RL-1. El archivo se bloquea con cifrado AES-256; una vez abierto se puede imprimir y copiar.
+
+- **La contraseña:** las 3 primeras letras del apellido en MAYÚSCULAS y luego la fecha de nacimiento como MMDDAAAA (mes, día, año). Por ejemplo, Jordan Ellis, nacido el 2 de marzo de 1990, usa `ELL03021990`.
+- **Sin fecha de nacimiento en el expediente:** se usa el último día del período de pago (el 31 de diciembre del año fiscal para un comprobante fiscal). **Sin apellido:** las 3 primeras letras del nombre. Un recibo nunca se envía sin bloqueo.
+- **El personal recibe el formato, nunca la contraseña**, en la lista de recibos de la aplicación y en el correo del recibo. El correo no incluye importes.
+- **A quién afecta:** **Payroll settings → Payslip passwords** muestra a todas las personas pagadas aquí sin fecha de nacimiento o sin apellido en su expediente. Añada el dato en su expediente de RR. HH. y su próxima descarga usará la contraseña habitual.
+- Abrir un recibo en el portal (la vista de oficina, para administradores y directores) no pide contraseña. Esta protección no se puede desactivar.
+
 ## Quién puede hacer qué
 
 | Rol | Qué puede hacer |

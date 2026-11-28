@@ -59,3 +59,13 @@ Une fiche pour laquelle la paie n'a pas calculé les retenues (fiche manuelle ou
 ## Conditions de la fiche de paie (administrateurs d'agence)
 
 Ouvrez **Paramètres de paie** et trouvez **Conditions de la fiche de paie**. Écrivez un énoncé par ligne. Indiquez le nombre de jours dont le personnel dispose pour signaler une erreur de paie (30 par défaut); `{days}` dans votre texte est remplacé par ce nombre. Gardez le texte standard et chacun le lit dans sa langue (anglais, français, espagnol ou hindi). **Utiliser le texte standard** le rétablit.
+
+## Mots de passe des fiches de paie
+
+Chaque fiche de paie en PDF qu'une personne télécharge ou reçoit par courriel est protégée par un mot de passe, comme iLearn protège ses fiches de paie : fiches du moteur de paie, fiches créées par **Generate payroll** ou ajoutées à la main, fiches au brut seulement, relevés hebdomadaires, et copies des T4, T4A et RL-1. Le fichier est verrouillé par un chiffrement AES-256 ; une fois ouvert, il peut être imprimé et copié.
+
+- **Le mot de passe :** les 3 premières lettres du nom de famille en MAJUSCULES, puis la date de naissance au format MMJJAAAA (mois, jour, année). Par exemple, Jordan Ellis, né le 2 mars 1990, utilise `ELL03021990`.
+- **Aucune date de naissance au dossier :** le dernier jour de la période de paie la remplace (le 31 décembre de l'année d'imposition pour un feuillet fiscal). **Aucun nom de famille :** les 3 premières lettres du prénom. Une fiche de paie n'est jamais envoyée sans verrou.
+- **Le personnel reçoit le format, jamais le mot de passe**, dans la liste des fiches de paie de l'application et dans le courriel de la fiche de paie. Le courriel ne contient aucun montant.
+- **Qui est concerné :** **Payroll settings → Payslip passwords** liste toutes les personnes payées ici sans date de naissance ou sans nom de famille au dossier. Ajoutez l'information dans leur dossier RH et leur prochain téléchargement utilise le mot de passe habituel.
+- Ouvrir une fiche de paie dans le portail (la vue du bureau, pour les administrateurs et les directeurs) ne demande aucun mot de passe. Cette protection ne peut pas être désactivée.

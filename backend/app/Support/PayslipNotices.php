@@ -243,152 +243,65 @@ final class PayslipNotices
         return $held ? 'held' : 'sent';
     }
 
-    /** [subject, html] — the approved invoice-email look (KiddieTrac billing header; white-label agencies their own). */
-    /* THE PAY IN THE BODY (2026-11-03, Anthony: "the payslip emails that are sent out do not have the details of the pay
-       in the body of the email such as amounts - if you compare to the ilearn payslip email use the similiar wordings").
-       It showed the period, gross and net only. Now the summary iLearn's own payslip email builds (Livewire/Payroll
-       sendPayslip): Gross, Vacation, CPP, EI, Tax, Other, Net pay, in its words, plus the hours and rate, any pay lines and
-       the year to date. Only what this payslip actually carries - an empty or zero row is left out, nothing is invented.
-       Also the resend (PayrollDocumentController::email) for payslips, so there is one payslip email. $note: the office's
-       message from the resend dialog. */
+    /**
+     * WHO, NOT WHAT, FOR EVERY PAYSLIP EMAIL (2026-11-27, Anthony: "all payslips should follow iLearn's pass-protect rule for
+     * any agency going forward"). The attached PDF is locked with the person's payslip password (PayslipLock, the rule iLearn
+     * uses), so the email no longer carries what the lock protects: no amounts in the body, the subject, the preheader or a
+     * hero. When the PDF is attached the email gives the password FORMAT (iLearn's own hint for iLearn's file), never the
+     * password. Payroll engine payslips (P2) were already sent this way; every payslip now is. This replaces "the pay in the
+     * body" (2026-11-03: gross, deductions, net and year to date in the email, as iLearn's email does). [subject, html], in the
+     * approved invoice-email look; also the resend (PayrollDocumentController::email), so there is one payslip email.
+     */
     public static function render(int $aid, object $doc, string $first, string $agencyName, string $kind, bool $attached, bool $wantPdf, string $note = ''): array
     {
-        if (($doc->source ?? '') === 'engine') {
-            return self::renderEngine($aid, $doc, $first, $agencyName, $kind, $note);
-        }
-        $money = fn ($v) => '$' . number_format((float) $v, 2);
-        $num = fn ($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
-        $has = fn ($v) => $v !== null && abs((float) $v) > 0.004;
+        $engine = ($doc->source ?? '') === 'engine';
         $period = self::period($doc);
         $payDay = null;
-        foreach (['paid_at', 'issued_at'] as $f) {
-            if (! empty($doc->$f)) { try { $payDay = Carbon::parse($doc->$f); break; } catch (Throwable $e) {} }
-        }
-
-        // iLearn: Providers and Contractors are independent - no CPP / EI / tax withheld, and Contractors accrue no vacation.
-        $roleKey = strtolower(trim((string) ($doc->role_label ?? '')));
-        $independent = in_array($roleKey, ['provider', 'contractor'], true);
-        $gross = (float) ($doc->gross ?? 0);
-        $vacation = $roleKey === 'contractor' ? 0.0 : (float) ($doc->vacation_pay ?? 0);
-        $ded = [['CPP', $doc->cpp ?? null], ['EI', $doc->ei ?? null], ['Tax', $doc->income_tax ?? null], ['Other', $doc->other_deductions ?? null]];
-        $dedTotal = 0.0;
-        foreach ($ded as [, $v]) $dedTotal += (float) $v;
-        $net = $doc->net !== null ? (float) $doc->net : $gross + $vacation - $dedTotal;
-
-        $rows = [['Pay period', e($period)]];
-        if ($payDay) $rows[] = [$doc->paid_at ? 'Pay date' : 'Issued', e($payDay->format('M j, Y'))];
-        $units = (float) ($doc->units ?? 0);
-        $unit = strtolower((string) ($doc->unit_label ?? ''));
-        if ($units > 0.004 && in_array($unit, ['hours', 'visits'], true)) {
-            $what = $unit === 'hours' ? ($units == 1.0 ? 'hour' : 'hours') : ($units == 1.0 ? 'visit' : 'visits');
-            $rate = (float) ($doc->rate ?? 0);
-            $rows[] = [$unit === 'hours' ? 'Hours' : 'Visits', e($num($units) . ' ' . $what . ($rate > 0.004 ? ' at ' . $money($rate) . ($unit === 'hours' ? '/hour' : '/visit') : ''))];
-        }
-        if ($has($doc->ot_amount ?? null)) {
-            $rows[] = ['Overtime', e(($has($doc->ot_hours ?? null) ? $num($doc->ot_hours) . ' hours' . ($doc->ot_mult ? ' at ' . $num($doc->ot_mult) . '×' : '') . ' · ' : '') . $money($doc->ot_amount))];
-        }
-        // Pay lines (wage enhancement, workforce compensation, a reward bonus...), itemised as iLearn itemises its misc lines.
-        $lines = isset($doc->lines) && $doc->lines ? (json_decode((string) $doc->lines, true) ?: []) : [];
-        foreach ((array) $lines as $l) {
-            if (! is_array($l) || trim((string) ($l['label'] ?? '')) === '' || ! $has($l['amount'] ?? null)) continue;
-            $rows[] = [(string) $l['label'], e($money($l['amount']))];
-        }
-        if ($gross > 0.004) $rows[] = ['Gross', e($money($gross))];
-        if ($vacation > 0.004) $rows[] = ['Vacation', e($money($vacation))];
-        foreach ($ded as [$label, $v]) {
-            if ($has($v)) $rows[] = [$label, '&minus;' . e($money($v))];
-        }
-        $rows[] = ['Net pay', '<strong>' . e($money($net)) . '</strong>'];
-
-        // Year to date: this person's payslips from this agency, same calendar year, up to and including this one.
-        $ytd = [];
-        $yearOf = (string) substr((string) ($doc->period_end ?: $doc->period_start), 0, 4);
-        if (! empty($doc->user_id) && preg_match('/^\d{4}$/', $yearOf)) {
-            try {
-                $q = \Illuminate\Support\Facades\DB::table('payroll_documents')->where('agency_id', $aid)->where('user_id', $doc->user_id)
-                    ->where('kind', 'payslip')->where(fn ($w) => $w->whereNull('status')->orWhere('status', '!=', 'void'))
-                    ->whereRaw('LEFT(COALESCE(period_end, period_start), 4) = ?', [$yearOf])
-                    ->whereRaw('COALESCE(period_end, period_start) <= ?', [(string) ($doc->period_end ?: $doc->period_start)])
-                    ->selectRaw('SUM(gross) g, SUM(COALESCE(net, gross)) n, COUNT(*) c')->first();
-                if ($q && (int) $q->c > 0) {
-                    if ((float) $q->g > 0.004) $ytd[] = ['Gross, year to date', e($money($q->g))];
-                    if ((float) $q->n > 0.004) $ytd[] = ['Net pay, year to date', e($money($q->n))];
-                }
-            } catch (Throwable $e) {
-                report($e);
+        if ($engine) {
+            $b = json_decode((string) ($doc->breakdown ?? ''), true) ?: [];
+            if (! empty($b['run']['pay_date'])) { try { $payDay = Carbon::parse($b['run']['pay_date']); } catch (Throwable $e) {} }
+        } else {
+            foreach (['paid_at', 'issued_at'] as $f) {
+                if (! empty($doc->$f)) { try { $payDay = Carbon::parse($doc->$f); break; } catch (Throwable $e) {} }
             }
         }
+        if ($engine) {
+            [$link, $where, $button] = ['https://app.kiddietrac.com/dashboard.html#my-hr', 'My HR &rarr; My payslips', 'Open my payslip'];
+        } else {
+            $role = Payroll::primaryRole((int) $doc->user_id);
+            [$link, $where, $button] = ['https://app.kiddietrac.com/dashboard.html#' . ($role === 'home_visitor' ? 'my-pay' : 'my-hours'), 'My pay &rarr; Payslips', 'View in the app'];
+        }
 
-        $role = Payroll::primaryRole((int) $doc->user_id);
-        $link = 'https://app.kiddietrac.com/dashboard.html#' . ($role === 'home_visitor' ? 'my-pay' : 'my-hours');
-
-        $lead = $kind === 'updated'
-            ? 'Your payslip for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> has been updated.'
-            : 'Your payslip for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> is ready.';
-        if ($attached) $lead .= ' It is attached as a PDF.';
+        $lead = ($kind === 'updated' ? 'Your payslip for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> has been updated'
+                : 'Your payslip for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> is ready')
+            . ($payDay ? ' (' . ($engine || ! empty($doc->paid_at) ? 'pay date ' : 'issued ') . e($payDay->format('M j, Y')) . ')' : '') . '.'
+            . ($attached ? ' It is attached as a password-protected PDF.' : '');
 
         $body = '<p style="margin:0 0 8px;">Hi ' . ($first !== '' ? e($first) : 'there') . ',</p>'
             . '<p style="margin:0;">' . $lead . '</p>'
             . ($note !== '' ? '<p style="margin:12px 0 0;">' . nl2br(e($note)) . '</p>' : '')
-            . '<p style="margin:16px 0 0;font-size:13px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;" class="kt-muted">Your pay</p>'
-            . InvoiceMail::details($rows);
-        if ($independent && $dedTotal < 0.005) {
-            $body .= '<p class="kt-muted" style="margin:-8px 0 14px;font-size:12.5px;font-style:italic;color:#64748B;">Statutory deductions (CPP / EI / income tax) &mdash; '
-                . '<strong>not applicable</strong> for independent ' . e(ucfirst($roleKey)) . 's.</p>';
-        }
-        if ($ytd) $body .= InvoiceMail::details($ytd);
-        $body .= '<p style="margin:0 0 14px;">Thank you for everything you do as part of the ' . e($agencyName) . ' team. The care you give our children means so much to the families we serve &mdash; we truly appreciate having you with us.</p>'
-            . InvoiceMail::payButton($aid, $link, 'View in the app');
-        if ($attached && trim((string) $doc->pdf_password_hint) !== '') {
-            $body .= EmailTemplate::calloutBox('<strong>The PDF is password protected.</strong> ' . e((string) $doc->pdf_password_hint)
+            . '<p style="margin:12px 0 14px;">For your privacy the amounts are not in this email. Open the PDF, or sign in, to see your pay, every deduction and your year to date.</p>'
+            . InvoiceMail::payButton($aid, $link, $button);
+        if ($attached) {
+            $hint = trim((string) ($doc->pdf_password_hint ?? '')) ?: Payroll\PayslipLock::forDoc($doc)['hint'];
+            $body .= EmailTemplate::calloutBox('<strong>The PDF is password protected.</strong> ' . e($hint)
                 . ' For security, your actual password is not included in this email.', 'info');
         }
         if ($wantPdf && ! $attached) {
-            $body .= '<p style="margin:12px 0 0;font-size:13px;color:#92400E;">The PDF could not be attached &mdash; open My pay in the app to view or download it.</p>';
+            $body .= '<p style="margin:12px 0 0;font-size:13px;color:#92400E;">The PDF could not be attached &mdash; open the app to view or download it.</p>';
         }
         // The footer says this inbox is not read, so "reply to the office" sent questions nowhere.
-        $body .= '<p class="kt-muted" style="font-size:12.5px;color:#64748B;margin:16px 0 0;">Your payslips, your pay ledger and year-to-date totals are always in the app under '
-            . '<strong>My pay &rarr; Payslips</strong>. Questions about your pay? Contact the office.</p>';
+        $body .= '<p class="kt-muted" style="font-size:12.5px;color:#64748B;margin:16px 0 0;">Your payslips are always in the app under <strong>' . $where
+            . '</strong>. Questions about your pay? Contact the office.</p>';
 
-        $hero = ['chip' => $kind === 'updated' ? 'UPDATED PAYSLIP' : 'PAYSLIP READY', 'chip_col' => '#4ADE80', 'doc_title' => 'Payslip',
-            'number' => $period, 'amount' => $money($net), 'amount_sub' => 'net pay' . ($payDay ? ' · ' . ($doc->paid_at ? 'paid ' : 'issued ') . $payDay->format('M j') : ''),
-            'centre_id' => null, 'label' => 'PAYROLL'];
         $html = EmailTemplate::wrap($aid, $body, [
             'eyebrow' => 'PAYSLIP',
-            'title' => 'Payslip ' . $period,
+            'title' => $kind === 'updated' ? 'Payslip updated' : 'Payslip ready',
             'subtitle' => $agencyName,
-            'preheader' => ($kind === 'updated' ? 'Updated payslip' : 'Your payslip') . ' for ' . $period . ' — net pay ' . $money($net) . '.',
-            'invoice_hero' => $hero,
+            'preheader' => ($kind === 'updated' ? 'An updated payslip' : 'Your payslip') . ' for ' . $period . ' is ready.',
         ]);
         $subject = ($kind === 'updated' ? 'Updated payslip' : 'Your payslip') . ' for ' . $period . ' — ' . $agencyName;
+
         return [$subject, $html];
-    }
-
-    /**
-     * PAYROLL ENGINE PAYSLIP NOTICE (P2, 2026-11-27): who and when, never what. No amounts in the body, the subject, the
-     * preheader or a hero, and no PDF attached by the automatic notice: the pay itself is in the app (My HR > My payslips,
-     * My pay), behind the person's own sign-in.
-     */
-    private static function renderEngine(int $aid, object $doc, string $first, string $agencyName, string $kind, string $note = ''): array
-    {
-        $period = self::period($doc);
-        $b = json_decode((string) ($doc->breakdown ?? ''), true) ?: [];
-        $payDate = ! empty($b['run']['pay_date']) ? Carbon::parse($b['run']['pay_date'])->format('M j, Y') : null;
-        $lead = ($kind === 'updated' ? 'An updated payslip' : 'Your payslip') . ' for <strong>' . e($period) . '</strong> from <strong>' . e($agencyName) . '</strong> is ready'
-            . ($payDate ? ' (pay date ' . e($payDate) . ')' : '') . '.';
-        $body = '<p style="margin:0 0 8px;">Hi ' . ($first !== '' ? e($first) : 'there') . ',</p>'
-            . '<p style="margin:0;">' . $lead . '</p>'
-            . ($note !== '' ? '<p style="margin:12px 0 0;">' . nl2br(e($note)) . '</p>' : '')
-            . '<p style="margin:12px 0 14px;">For your privacy the amounts are not in this email. Sign in to see your pay, every deduction and your year to date.</p>'
-            . InvoiceMail::payButton($aid, 'https://app.kiddietrac.com/dashboard.html#my-hr', 'Open my payslip')
-            . '<p class="kt-muted" style="font-size:12.5px;color:#64748B;margin:16px 0 0;">Your payslips are always in the app under <strong>My HR &rarr; My payslips</strong>. Questions about your pay? Contact the office.</p>';
-        $html = EmailTemplate::wrap($aid, $body, [
-            'eyebrow' => 'PAYSLIP',
-            'title' => 'Payslip ready',
-            'subtitle' => $agencyName,
-            'preheader' => ($kind === 'updated' ? 'An updated payslip' : 'Your payslip') . ' for ' . $period . ' is ready in the app.',
-        ]);
-
-        return [($kind === 'updated' ? 'Updated payslip' : 'Your payslip is ready') . ' — ' . $period . ' — ' . $agencyName, $html];
     }
 }

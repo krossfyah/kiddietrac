@@ -285,8 +285,9 @@ class PayrollYearEndController extends Controller
         YearEnd::note($aid, $this->me($request), 'payroll.slip_downloaded', 'payroll_slip', $id, 'Opened the ' . $s->kind . ' ' . $s->tax_year . ' of '
             . ($this->hrNames([(int) $s->user_id])[(int) $s->user_id] ?? 'a staff member') . ($full ? ' (SIN shown)' : ' (SIN masked)') . '.');
 
+        // Locked with the person's payslip password, as every payslip is (PayslipLock; December 31 of the tax year stands in for a missing date of birth).
         return YearEndPdf::pdf(YearEndPdf::slipHtml($s, $full ? YearEnd::sinFor($aid, (int) $s->user_id) : YearEnd::sinHint($aid, (int) $s->user_id)),
-            strtolower($s->kind) . '-' . $s->tax_year . '-' . $s->user_id);
+            strtolower($s->kind) . '-' . $s->tax_year . '-' . $s->user_id, \App\Support\Payroll\PayslipLock::forPerson((int) $s->user_id, null, $s->tax_year . '-12-31', 'year'));
     }
 
     /** GET /hr/payroll/year-end/summary?year=&kind= (admins). */
@@ -343,7 +344,7 @@ class PayrollYearEndController extends Controller
             return response()->json(['enabled' => false]);
         }
 
-        return response()->json(['enabled' => true, 'slips' => $rows->map(fn ($s) => ['id' => (int) $s->id, 'tax_year' => (int) $s->tax_year, 'kind' => $s->kind,
+        return response()->json(['enabled' => true, 'password_hint' => \App\Support\Payroll\PayslipLock::hintForUser($me, null, 'year'), 'slips' => $rows->map(fn ($s) => ['id' => (int) $s->id, 'tax_year' => (int) $s->tax_year, 'kind' => $s->kind,
             'jurisdiction' => $s->jurisdiction, 'status' => $s->status, 'report_type' => $s->report_type, 'version' => (int) $s->version,
             'finalized_at' => $s->finalized_at ? (string) $s->finalized_at : null, 'in_force' => $s->status === 'final' && $s->report_type !== 'C'])->values()]);
     }
@@ -357,6 +358,7 @@ class PayrollYearEndController extends Controller
         abort_unless($s, 404, 'Not found.');
         YearEnd::note($aid, $me, 'payroll.own_slip_downloaded', 'payroll_slip', $id, 'Opened their own ' . $s->kind . ' ' . $s->tax_year . '.');
 
-        return YearEndPdf::pdf(YearEndPdf::slipHtml($s, YearEnd::sinFor($aid, $me)), strtolower($s->kind) . '-' . $s->tax_year);
+        return YearEndPdf::pdf(YearEndPdf::slipHtml($s, YearEnd::sinFor($aid, $me)), strtolower($s->kind) . '-' . $s->tax_year,
+            \App\Support\Payroll\PayslipLock::forPerson($me, null, $s->tax_year . '-12-31', 'year'));
     }
 }

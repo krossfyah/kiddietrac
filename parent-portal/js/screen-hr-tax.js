@@ -585,7 +585,8 @@
     var y = ps[0] || null;
     wrap.innerHTML = '<div class="hrt-sec">My payslips</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>'
       + (ps.length ? (y ? '<div class="hrx-tot"><div><span>Gross this year</span><b>' + money(y.ytd_gross) + '</b></div><div><span>Net this year</span><b>' + money(y.ytd_net) + '</b></div></div>' : '')
-        + table(['Pay date', 'Period', { t: 'Gross', r: 1 }, { t: 'Net', r: 1 }], rows) : '<span class="hr-sub">No payslips from KiddieTrac payroll yet.</span>') + '</div>';
+        + table(['Pay date', 'Period', { t: 'Gross', r: 1 }, { t: 'Net', r: 1 }], rows) : '<span class="hr-sub">No payslips from KiddieTrac payroll yet.</span>')
+      + (ps.length && r.password_hint ? '<div class="hr-sub" style="margin-top:6px;">🔒 The PDF is password-protected. ' + esc(r.password_hint) + '</div>' : '') + '</div>';
     wrap.querySelectorAll('tr[data-open]').forEach(function (tr) {
       tr.addEventListener('click', function () { slipMine(+tr.getAttribute('data-open')); });
     });
@@ -802,7 +803,8 @@
         + td(st ? st : 'In force') + td(s.finalized_at ? day(s.finalized_at) : '') + '</tr>';
     });
     wrap.innerHTML = '<div class="hrt-sec">My tax slips</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>'
-      + table(['Slip', 'Status', 'Issued'], rows) + '<div class="hr-sub" style="margin-top:6px;">Your employer files these with the CRA (and Revenu Québec for an RL-1). Open one to see or save it for your tax return.</div></div>';
+      + table(['Slip', 'Status', 'Issued'], rows) + '<div class="hr-sub" style="margin-top:6px;">Your employer files these with the CRA (and Revenu Québec for an RL-1). Open one to see or save it for your tax return.</div>'
+      + (r.password_hint ? '<div class="hr-sub" style="margin-top:4px;">🔒 Each slip is password-protected. ' + esc(r.password_hint) + '</div>' : '') + '</div>';
     wrap.querySelectorAll('tr[data-open]').forEach(function (tr) {
       tr.addEventListener('click', function () {
         var s = r.slips.filter(function (x) { return String(x.id) === tr.getAttribute('data-open'); })[0]; if (!s) return;

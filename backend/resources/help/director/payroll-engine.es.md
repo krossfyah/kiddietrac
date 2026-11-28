@@ -59,3 +59,13 @@ Un recibo en el que la nómina no calculó deducciones (un recibo manual o solo 
 ## Términos y condiciones del recibo (administradores de la agencia)
 
 Abra **Configuración de nómina** y busque **Términos y condiciones del recibo de pago**. Escriba una declaración por línea. Indique cuántos días tiene el personal para informar de un error en el pago (30 por defecto); `{days}` en su texto se sustituye por ese número. Si deja el texto estándar, cada persona lo lee en su idioma (inglés, francés, español o hindi). **Usar el texto estándar** lo restablece.
+
+## Contraseñas de los recibos de pago
+
+Cada recibo de pago en PDF que una persona descarga o recibe por correo está protegido con contraseña, como iLearn protege sus recibos: recibos del motor de nómina, recibos de **Generate payroll** o añadidos a mano, recibos solo con el bruto, estados semanales y copias de T4, T4A y RL-1. El archivo se bloquea con cifrado AES-256; una vez abierto se puede imprimir y copiar.
+
+- **La contraseña:** las 3 primeras letras del apellido en MAYÚSCULAS y luego la fecha de nacimiento como MMDDAAAA (mes, día, año). Por ejemplo, Jordan Ellis, nacido el 2 de marzo de 1990, usa `ELL03021990`.
+- **Sin fecha de nacimiento en el expediente:** se usa el último día del período de pago (el 31 de diciembre del año fiscal para un comprobante fiscal). **Sin apellido:** las 3 primeras letras del nombre. Un recibo nunca se envía sin bloqueo.
+- **El personal recibe el formato, nunca la contraseña**, en la lista de recibos de la aplicación y en el correo del recibo. El correo no incluye importes.
+- **A quién afecta:** **Payroll settings → Payslip passwords** muestra a todas las personas pagadas aquí sin fecha de nacimiento o sin apellido en su expediente. Añada el dato en su expediente de RR. HH. y su próxima descarga usará la contraseña habitual.
+- Abrir un recibo en el portal (la vista de oficina, para administradores y directores) no pide contraseña. Esta protección no se puede desactivar.

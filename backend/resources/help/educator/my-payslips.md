@@ -23,3 +23,9 @@ When a payslip is ready you get an email saying so. For your privacy it has no a
 Each payslip PDF shows your employer (with their logo), your details (name, employee ID, position, centre, start date, home address, phone and email), your SIN as **XXX-XXX-123** only, the pay period and pay date, how you are paid, your earnings and deductions for this pay and the year so far, your net pay, your leave balances and your employer's terms. It is marked **NON-NEGOTIABLE — THIS IS NOT A CHEQUE**: it is a record of your pay, not money. Check it, keep it for your taxes, and tell your office about any mistake within the time your terms give.
 
 If deductions were not worked out in KiddieTrac, the payslip shows your gross pay and says so.
+
+## Opening a payslip PDF (password)
+
+Every payslip PDF you download or are emailed is password-protected, and so are your T4, T4A and RL-1. The password is the **first 3 letters of your last name in CAPITALS, then your date of birth as MMDDYYYY**. For example, Jordan Ellis born March 2, 1990 types `ELL03021990`.
+
+If your office has no date of birth for you, the last day of the pay period is used instead (December 31 of the tax year for a tax slip); with no last name on file, the first 3 letters of your first name. The app shows your own format next to your payslips, and the payslip email says it too. Nobody will ever send you the password itself. To use your date of birth, ask your office to add it to your file.

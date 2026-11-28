@@ -59,6 +59,16 @@ The rate is never filled in for you: type it every run. Anyone who already has a
 
 Press **⤓ CSV** to download the hours report for the dates shown. It is an hours file: people paid without punches are on the screen, not in the file. See [Payroll-ready CSV export](payroll-csv).
 
+## Payslip passwords
+
+Every payslip PDF a person downloads or is emailed is password-protected, the way iLearn protects its payslips: payroll engine payslips, payslips from **Generate payroll** or added by hand, gross-only payslips, weekly statements, and T4, T4A and RL-1 copies. The file is locked with AES-256 encryption; once it is open it can be printed and copied.
+
+- **The password:** the first 3 letters of the person's last name in CAPITALS, then their date of birth as MMDDYYYY. For example, Jordan Ellis born March 2, 1990 uses `ELL03021990`.
+- **No date of birth on file:** the last day of the pay period stands in (December 31 of the tax year for a tax slip). **No last name:** the first 3 letters of the first name. A payslip is never sent unlocked.
+- **Staff are told the format, never the password**, on the payslip list in the app and in the payslip email. The email has no amounts in it.
+- **Who is affected:** **Payroll settings → Payslip passwords** lists everyone paid here who has no date of birth or last name on file. Add it in their HR file and their next download uses the usual password.
+- Opening a payslip in the portal (the office view, for admins and directors) needs no password. This cannot be switched off.
+
 ## Who can do what
 
 | Role | What they can do |

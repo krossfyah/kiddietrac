@@ -243,8 +243,8 @@
       return [
         '<strong style="color:#0D1B2A;">' + esc(d.kind === 'invoice' ? 'Payroll invoice' : 'Payslip') + '</strong>'
           + (d.reference ? '<div style="font-size:11.5px;color:#64748B;">' + esc(d.reference) + '</div>' : '')
-          /* iLearn password-protects every payslip it renders, and this document is
-             iLearn's own served through us unchanged. Saying so BEFORE the prompt
+          /* Every payslip PDF is password-protected (iLearn's rule, every agency, 2026-11-27): iLearn's own file
+             carries iLearn's hint, every other payslip the person's own format (PayslipLock). Saying so BEFORE the prompt
              appears is the difference between a familiar step and a broken download.
              The hint is the FORMAT, never the password. */
           + (d.pdf_password_hint
@@ -558,7 +558,7 @@
       panes.push({ key: 'ledger', label: '📒 Ledger', count: null, html: '<div class="kt-pay-sec" data-pay-ledger></div>' });
     }
     if (slips.length) {
-      panes.push({ key: 'weekly', label: '🗓 Weekly', count: slips.length, html: '<div class="kt-pay-sec">' + UI.card('🗓 Weekly statements', 'Calculated from your logged ' + esc(unit) + ' — not yet a payment',
+      panes.push({ key: 'weekly', label: '🗓 Weekly', count: slips.length, html: '<div class="kt-pay-sec">' + UI.card('🗓 Weekly statements', 'Calculated from your logged ' + esc(unit) + ' — not yet a payment' + (pay.password_hint ? '. 🔒 The PDFs are password-protected. ' + esc(pay.password_hint) : ''),
         payTable(['Week', esc(unit.charAt(0).toUpperCase() + unit.slice(1)), 'Rate', 'Gross', ''], slips.map(function (s) {
           return ['<strong style="color:#0D1B2A;">' + esc(fmt(s.period_start)) + ' – ' + esc(fmt(s.period_end)) + '</strong>', esc(String(s.units)),
             money(s.rate) + '<span style="color:#94A3B8;">/' + perLabel + '</span>', '<strong style="color:#0D1B2A;">' + money(s.gross) + '</strong>',

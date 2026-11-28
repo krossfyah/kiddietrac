@@ -584,7 +584,8 @@ class PayrollRunController extends Controller
                 'ytd_gross' => (float) ($b['ytd']['gross'] ?? 0), 'ytd_net' => (float) ($b['ytd']['net'] ?? 0)];
         })->values();
 
-        return response()->json(['enabled' => true, 'payslips' => $list, 'engine_on' => PayrollTax::engineOn($aid)]);
+        return response()->json(['enabled' => true, 'payslips' => $list, 'engine_on' => PayrollTax::engineOn($aid),
+            'password_hint' => \App\Support\Payroll\PayslipLock::hintForUser($me)]);
     }
 
     /** GET /hr/me/payslips/{id}: one of my own. */

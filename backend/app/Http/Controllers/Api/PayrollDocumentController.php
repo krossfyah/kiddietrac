@@ -170,6 +170,13 @@ class PayrollDocumentController extends Controller
                 // password-protected, how to open it.
                 'external_source', 'pdf_password_hint',
             ]);
+        // Every payslip is password-protected now (PayslipLock), so every one says how to open it; iLearn's file keeps iLearn's hint.
+        $hint = \App\Support\Payroll\PayslipLock::hintForUser($uid);
+        foreach ($rows as $r) {
+            if ($r->kind !== 'invoice' && trim((string) $r->pdf_password_hint) === '') {
+                $r->pdf_password_hint = $hint;
+            }
+        }
 
         return response()->json([
             'data' => $rows,
@@ -610,8 +617,13 @@ class PayrollDocumentController extends Controller
            worse document beats an error page on payday. */
         /* PAYROLL ENGINE (P2, 2026-11-27): a payslip a pay run wrote is drawn from what the run froze on it (every deduction,
            year to date, employer side). Every other payslip carries on below exactly as before. */
+        /* PASSWORD-PROTECTED (2026-11-27, Anthony: "all payslips should follow iLearn's pass-protect rule for any agency going
+           forward"): every payslip PDF this method returns is locked with the person's payslip password (PayslipLock: first 3
+           letters of the last name + date of birth MMDDYYYY, the pay period end when no date of birth), whoever downloads it
+           and for the emailed copy alike, as iLearn's own file already is. Only the office view (officeView()) is not. */
+        $locked = $request->attributes->get('kt_office_view') !== true;
         if (\App\Support\Payroll\Payslip::isEngine($doc)) {
-            return \App\Support\Payroll\Payslip::pdf($doc);
+            return \App\Support\Payroll\Payslip::pdf($doc, $locked);
         }
 
         /* OFFICE VIEW (2026-11-27): officeView() asks for the locally drawn copy, so an admin or director reads an iLearn
@@ -685,10 +697,14 @@ class PayrollDocumentController extends Controller
                     . (str_contains((string) $tpl->body, 'pay_lines') ? '' : self::fundingBlock(self::payLines($doc)))
                     . '</body></html>';
 
-                $pdf = new Dompdf();
+                $lockTpl = $locked && $doc->kind !== 'invoice';
+                $pdf = new Dompdf($lockTpl ? \App\Support\Pdf\PdfSeal::options() : []);
                 $pdf->loadHtml($html);
                 $pdf->setPaper('letter');
                 $pdf->render();
+                if ($lockTpl) {
+                    \App\Support\Pdf\PdfSeal::seal($pdf, \App\Support\Payroll\PayslipLock::forDoc($doc)['password']);
+                }
                 $name = ($doc->kind === 'invoice' ? 'payroll-invoice-' : 'payslip-')
                     . ($doc->period_start ?: $doc->id) . '.pdf';
 
@@ -709,7 +725,8 @@ class PayrollDocumentController extends Controller
            only the deductions that were recorded, else "Deductions not calculated in KiddieTrac", terms, NON-NEGOTIABLE
            watermark). A payroll invoice keeps the layout below. */
         if ($doc->kind !== 'invoice') {
-            return \App\Support\Payroll\PayslipPdf::response(\App\Support\Payroll\PayslipPdf::fromDocument($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf');
+            return \App\Support\Payroll\PayslipPdf::response(\App\Support\Payroll\PayslipPdf::fromDocument($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf',
+                $locked ? \App\Support\Payroll\PayslipLock::forDoc($doc) : false);
         }
 
         $period = $doc->period_start

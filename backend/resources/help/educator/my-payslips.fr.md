@@ -23,3 +23,9 @@ Quand un talon est prêt, vous recevez un courriel qui le dit. Pour votre confid
 Chaque fiche de paie PDF indique votre employeur (avec son logo), vos renseignements (nom, numéro d'employé, poste, centre, date d'entrée, adresse personnelle, téléphone et courriel), votre NAS uniquement sous la forme **XXX-XXX-123**, la période et la date de paie, votre mode de paiement, vos gains et retenues pour cette paie et pour l'année, votre paie nette, vos soldes de congés et les conditions de votre employeur. Elle porte la mention **NON NÉGOCIABLE — CECI N'EST PAS UN CHÈQUE** : c'est un relevé de votre paie, pas de l'argent. Vérifiez-la, conservez-la pour vos impôts et signalez toute erreur au bureau dans le délai prévu par les conditions.
 
 Si les retenues n'ont pas été calculées dans KiddieTrac, la fiche montre votre salaire brut et le précise.
+
+## Ouvrir une fiche de paie en PDF (mot de passe)
+
+Chaque fiche de paie en PDF que vous téléchargez ou recevez par courriel est protégée par un mot de passe, tout comme vos T4, T4A et RL-1. Le mot de passe est formé des **3 premières lettres de votre nom de famille en MAJUSCULES, puis de votre date de naissance au format MMJJAAAA (mois, jour, année)**. Par exemple, Jordan Ellis, né le 2 mars 1990, tape `ELL03021990`.
+
+Si votre bureau n'a pas votre date de naissance, le dernier jour de la période de paie la remplace (le 31 décembre de l'année d'imposition pour un feuillet fiscal) ; sans nom de famille au dossier, ce sont les 3 premières lettres de votre prénom. L'application affiche votre propre format à côté de vos fiches de paie, et le courriel de la fiche de paie l'indique aussi. Personne ne vous enverra jamais le mot de passe lui-même. Pour utiliser votre date de naissance, demandez à votre bureau de l'ajouter à votre dossier.

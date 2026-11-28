@@ -124,9 +124,12 @@ final class Payslip
 
     /* THE HOUSE PAYSLIP (2026-11-27): the PDF is drawn by PayslipPdf (agency band + logo, full employee block, earnings and
        deductions with year to date, employer contributions, leave, remarks, terms, NON-NEGOTIABLE watermark). Same frozen
-       figures as view(); html() stays for anything that wants the plain version. */
-    public static function pdf(object $doc)
+       figures as view(); html() stays for anything that wants the plain version.
+       LOCKED (2026-11-27, iLearn's rule for every agency, PayslipLock): every copy a person downloads or is emailed; only the
+       office view ($locked = false) is not. */
+    public static function pdf(object $doc, bool $locked = true)
     {
-        return PayslipPdf::response(PayslipPdf::fromEngine($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf');
+        return PayslipPdf::response(PayslipPdf::fromEngine($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf',
+            $locked ? PayslipLock::forDoc($doc) : false);
     }
 }
