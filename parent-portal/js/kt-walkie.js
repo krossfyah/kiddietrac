@@ -138,7 +138,8 @@
      KT.walkie.creditsCard). Recorded walkie sounds, trimmed / mono / made quieter (ffmpeg), served from /sounds/:
        press    "Function Beep.wav" by JustinBW (Freesound 70106, CC BY 4.0)
        release  "Walkie Talkie - Roger Beep" by bruce965 (Freesound 321906, CC0)
-       rx       "Walkie Talkie Static Beep" by BudgetPixel AI (CC BY 4.0), first 0.6 s
+       rx       "Walkie Talkie Static Beep" by BudgetPixel AI (CC BY 4.0), 0.22-0.47 s of it with short fades
+                (2026-11-28, Anthony chose a shorter incoming sound: 0.25 s, was 0.63 s; the voice follows its real length)
        rxEnd    "walkietalkie_eot.wav" by IneQuation (Freesound 27878, CC BY 3.0)
      The synthesised KIT above stays as the stand-in until a file has loaded (and for emergency). The Android app
      plays the same rx / rxEnd recordings (res/raw walkie_incoming / walkie_eot). */
@@ -146,7 +147,7 @@
   function preload(c) {
     Object.keys(FILES).forEach(function (n) {
       if (BUF[n] || LOADING[n]) return; LOADING[n] = 1;
-      fetch('/sounds/' + FILES[n] + '.mp3?v=1127').then(function (r) { if (!r.ok) throw r.status; return r.arrayBuffer(); }).then(function (ab) {
+      fetch('/sounds/' + FILES[n] + '.mp3?v=1128s').then(function (r) { if (!r.ok) throw r.status; return r.arrayBuffer(); }).then(function (ab) {
         return new Promise(function (res, rej) { c.decodeAudioData(ab, res, rej); });   // callback form: older Safari
       }).then(function (b) { BUF[n] = b; }, function () { LOADING[n] = 0; });
     });
