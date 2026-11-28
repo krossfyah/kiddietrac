@@ -95,6 +95,27 @@ final class AdminController extends Controller
         return [$agency, \App\Support\Visibility::centreIds($agency, $user), false];
     }
 
+    /**
+     * A PURE AUDITOR OF THE AGENCY ON SCREEN (2026-11-27, Anthony: auditors get read-only Compliance and Audit log).
+     * The agency id when the caller's roles in the ACTIVE agency (AgencyRole::names) include auditor and nothing that
+     * already has its own path here (agency admin, platform admin, centre director); else null. Auditors are
+     * agency-wide readers (Visibility::AGENCY_WIDE); EnforceAuditorReadOnly refuses every write they send.
+     */
+    private function auditorAgencyId(Request $request): ?int
+    {
+        $names = \App\Support\AgencyRole::names($request);
+        if (! in_array('auditor', $names, true) || array_intersect($names, ['agency_admin', 'platform_admin', 'centre_director'])) {
+            return null;
+        }
+        $agency = \App\Support\AgencyRole::activeAgency($request);
+        $q = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'auditor')->where('active', true);
+        if ($agency) {
+            return (clone $q)->where('agency_id', $agency)->exists() ? (int) $agency : null;
+        }
+        $first = $q->whereNotNull('agency_id')->value('agency_id');
+        return $first ? (int) $first : null;
+    }
+
     private function getCentreIds(int $agencyId): array
     {
         return DB::table('centres')
@@ -1518,7 +1539,12 @@ final class AdminController extends Controller
         $callerIsPlatformAdmin = in_array('platform_admin', $callerRoles, true);
         $callerIsAgencyAdmin   = in_array('agency_admin', $callerRoles, true);
         $callerIsDirector      = in_array('centre_director', $callerRoles, true);
-        if (!$callerIsPlatformAdmin && !$callerIsAgencyAdmin && !$callerIsDirector) {
+        // Auditors read the whole agency on screen, read-only (2026-11-27).
+        $auditorAgency         = $this->auditorAgencyId($request);
+        if ($auditorAgency) {
+            $callerIsPlatformAdmin = $callerIsAgencyAdmin = $callerIsDirector = false;
+        }
+        if (!$callerIsPlatformAdmin && !$callerIsAgencyAdmin && !$callerIsDirector && !$auditorAgency) {
             return response()->json(['logs' => [], 'total' => 0]);
         }
 
@@ -1549,9 +1575,9 @@ final class AdminController extends Controller
         // surfaced every agency's audit trail to platform_admins — removed.
         $scopedUserIds = null;
         $activeAgencyId = null;   // the agency this log view is scoped to
-        if ($callerIsPlatformAdmin || $callerIsAgencyAdmin) {
+        if ($callerIsPlatformAdmin || $callerIsAgencyAdmin || $auditorAgency) {
             // Whole active agency: actors scoped by agency_id or any agency centre.
-            $agencyId = $this->getAgencyId($request);
+            $agencyId = $auditorAgency ?: $this->getAgencyId($request);
             if (!$agencyId && !($platformScope && $callerIsPlatformAdmin)) return response()->json(['logs' => [], 'total' => 0]);
             $activeAgencyId = $agencyId ? (int) $agencyId : null;
             $centreIds = $agencyId ? $this->getCentreIds($agencyId) : [];
@@ -1917,7 +1943,11 @@ final class AdminController extends Controller
     public function compliance(Request $request): JsonResponse
     {
         // A centre director: their own centres' staff, MFA and capacity (2026-10-05).
-        [$agencyId, $centreIds, $wide] = $this->listScope($request);
+        // An auditor: the whole agency on screen, read-only (2026-11-27).
+        $auditorAgency = $this->auditorAgencyId($request);
+        [$agencyId, $centreIds, $wide] = $auditorAgency
+            ? [$auditorAgency, $this->getCentreIds($auditorAgency), true]
+            : $this->listScope($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $now = now();

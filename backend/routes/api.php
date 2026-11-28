@@ -1977,9 +1977,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/invoices/email-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'emailBatch']);
 
         // v22p43: custom forms builder — admin side (CRUD + responses)
-        Route::get('/forms', [\App\Http\Controllers\Api\FormsController::class, 'index']);
+        // GET /forms and /forms/{form} -> the read-only group below, which also admits auditors (2026-11-27)
         Route::post('/forms', [\App\Http\Controllers\Api\FormsController::class, 'store']);
-        Route::get('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'show']);
         Route::patch('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'update']);
         Route::delete('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'destroy']);
         Route::get('/forms/{form}/responses', [\App\Http\Controllers\Api\FormsController::class, 'listResponses']);
@@ -2092,6 +2091,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get('/forms', [\App\Http\Controllers\Api\FormsController::class, 'publishedForUser']);
     Route::post('/forms/{form}/submit', [\App\Http\Controllers\Api\FormsController::class, 'submit']);
     
+    /* AUDITORS: READ-ONLY FORMS, COMPLIANCE AND AUDIT LOG (2026-11-27, Anthony). GET only; the writers beside them stay
+       in their own groups and EnforceAuditorReadOnly refuses any write an auditor sends. Each controller scopes an
+       auditor to the agency on screen (AdminController::auditorAgencyId, FormsController::getAgencyId). */
+    Route::middleware('role:agency_admin,auditor')->prefix('admin')->group(function () {
+        Route::get('/forms', [\App\Http\Controllers\Api\FormsController::class, 'index']);
+        Route::get('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'show']);
+    });
+    Route::middleware('role:agency_admin,centre_director,platform_admin,auditor')->prefix('admin')->group(function () {
+        // Compliance dashboard: agency admins (whole agency), directors (own centres), auditors (whole agency, read-only).
+        Route::get('/compliance', [AdminController::class, 'compliance']);
+        // v22p47: audit trail — agency admins (whole agency) + directors (their centre) + auditors (whole agency, read-only)
+        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+    });
+
     // v22p42: global search for both agency_admin AND centre_director.
     // SearchController::resolveAgencyId now walks director.centre_id ->
     // centres.agency_id so directors get correctly scoped results.
@@ -2110,10 +2123,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'listNotes']);
         Route::get   ('/families/{family}/documents',            [\App\Http\Controllers\Api\FamilyRecordController::class, 'documents'])->whereNumber('family');
         Route::get('/children', [AdminController::class, 'listAgencyChildren']);
-        Route::get('/compliance', [AdminController::class, 'compliance']);
+        // GET /compliance and /audit-logs -> the auditor read-only group below (2026-11-27)
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
-        // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
-        Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
         // Chat conversations subtab (2026-10-09): agency/platform admins only, enforced in the controller.
         Route::get('/chat-audit', [\App\Http\Controllers\Api\ChatAuditController::class, 'index']);
         Route::get('/chat-audit/{kind}/{id}', [\App\Http\Controllers\Api\ChatAuditController::class, 'show'])->where(['kind' => 'family|staff', 'id' => '[0-9]+']);

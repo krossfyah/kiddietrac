@@ -54,8 +54,19 @@
     container.appendChild(wrap);
   }
 
+  /* AUDITORS READ CUSTOM FORMS (2026-11-27, Anthony): the list and each form's preview, nothing else. The server
+     admits an auditor to GET /admin/forms and /admin/forms/{id} only (responses, edits, email and delete stay agency
+     admin) and EnforceAuditorReadOnly refuses any write, so this screen offers none of them. */
+  function formsReadOnly() {
+    try {
+      var u = (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null');
+      return !!(u && KT.Shell && KT.Shell.Roles && KT.Shell.Roles.primaryRoleOf && KT.Shell.Roles.primaryRoleOf(u) === 'auditor');
+    } catch (e) { return false; }
+  }
+
   function render(container) {
-    if (effectiveRole() !== 'agency_admin') { renderNotAvailable(container); return; }
+    var RO = formsReadOnly();
+    if (effectiveRole() !== 'agency_admin' && !RO) { renderNotAvailable(container); return; }
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -63,6 +74,7 @@
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#7C3AED 0%,#1F6080 60%,#16637A 100%);' });
     hero.innerHTML = '<div class="kt-hero-greet">📝 FORMS</div><h1>Custom forms</h1><div class="kt-hero-sub">Build registration, consent, survey and feedback forms. Families fill them in from their parent portal; responses appear here.</div>';
     wrap.appendChild(hero);
+    if (RO) wrap.appendChild(Dom.el('div', { style: 'margin:12px 0 0;' }, [Dom.el('span', { style: 'display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;' }, '🔒 Read-only (auditor) — you can view forms, not change them')]));
 
     var bar = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:18px 0;flex-wrap:wrap;' });
     // v22p86: search box
@@ -73,7 +85,7 @@
     bar.appendChild(searchInput);
     var newBtn = Dom.el('button', { style: btnPrimary() }, '+ New form');
     newBtn.addEventListener('click', function () { openBuilder(null, container); });
-    bar.appendChild(newBtn);
+    if (!RO) bar.appendChild(newBtn);
     wrap.appendChild(bar);
 
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
@@ -86,7 +98,7 @@
     function paint() {
       Dom.clear(listWrap);
       if (!allForms.length) {
-        listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, 'No forms yet. Click + New form to build one.'));
+        listWrap.appendChild(Dom.el('div', { style: 'padding:48px;text-align:center;color:#6B7280;' }, RO ? 'No forms yet.' : 'No forms yet. Click + New form to build one.'));
         return;
       }
       var filtered = query
@@ -149,13 +161,14 @@
       style: 'background:#EFF6FB;color:#1F6080;border:1px solid #CFE3EE;padding:5px 11px;border-radius:20px;font-size:11.5px;font-weight:700;flex-shrink:0;white-space:nowrap;cursor:pointer;',
     }, (f.response_count || 0) + ' response' + (f.response_count === 1 ? '' : 's'));
     respPill.addEventListener('click', function (e) { e.stopPropagation(); openResponses(f, container); });
-    row.appendChild(respPill);
+    var ro = formsReadOnly();
+    if (!ro) row.appendChild(respPill);
 
     row.appendChild(statusPill(f.status));
     row.appendChild(makeFormKebab(f, container, refresh));
 
-    // Clicking the row (anywhere but the kebab / pills) opens the builder to edit.
-    row.addEventListener('click', function () { openBuilder(f, container); });
+    // Clicking the row (anywhere but the kebab / pills) opens the builder to edit; an auditor gets the preview.
+    row.addEventListener('click', function () { if (ro) openPreview(f); else openBuilder(f, container); });
     return row;
   }
 
@@ -192,6 +205,21 @@
       menu = Dom.el('div', {
         style: 'position:fixed;z-index:2147483000;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);padding:6px 0;min-width:200px;',
       });
+      if (formsReadOnly()) {
+        // An auditor: view only (see formsReadOnly).
+        menu.appendChild(item('👁', 'Preview', false, function () { openPreview(f); }));
+        document.body.appendChild(menu);
+        var rr = btn.getBoundingClientRect();
+        var rw = menu.offsetWidth || 200, rh = menu.offsetHeight || 60;
+        menu.style.left = Math.max(8, Math.min(rr.right - rw, window.innerWidth - rw - 8)) + 'px';
+        menu.style.top = ((rr.bottom + 6 + rh > window.innerHeight - 8) ? Math.max(8, rr.top - rh - 6) : rr.bottom + 6) + 'px';
+        setTimeout(function () {
+          document.addEventListener('click', onDoc, true);
+          window.addEventListener('resize', close);
+          window.addEventListener('scroll', close, true);
+        }, 0);
+        return;
+      }
       menu.appendChild(item('✏️', 'Edit form', false, function () { openBuilder(f, container); }));
       menu.appendChild(item('👁', 'Preview', false, function () { openPreview(f); }));
       menu.appendChild(item('✉️', 'Email to parents', false, function () { emailForm(f); }));

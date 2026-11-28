@@ -427,6 +427,15 @@
       isPlatform = (u.roles && u.roles.indexOf('platform_admin') > -1) || sessionStorage.getItem('kt_is_platform_admin') === '1';
       isAgencyAdmin = !!(u.roles && u.roles.indexOf('agency_admin') > -1);
     } catch (e) {}
+    /* AUDITORS (2026-11-27, Anthony: read-only Forms, Compliance and Audit log): the Audit log and Payment integrations
+       tabs only - both read /admin/audit-logs. Text messages, voice calls, chats, email and platform rows are not
+       theirs (the server refuses them), so no tab offers them. Same check as Forms Manager: the role on screen. */
+    var isAuditor = false;
+    try {
+      var _au = (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null');
+      isAuditor = !!(_au && KT.Shell && KT.Shell.Roles && KT.Shell.Roles.primaryRoleOf && KT.Shell.Roles.primaryRoleOf(_au) === 'auditor');
+    } catch (e) {}
+    if (isAuditor) { isPlatform = false; isAgencyAdmin = false; }
     // Chat conversations: platform and agency admins only (the server enforces the same).
     var hasChats = isPlatform || isAgencyAdmin;
     /* The bar used to appear only for platform admins, because the email log was the
@@ -596,8 +605,7 @@
     tabsRow.appendChild(tA);
     tabsRow.appendChild(tP);
     if (hasChats) { tabsRow.appendChild(tC); }
-    tabsRow.appendChild(tS);
-    tabsRow.appendChild(tV);
+    if (!isAuditor) { tabsRow.appendChild(tS); tabsRow.appendChild(tV); }
     // The email tabs are built only for people who can load them: platform admins (/platform/*) and
     // agency admins (/admin/email-logs, their own agency).
     if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }

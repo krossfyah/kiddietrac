@@ -85,7 +85,7 @@ final class KtLeakProbe extends Command
     private const ID_KEYS = ['child_id' => 'child', 'family_id' => 'family', 'centre_id' => 'centre', 'room_id' => 'room',
         'conversation_id' => 'conversation', 'thread_id' => 'staff_thread', 'invoice_id' => 'invoice'];
 
-    private const ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'guardian', 'staff_parent', 'integration'];
+    private const ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'guardian', 'staff_parent', 'integration', 'auditor'];
 
     /**
      * CENTRE SCOPE (2026-11-27): roles that must never receive their OWN agency's sibling-centre marker

@@ -39,6 +39,15 @@ final class FormsController extends Controller
     private function getAgencyId(Request $request): ?int
     {
         $userId = $request->user()->id;
+        /* AUDITORS READ FORMS (2026-11-27, Anthony): GET /admin/forms and /admin/forms/{id} admit a pure auditor of
+           the agency on screen (no admin/director role there); the writers stay agency-admin only and
+           EnforceAuditorReadOnly refuses any write an auditor sends. */
+        $names = \App\Support\AgencyRole::names($request);
+        if (in_array('auditor', $names, true) && ! array_intersect($names, ['agency_admin', 'platform_admin', 'centre_director'])) {
+            $agency = (int) \App\Support\AgencyRole::activeAgency($request);
+            return $agency && DB::table('role_assignments')->where('user_id', $userId)->where('role', 'auditor')
+                ->where('active', true)->where('agency_id', $agency)->exists() ? $agency : null;
+        }
         $isPlatform = DB::table('role_assignments')
             ->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
         $activeId = (int) $request->header('X-Active-Agency-Id');

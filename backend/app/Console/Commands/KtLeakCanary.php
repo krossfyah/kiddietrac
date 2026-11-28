@@ -14,8 +14,8 @@ use Illuminate\Support\Str;
  * kt:leak-canary - plant (idempotently) the leak guard's canary records in the two test agencies (LeakGuard::AGENCIES).
  *
  * Each agency gets ONE canary centre ("Leak Guard canary - internal") so no real demo centre's roster changes, with a
- * room, seven people (agency admin, director, educator, home visitor, parent, a staff member who is also a parent,
- * an integration account), two families, two children, an enrolment, and one of each record type the probe looks
+ * room, eight people (agency admin, director, educator, home visitor, parent, a staff member who is also a parent,
+ * an integration account, and an auditor - added 2026-11-27 when auditors got read-only Forms/Compliance/Audit log), two families, two children, an enrolment, and one of each record type the probe looks
  * for: family chat message, team chat message, daily event, incident, child note, quick note, announcement, bell row,
  * custom form, document, family file, invoice (paid, $0), HR employee file, and (2026-11-27) a vacation hold,
  * tuition increase and re-enrolment campaign at each canary centre (the sibling's carry the centre marker). Every text field that can carry it
@@ -113,6 +113,7 @@ final class KtLeakCanary extends Command
             $parent = $user('guardian');          $role('guardian', $parent, 'guardian', $centre);
             $sp = $user('staff_parent');          $role('staff_parent_staff', $sp, 'educator', $centre); $role('staff_parent_guardian', $sp, 'guardian', $centre);
             $integ = $user('integration');        $role('integration', $integ, 'integration', null);
+            $auditor = $user('auditor');          $role('auditor', $auditor, 'auditor', null);   // agency-wide, read-only
 
             foreach (['educator' => $educator, 'staff_parent' => $sp] as $k => $uid) {
                 $get('educator_room:' . $k, 'educator_rooms', fn () => DB::table('educator_rooms')->insertGetId([
