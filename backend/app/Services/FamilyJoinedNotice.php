@@ -44,9 +44,9 @@ final class FamilyJoinedNotice
             $kids = DB::table('children')->where('family_id', $familyId)
                 ->whereNull('deleted_at')->count();
 
-            /* The agency's own admins and directors, and nobody else. A director attached
-               to a single centre still gets it: a family arriving anywhere in the agency
-               is something the office as a whole acts on (invites, forms, room). */
+            /* The agency's own admins and the directors of THIS family's centre, and nobody else (2026-11-27: a
+               director of another centre was told every family's name - CentreScope::managers, the leak guard's
+               centre-scope check). */
             /* And the family's own educator(s) / provider (2026-11-03, Anthony: "new family should also be alerted
                the same way by the bell ... to its educator/provider and not to all") - App\Support\RosterAlerts. */
             $famRooms = DB::table('enrollments as e')->join('children as c', 'c.id', '=', 'e.child_id')

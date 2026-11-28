@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * NEW FAMILIES AND WITHDRAWN CHILDREN RING THE BELL FOR THE WHOLE TEAM (2026-11-03, Anthony: "de-enrollement should be
  * alerted in the bell for all admin staff and educator" and "new family should also be alerted the same way").
  *
- * Who: the agency's admins and directors, and the family's OWN educator(s) / provider - not every educator ("should be
+ * Who: the agency's admins and the directors of the family's centre (CentreScope::managers, 2026-11-27), and the family's OWN educator(s) / provider - not every educator ("should be
  * to its educator/provider and not to all", same day). Its educators = those assigned to the child's room(s)
  * (educator_rooms); with no room or nobody assigned, the centre's educators - in home child care the centre is the
  * provider's home, so that is the provider. Never another agency (role_assignments are read for the family's own
@@ -35,23 +35,26 @@ final class RosterAlerts
         return [(int) $f->agency_id, (int) $f->centre_id, (string) ($f->name ?? '')];
     }
 
-    /** Agency admins + directors, and the educators of these rooms (else the centre's educators). Active people only. */
+    /**
+     * Agency admins + the directors OF THIS CENTRE, and the educators of these rooms (else the centre's educators).
+     * Active people only. CENTRE SCOPE (2026-11-27, leak guard): "agency_id = A AND role IN (agency_admin,
+     * centre_director)" reached the directors of EVERY centre, because a director's role row carries agency_id too, so
+     * a director was told the name of a family joining (or a child leaving) another centre. The managers now come
+     * from CentreScope::managers, the one rule for notices about something at a centre (outsiders and HR leavers out).
+     */
     public static function recipients(int $agencyId, int $centreId, array $roomIds = [], ?int $exceptUserId = null): array
     {
         $roomIds = array_values(array_filter(array_map('intval', $roomIds)));
         $own = $roomIds ? DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
             ->whereIn('er.room_id', $roomIds)->where('r.centre_id', $centreId)->pluck('er.user_id')->map(fn ($v) => (int) $v)->all() : [];
-        $ids = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-            ->where('ra.active', true)->whereNull('u.deleted_at')->where('u.status', 'active')
-            ->where(function ($q) use ($agencyId, $centreId, $own) {
-                $q->where(function ($w) use ($agencyId) {
-                    $w->where('ra.agency_id', $agencyId)->whereIn('ra.role', ['agency_admin', 'centre_director']);
-                })->orWhere(function ($w) use ($centreId, $own) {
-                    $w->where('ra.centre_id', $centreId ?: -1)->where('ra.role', 'educator');
-                    if ($own) $w->whereIn('ra.user_id', $own);   // the room's own educators, still checked against this centre
-                });
-            })
+        $managers = CentreScope::managers($agencyId, $centreId ?: null)->where('u.status', 'active')
             ->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all();
+        $educators = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)->whereNull('u.deleted_at')->where('u.status', 'active')
+            ->where('ra.centre_id', $centreId ?: -1)->where('ra.role', 'educator')
+            ->when($own, fn ($w) => $w->whereIn('ra.user_id', $own))   // the room's own educators, still checked against this centre
+            ->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all();
+        $ids = array_values(array_unique(array_merge($managers, $educators)));
         if ($exceptUserId) $ids = array_values(array_filter($ids, fn ($id) => $id !== (int) $exceptUserId));
         return $ids;
     }
