@@ -2,14 +2,14 @@
 title: Family engagement score and NPS
 category: Reporting
 order: 49
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director
 screens: engagement, nps
 ---
 # Family engagement score and NPS
 
 Two screens under **Engagement** tell you how connected your families feel. **Engagement score** measures what
 families do in the portal over the last 30 days. **NPS** (Net Promoter Score) shows how likely families say they are
-to recommend you, on a 0–10 scale, over the last 12 months. Use them together: a family with a low engagement score
+to recommend you, on a 0–10 scale, over the last 24 months. Use them together: a family with a low engagement score
 and a low NPS answer is one to call.
 
 [[open: #engagement | Open Engagement score]] [[open: #nps | Open NPS]]
@@ -26,27 +26,43 @@ and a low NPS answer is one to call.
 
 ## Reading your NPS
 
-1. Open **Engagement › NPS**. The banner reads **📊 NPS — Net Promoter Score** and says how many responses came in over the last 12 months.
-2. Read the big number. It is the percentage of **PROMOTERS (9-10)** minus the percentage of **DETRACTORS (0-6)**; **PASSIVE (7-8)** answers count in the total only. Green is 50 or more, amber 0–49, red below 0.
-3. Read **Recent comments**: each shows the score out of 10, the date and what the family wrote.
-4. Follow up on detractor comments personally, and share promoter comments with your team.
+1. Open **Engagement › NPS**. The banner reads **📈 Net Promoter Score** and says whether the survey is on and when the next round goes out.
+2. Pick a **Centre** (when you have more than one) and who the answers are **from**: everyone, families or staff.
+3. Read the big number. It is the percentage of promoters (9-10) minus the percentage of detractors (0-6); passive answers (7-8) count in the total only. Green is 50 or more, amber 0-49, red below 0.
+4. **Trend by survey round** shows the score for each round, so you can see whether things are getting better.
+5. **Comments** lists what people wrote, with the score, the centre and whether it came from a family or staff.
+6. **Survey rounds** shows each round: when it went out, who was asked and how many answered.
+
+## Sending the survey
+
+The survey is **off** for every agency until an agency admin turns it on.
+
+1. In **Survey setting**, tick **Send the survey automatically**, choose **Every** 3, 6 or 12 months, and tick **Families**, **Staff** or both. Select **Save**.
+2. To send a round now, select **📨 Send now…**. The popup shows exactly how many people it goes to. Type **SEND** and select **Send to …**.
+3. Each person gets an email and an app notice with one question, 0 to 10, and an optional comment. The email has a button for each number. No sign-in is needed. Parents also see the question in the portal.
+4. The person picks a number and selects **Send**. They can change their answer with the same link for 30 days.
+5. A score of 0 to 6 tells the centre's managers straight away, so they can follow up.
+
+> 💡 Tapping a number in the email opens the page with that number picked. The answer only counts after **Send**, because email security scanners open every link in a message.
 
 ## Who can do what
 
 | Role | Sees |
 |---|---|
-| Agency admin | Both screens for the active agency. |
+| Agency admin | Both screens for the active agency, the survey setting and **Send now**. |
 | Platform admin | The agency chosen in the agency switcher. |
-| Centre director, educator | Not available. |
+| Centre director | NPS for their own centres only. They cannot change the setting or send. |
+| Educator | Not available. |
 
-Families never see their engagement score.
+Families never see their engagement score, and nobody else sees one family's NPS answer outside these screens.
 
 ## FAQs and when something goes wrong
 
 ??? The engagement table says "No engagement data yet." | No family has used the portal in the last 30 days, or the agency has no active families yet.
-??? NPS says "No responses yet." and shows 0. | No family has answered the 0–10 question yet. A score of 0 with no responses is not a bad score — there is nothing to measure.
-??? How do families answer the NPS question? | Families answer from their parent account. If you are not receiving any responses, raise a ticket from Help and ask how to collect them for your agency.
-??? Do these screens send anything? | No. They only read what families have already done or answered.
+??? NPS says "No answers yet." | No one has answered yet. Turn the survey on, or send a round with **Send now**.
+??? Send now says it cannot send. | A test agency sends nothing to anyone. A round was also sent in the last 24 hours, or the number of people changed since the preview: open **Send now…** again.
+??? Who is left out? | Families who are closed or withdrawn, pickup-only contacts, suspended accounts, and KiddieTrac staff who only support your agency.
+??? Can a person answer twice? | Each person answers once per round. A second answer replaces the first.
 
 ## Related screens
 

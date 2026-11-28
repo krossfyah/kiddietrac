@@ -291,6 +291,15 @@ final class EmailCatalogue
             ],
             // ── 2026-11-27: family emails moved into the house frame (Anthony: "supplies needed email ... isn't in the typical format") ──
             [
+                'key' => 'nps-survey', 'audience' => 'parents',
+                'name' => 'NPS survey (How are we doing?)',
+                'fires' => 'When an agency admin sends the NPS survey now, or on the agency\'s schedule (every 3, 6 or 12 months) when the survey is switched on. Off by default.',
+                'to' => 'Each parent (and staff member when staff are included), by first name',
+                'subject' => 'How are we doing? A one-question survey from {agency}',
+                'source' => 'Support/NpsMail.php',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'supplies-needed', 'audience' => 'parents',
                 'name' => 'Supplies needed from home',
                 'fires' => 'When an educator, director or admin asks a family for supplies, and the evening before they are needed (only what is still to come).',

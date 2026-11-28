@@ -5,7 +5,7 @@ title: Puntuación de participación de las familias y NPS
 
 Dos pantallas en **Engagement** le dicen qué tan conectadas se sienten sus familias. **Engagement score** mide lo que
 las familias hacen en el portal en los últimos 30 días. **NPS** (Net Promoter Score) muestra qué tan probable es que las
-familias los recomienden, en una escala de 0 a 10, en los últimos 12 meses. Úselas juntas: una familia con poca
+familias los recomienden, en una escala de 0 a 10, en los últimos 24 meses. Úselas juntas: una familia con poca
 participación y una respuesta NPS baja es una familia a la que conviene llamar.
 
 [[open: #engagement | Abrir la participación]] [[open: #nps | Abrir el NPS]]
@@ -22,27 +22,43 @@ participación y una respuesta NPS baja es una familia a la que conviene llamar.
 
 ## Leer su NPS
 
-1. Abra **Engagement › NPS**. El encabezado dice **📊 NPS — Net Promoter Score** e indica cuántas respuestas llegaron en los últimos 12 meses.
-2. Lea el número grande. Es el porcentaje de **PROMOTERS (9-10)** menos el de **DETRACTORS (0-6)**; las respuestas **PASSIVE (7-8)** solo cuentan en el total. Verde desde 50, ámbar de 0 a 49, rojo por debajo de 0.
-3. Lea **Recent comments**: cada uno muestra la nota sobre 10, la fecha y lo que escribió la familia.
-4. Haga seguimiento personal a los comentarios de detractores y comparta los de promotores con su equipo.
+1. Abra **Engagement › NPS**. El banner muestra **📈 Net Promoter Score** e indica si la encuesta está activada y cuándo sale la próxima ronda.
+2. Elija un **Centro** (si tiene más de uno) y de quién son las respuestas: todos, familias o personal.
+3. Lea el número grande. Es el porcentaje de promotores (9-10) menos el porcentaje de detractores (0-6); las respuestas pasivas (7-8) solo cuentan en el total. Verde es 50 o más, ámbar de 0 a 49, rojo menos de 0.
+4. **Trend by survey round** muestra la puntuación de cada ronda, para ver si las cosas mejoran.
+5. **Comments** muestra lo que escribieron las personas, con la puntuación, el centro y si vino de una familia o del personal.
+6. **Survey rounds** muestra cada ronda: cuándo salió, a quién se preguntó y cuántos respondieron.
+
+## Enviar la encuesta
+
+La encuesta está **desactivada** en todas las agencias hasta que un administrador de agencia la active.
+
+1. En **Survey setting**, marque **Send the survey automatically**, elija **Every** 3, 6 o 12 meses, y marque **Families**, **Staff** o ambos. Seleccione **Save**.
+2. Para enviar una ronda ahora, seleccione **📨 Send now…**. La ventana muestra exactamente a cuántas personas llegará. Escriba **SEND** y seleccione **Send to …**.
+3. Cada persona recibe un correo y un aviso en la aplicación con una sola pregunta, de 0 a 10, y un comentario opcional. El correo tiene un botón para cada número. No hace falta iniciar sesión. Los padres también ven la pregunta en el portal.
+4. La persona elige un número y selecciona **Enviar**. Puede cambiar su respuesta con el mismo enlace durante 30 días.
+5. Una puntuación de 0 a 6 avisa de inmediato a los responsables del centro, para que hagan seguimiento.
+
+> 💡 Tocar un número en el correo abre la página con ese número elegido. La respuesta solo cuenta después de **Enviar**, porque los filtros de seguridad del correo abren cada enlace de un mensaje.
 
 ## Quién puede hacer qué
 
 | Rol | Ve |
 |---|---|
-| Administrador de agencia | Ambas pantallas de la agencia activa. |
+| Administrador de agencia | Ambas pantallas de la agencia activa, el ajuste de la encuesta y **Send now**. |
 | Administrador de plataforma | La agencia elegida en el selector de agencias. |
-| Director de centro, educador | No disponible. |
+| Director de centro | El NPS solo de sus propios centros. No puede cambiar el ajuste ni enviar. |
+| Educadora | No disponible. |
 
-Las familias nunca ven su puntuación de participación.
+Las familias nunca ven su puntuación de participación, y nadie más ve la respuesta NPS de una familia fuera de estas pantallas.
 
 ## Preguntas frecuentes y problemas
 
-??? La tabla dice «No engagement data yet.» | Ninguna familia usó el portal en los últimos 30 días, o la agencia aún no tiene familias activas.
-??? El NPS dice «No responses yet.» y muestra 0. | Ninguna familia ha respondido aún la pregunta de 0 a 10. Un 0 sin respuestas no es una mala nota: no hay nada que medir.
-??? ¿Cómo responden las familias la pregunta NPS? | Desde su cuenta de padre o madre. Si no recibe respuestas, abra un ticket desde Ayuda para saber cómo recogerlas en su agencia.
-??? ¿Estas pantallas envían algo? | No. Solo leen lo que las familias ya hicieron o respondieron.
+??? La tabla de participación dice "No engagement data yet." | Ninguna familia usó el portal en los últimos 30 días, o la agencia aún no tiene familias activas.
+??? El NPS dice "No answers yet." | Nadie ha respondido todavía. Active la encuesta o envíe una ronda con **Send now**.
+??? Send now dice que no puede enviar. | Una agencia de prueba no envía nada a nadie. También pudo salir una ronda en las últimas 24 horas, o cambió el número de personas desde la vista previa: abra **Send now…** de nuevo.
+??? ¿Quién queda fuera? | Las familias cerradas o retiradas, los contactos solo para recoger, las cuentas suspendidas y el personal de KiddieTrac que solo da soporte a su agencia.
+??? ¿Una persona puede responder dos veces? | Cada persona responde una vez por ronda. Una segunda respuesta reemplaza la primera.
 
 ## Pantallas relacionadas
 

@@ -1199,35 +1199,115 @@
   }
 
   // ============================ NPS summary =================================
+  /* NPS (2026-11-28): the survey now goes out (App\Support\NpsSurvey). Score, trend by round, comments, centre bar
+     (a director sees their own centres), and for agency admins the survey setting + "Send now" (preview count, type
+     SEND). Default OFF for every agency. */
+  let npsCentre = 0, npsAudience = '';
   async function renderNps(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/engagement/nps').catch(() => ({ data: [], summary: {} }));
+    const qs = new URLSearchParams();
+    if (npsCentre) qs.set('centre_id', npsCentre);
+    if (npsAudience) qs.set('audience', npsAudience);
+    let r;
+    try { r = await Api.get('/engagement/nps' + (qs.toString() ? '?' + qs : '')); }
+    catch (e) { main.innerHTML = `<div class="kt-card" style="margin:24px;color:#B91C1C;">${esc((e && e.message) || 'NPS results could not be loaded. Please try again.')}</div>`; return; }
+    if (!main.isConnected) return;
     const s = r.summary || {};
-    const npsScore = s.nps || 0;
-    const npsColour = npsScore >= 50 ? '#10B981' : npsScore >= 0 ? '#F59E0B' : '#EF4444';
+    const has = s.count > 0;
+    const npsScore = has ? s.nps : null;
+    const npsColour = npsScore == null ? '#64748B' : npsScore >= 50 ? '#10B981' : npsScore >= 0 ? '#F59E0B' : '#EF4444';
+    const centres = r.centres || [];
+    const trend = r.trend || [];
+    const max = 100;
+    const bars = trend.map(t => {
+      const v = t.nps == null ? 0 : t.nps;
+      const h = Math.round(Math.abs(v) / max * 60);
+      const col = v >= 50 ? '#10B981' : v >= 0 ? '#F59E0B' : '#EF4444';
+      return `<div style="flex:1;min-width:44px;display:flex;flex-direction:column;align-items:center;gap:4px;" data-kttip="${esc(t.label + ': ' + t.count + ' answers')}">
+        <div style="height:64px;display:flex;align-items:flex-end;"><div style="width:26px;height:${Math.max(3, h)}px;background:${col};border-radius:6px 6px 0 0;"></div></div>
+        <div style="font-size:13px;font-weight:800;color:${col};">${v}</div><div style="font-size:11px;color:#64748B;white-space:nowrap;">${esc(t.label)}</div></div>`;
+    }).join('');
+    const st = r.settings;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <div class="kt-page-hero">
-        <h2>📊 NPS — Net Promoter Score</h2>
-        <p>${s.count || 0} responses in the last 12 months.</p>
+      <div class="kt-page-hero"><h2>📈 Net Promoter Score</h2>
+        <p>${st ? (st.enabled ? `The survey goes out every ${st.every_months} months to ${[st.families ? 'families' : '', st.staff ? 'staff' : ''].filter(Boolean).join(' and ')}. Next round: ${esc(fmtDate(st.next_due))}.` : 'The survey is off. Turn it on below, or send one round now.') : 'How families and staff rate your centre, from 0 to 10.'}</p></div>
+      <div class="kt-card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        ${centres.length > 1 || (centres.length === 1 && npsCentre) ? `<label style="font-size:13px;font-weight:600;">Centre <select id="nps-centre"><option value="">All my centres</option>${centres.map(c => `<option value="${c.id}" ${+c.id === +npsCentre ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>` : ''}
+        <label style="font-size:13px;font-weight:600;">Answers from <select id="nps-aud"><option value="">Everyone</option><option value="family" ${npsAudience === 'family' ? 'selected' : ''}>Families</option><option value="staff" ${npsAudience === 'staff' ? 'selected' : ''}>Staff</option></select></label>
       </div>
-      <div class="kt-card" style="text-align:center;padding:36px;">
-        <div style="font-size:14px;color:#64748B;font-weight:700;letter-spacing:2px;text-transform:uppercase;">NPS</div>
-        <div style="font-size:72px;font-weight:800;color:${npsColour};line-height:1;margin:12px 0;">${npsScore}</div>
-        <div style="display:flex;justify-content:center;gap:20px;margin-top:14px;">
-          <div><div style="color:#10B981;font-weight:700;font-size:22px;">${s.promoters || 0}</div><div style="font-size:12px;color:#64748B;font-weight:600;">PROMOTERS (9-10)</div></div>
-          <div><div style="color:#64748B;font-weight:700;font-size:22px;">${s.passive || 0}</div><div style="font-size:12px;color:#64748B;font-weight:600;">PASSIVE (7-8)</div></div>
-          <div><div style="color:#EF4444;font-weight:700;font-size:22px;">${s.detractors || 0}</div><div style="font-size:12px;color:#64748B;font-weight:600;">DETRACTORS (0-6)</div></div>
+      <div class="kt-card" style="text-align:center;padding:30px;">
+        <div style="font-size:13px;color:#64748B;text-transform:uppercase;font-weight:700;letter-spacing:1px;">NPS · last 24 months</div>
+        <div style="font-size:72px;font-weight:800;color:${npsColour};line-height:1;margin:12px 0;">${npsScore == null ? '—' : npsScore}</div>
+        <div style="color:#475569;">${has ? `${s.count} answers · ${s.promoters} promoters (9-10) · ${s.passive} passive (7-8) · ${s.detractors} detractors (0-6)` : 'No answers yet.'}</div>
+      </div>
+      ${trend.length > 1 ? `<div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Trend by survey round</h3></div><div style="display:flex;gap:8px;overflow-x:auto;padding:6px 2px;">${bars}</div></div>` : ''}
+      ${st ? `<div class="kt-card" id="nps-set">
+        <div class="kt-card-header"><h3 class="kt-card-title">Survey setting</h3></div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:13.5px;">
+          <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-on" ${st.enabled ? 'checked' : ''}> Send the survey automatically</label>
+          <label>Every <select id="nps-every">${[3, 6, 12].map(m => `<option value="${m}" ${+st.every_months === m ? 'selected' : ''}>${m} months</option>`).join('')}</select></label>
+          <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-fam" ${st.families ? 'checked' : ''}> Families</label>
+          <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="nps-staff" ${st.staff ? 'checked' : ''}> Staff</label>
+          <button type="button" class="kt-btn kt-btn-primary" id="nps-save">Save</button>
+          <button type="button" class="kt-btn" id="nps-send">📨 Send now…</button>
         </div>
-      </div>
-      <div class="kt-card">
-        <h3 style="margin:0 0 14px;color:#0F172A;font-size:16px;font-weight:700;">Recent comments</h3>
-        <div data-kt-list="1">${(r.data || []).slice(0, 30).map(n => `<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">
-          <div style="font-size:13px;color:#64748B;"><strong style="color:${n.score >= 9 ? '#10B981' : n.score >= 7 ? '#F59E0B' : '#EF4444'};">${n.score}/10</strong> · ${fmtDate(n.created_at)}</div>
-          <div style="font-size:14px;color:#0F172A;margin-top:4px;">${esc(n.comment || '')}</div>
-        </div>`).join('') || '<div style="text-align:center;padding:30px;color:#64748B;">No responses yet.</div>'}</div>
-      </div>
+        <div style="font-size:12.5px;color:#64748B;margin-top:8px;">Each person gets an email and an app notice with one question, 0 to 10, and an optional comment. No sign-in is needed. A low score (0-6) tells the centre's managers.</div>
+        <div id="nps-set-msg" style="font-size:13px;margin-top:8px;"></div>
+      </div>` : ''}
+      <div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Comments</h3></div>
+        <table><thead><tr><th>When</th><th>Score</th><th>From</th><th>Centre</th><th>Comment</th></tr></thead><tbody>
+        ${(r.comments || []).map(c => `<tr><td style="white-space:nowrap;">${esc(c.at || '')}</td><td><span class="kt-pill ${c.score >= 9 ? 'kt-pill-success' : c.score >= 7 ? 'kt-pill-warning' : 'kt-pill-danger'}">${c.score}</span></td><td>${c.audience === 'staff' ? 'Staff' : 'Family'}</td><td>${esc(c.centre || '')}</td><td style="white-space:pre-wrap;">${esc(c.comment)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#64748B;">No comments yet.</td></tr>'}
+        </tbody></table></div>
+      ${(r.rounds || []).length ? `<div class="kt-card"><div class="kt-card-header"><h3 class="kt-card-title">Survey rounds</h3></div>
+        <table><thead><tr><th>Sent</th><th>How</th><th>Asked</th><th>Answered</th></tr></thead><tbody>
+        ${r.rounds.map(x => `<tr><td>${esc(x.at)}</td><td>${x.source === 'schedule' ? 'Automatic' : 'Send now'} · ${[x.families ? 'families' : '', x.staff ? 'staff' : ''].filter(Boolean).join(' + ')}</td><td>${x.invited}</td><td>${x.answered}${x.invited ? ' (' + Math.round(x.answered / x.invited * 100) + '%)' : ''}</td></tr>`).join('')}
+        </tbody></table></div>` : ''}
     </div>`;
+    const cSel = main.querySelector('#nps-centre');
+    if (cSel) cSel.onchange = () => { npsCentre = +cSel.value || 0; renderNps(main); };
+    main.querySelector('#nps-aud').onchange = (e) => { npsAudience = e.target.value; renderNps(main); };
+    if (!st) return;
+    const val = () => ({ enabled: main.querySelector('#nps-on').checked, every_months: +main.querySelector('#nps-every').value,
+      families: main.querySelector('#nps-fam').checked, staff: main.querySelector('#nps-staff').checked });
+    const setMsg = (t, bad) => { const m = main.querySelector('#nps-set-msg'); m.style.color = bad ? '#B91C1C' : '#047857'; m.textContent = t; };
+    main.querySelector('#nps-save').onclick = async () => {
+      try { await Api.put('/engagement/nps/settings', val()); if (KT.toast) KT.toast('Survey setting saved.', 'success'); renderNps(main); }
+      catch (e) { setMsg((e && e.message) || 'The setting could not be saved.', true); }
+    };
+    main.querySelector('#nps-send').onclick = async () => {
+      const v = val();
+      if (!v.families && !v.staff) { setMsg('Tick Families, Staff or both first.', true); return; }
+      let p;
+      try { p = await Api.get(`/engagement/nps/preview?families=${v.families ? 1 : 0}&staff=${v.staff ? 1 : 0}`); }
+      catch (e) { setMsg((e && e.message) || 'The preview could not be loaded.', true); return; }
+      const Modal = KT.Shell && KT.Shell.Modal;
+      if (!Modal) return;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = p.test_agency
+        ? '<p style="margin:0;font-size:14px;">This is a test agency. It sends nothing to anyone, so a survey cannot be sent from here.</p>'
+        : `<p style="margin:0 0 10px;font-size:14px;line-height:1.55;">This sends the survey now to <strong>${p.people}</strong> ${p.people === 1 ? 'person' : 'people'}:
+            ${v.families ? `<strong>${p.parents}</strong> parents in <strong>${p.families}</strong> families` : ''}${v.families && v.staff ? ' and ' : ''}${v.staff ? `<strong>${p.staff}</strong> staff` : ''}.
+            Each gets an email and an app notice.</p>
+           <label style="display:block;font-size:13px;font-weight:600;">Type SEND to confirm <input id="nps-confirm" autocomplete="off" style="display:block;width:100%;margin-top:4px;"></label>
+           <div id="nps-send-msg" style="font-size:13px;margin-top:8px;color:#B91C1C;"></div>`;
+      Modal.open({
+        title: 'Send the NPS survey now', body: wrap,
+        actions: p.test_agency || !p.people ? [{ label: 'Close' }] : [{ label: 'Cancel' }, {
+          label: `Send to ${p.people}`, style: 'btn-primary', busyLabel: 'Sending…',
+          handler: async () => {
+            const box = wrap.querySelector('#nps-send-msg');
+            const c = wrap.querySelector('#nps-confirm').value.trim().toUpperCase();
+            if (c !== 'SEND') { box.textContent = 'Type SEND to confirm.'; return false; }
+            try {
+              const res = await Api.post('/engagement/nps/send', { families: v.families, staff: v.staff, count: p.people, confirm: c });
+              if (KT.toast) KT.toast(res.message || 'The survey is on its way.', 'success', 7000);
+              renderNps(main);
+            } catch (e) { box.textContent = (e && e.message) || 'The survey could not be sent.'; return false; }
+          },
+        }],
+      });
+    };
   }
 
   // ============================ E-sign documents =================================

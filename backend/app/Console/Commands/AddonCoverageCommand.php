@@ -46,6 +46,7 @@ final class AddonCoverageCommand extends Command
     public const JOBS = [
         'immunization:reminders' => ['immunizations', 'app/Console/Commands/ImmunizationRemindersCommand.php'],
         'drip:dispatch' => ['marketing', 'app/Console/Commands/DripDispatchCommand.php'],
+        'kiddietrac:nps-surveys' => ['parent_feedback', 'app/Support/NpsSurvey.php'],   // NPS rounds: NpsSurvey::startDue asks Features
         'invoices:issue-scheduled' => ['billing', 'app/Console/Commands/IssueScheduledInvoices.php'],
         'billing:reminders' => ['billing', 'app/Console/Commands/BillingReminders.php'],
         'invoices:apply-late-fees' => ['billing', 'app/Console/Commands/ApplyLateFeesCommand.php'],

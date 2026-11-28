@@ -61,6 +61,7 @@ class MinuteBatchCommand extends Command
             'kt:sales-meetings' => 10,
             'kt:server-health-sample' => 10,
             'kiddietrac:campaigns-mail' => 10,
+            'kiddietrac:nps-surveys' => 10,   // NPS: pending invites; due rounds once a day (2026-11-28)
         ],
         'ten' => [   // everyTenMinutes
             'kiddietrac:educator-summary --due' => 30,

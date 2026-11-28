@@ -492,6 +492,9 @@ Route::post('/public/time-fix/{token}',  [\App\Http\Controllers\Api\AutoTimeFixC
    (App\Support\AttendanceReply). GET only reads (email scanners prefetch links); only the page's POST acts. */
 Route::get ('/public/attendance-reply/{token}',  [\App\Http\Controllers\Api\AttendanceReplyController::class, 'show'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:60,1,attrget');
 Route::post('/public/attendance-reply/{token}',  [\App\Http\Controllers\Api\AttendanceReplyController::class, 'submit'])->where('token', '[A-Za-z0-9]{30,64}')->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:10,10,attrpost']);
+// NPS survey link from the email / bell (2026-11-28): GET only reads, POST answers (no sign-in; signed link).
+Route::get ('/public/nps/{token}',  [\App\Http\Controllers\Api\NpsController::class, 'show'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:60,1,npsget');
+Route::post('/public/nps/{token}',  [\App\Http\Controllers\Api\NpsController::class, 'answer'])->where('token', '[A-Za-z0-9]{30,64}')->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:10,10,npspost']);
 Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
 Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
 Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');
@@ -3835,12 +3838,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'listCampaigns']);
         Route::post  ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'createCampaign']);
         Route::get   ('/engagement/scores',            [\App\Http\Controllers\Api\EngagementController::class, 'engagementScores']);
-        Route::get   ('/engagement/nps',               [\App\Http\Controllers\Api\EngagementController::class, 'npsSummary']);
+        Route::get   ('/engagement/nps',               [\App\Http\Controllers\Api\NpsController::class, 'summary']);
+        // NPS survey setting + Send now (2026-11-28, App\Support\NpsSurvey); the controller lets agency admins only.
+        Route::put   ('/engagement/nps/settings',      [\App\Http\Controllers\Api\NpsController::class, 'saveSettings']);
+        Route::get   ('/engagement/nps/preview',       [\App\Http\Controllers\Api\NpsController::class, 'preview']);
+        Route::post  ('/engagement/nps/send',          [\App\Http\Controllers\Api\NpsController::class, 'sendNow']);
     });
     // Parent-side
     Route::post('/billing/vacation-holds',           [\App\Http\Controllers\Api\BillingV2Controller::class, 'requestHold']);
     Route::post('/engagement/reenrollment/{id}/respond', [\App\Http\Controllers\Api\EngagementController::class, 'respondCampaign']);
-    Route::post('/engagement/nps',                   [\App\Http\Controllers\Api\EngagementController::class, 'submitNps']);
+    // NPS answers from the portal prompt: only an open invite of the signed-in person (2026-11-28).
+    Route::post('/engagement/nps',                   [\App\Http\Controllers\Api\NpsController::class, 'submit']);
+    Route::get ('/engagement/nps/pending',           [\App\Http\Controllers\Api\NpsController::class, 'pending']);
     Route::post('/engagement/sign-document',         [\App\Http\Controllers\Api\EngagementController::class, 'signDocument']);
     Route::get ('/engagement/signed-documents',      [\App\Http\Controllers\Api\EngagementController::class, 'listSignedDocs']);
     Route::get ('/engagement/signed-documents/{id}/download', [\App\Http\Controllers\Api\EngagementController::class, 'downloadSignedDoc']);

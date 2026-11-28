@@ -506,6 +506,9 @@ post email/messages/{uid}/links | Linked an email to a person
 delete email/links/{id} | Unlinked an email from a person
 put admin/email-link-settings | Changed the setting for linking emails to people
 post engagement/nps | Answered the satisfaction survey
+put engagement/nps/settings | Changed the NPS survey setting
+post engagement/nps/send | Sent the NPS survey now
+post public/nps/{token} | Answered the NPS survey from the email link
 post engagement/reenrollment | Started a re-enrolment campaign
 post engagement/reenrollment/{id}/respond | Answered the re-enrolment request
 post engagement/sign-document | Signed a document

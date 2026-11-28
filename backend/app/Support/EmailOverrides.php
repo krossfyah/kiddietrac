@@ -105,6 +105,7 @@ final class EmailOverrides
         'AccountLedgerController@emailInvoice' => 'invoice-copy',
         // Family emails moved into the house frame (2026-11-27 sweep).
         'SupplyMail@build' => 'supplies-needed',
+        'NpsMail@build' => 'nps-survey',
         'AnnouncementMail@build' => 'announcement-notice',
         'FamilyNoticeMail@formRequest' => 'form-request',
         'FamilyNoticeMail@invoiceCopy' => 'invoice-copy-self',

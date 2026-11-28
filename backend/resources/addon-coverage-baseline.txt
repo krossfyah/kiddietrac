@@ -453,6 +453,7 @@ route provider/temp-pickups
 route public/attendance-reply
 route public/give
 route public/nda
+route public/nps
 route public/proposal
 route public/rsvp
 route public/time-fix

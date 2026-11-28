@@ -4,6 +4,16 @@
         {
             "type": "new",
             "date": "2026-11-28",
+            "icon": "💛",
+            "title": "Tell us how we're doing",
+            "body": "Now and then your centre may ask one quick question: how likely are you to recommend them, from 0 to 10. Answer from the email, the app notice or the portal, add a comment if you like, and change it any time in the next 30 days.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-28",
             "icon": "🙋",
             "title": "Substitute list and Cover shifts",
             "body": "Keep a substitute list (who, which centres, how they are told, active or not), post a shift that needs cover, and see who took it. People on the list are told by app or email and take the shift themselves under Cover shifts: first come, first served, or confirmed by a director if your agency prefers. With KiddieTrac HR, a filled shift goes straight onto the rota.",
