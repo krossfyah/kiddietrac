@@ -390,6 +390,11 @@
           grid.appendChild(add);
         }
       }
+      /* 📻 Walkie-talkie, pinned FIRST on phones (2026-11-28, Anthony: "place it in quick access as the first option
+         (static and cannot be changed)"). Not in `quick`, so never saved, moved, removed or counted; added after the
+         Customize controls so their tile indexes stay right. kt-walkie-quick.js decides who gets it. */
+      grid.setAttribute('data-wtq-pin', '1');
+      if (KT.walkieQuick && KT.walkieQuick.pinTile) { try { KT.walkieQuick.pinTile(grid, { editing: qaEditing }); } catch (e) {} }
       var tools = document.createElement('div');
       tools.className = 'kt-qa-tools';
       tools.hidden = grid.hidden;

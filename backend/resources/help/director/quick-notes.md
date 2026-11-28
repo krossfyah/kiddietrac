@@ -6,7 +6,7 @@ screens: notes
 ---
 # Quick notes
 
-A notepad for the things you need to remember: jot a note in seconds and keep it just for you, or share it with your staff. Press the **📃** button in the top bar for the notepad drawer, or open **Notes** in the sidebar (under Operations) for the full screen. You can also add the **Quick notes** card to your dashboard: **+ Add widget → Quick notes**.
+A notepad for the things you need to remember: jot a note in seconds and keep it just for you, or share it with your staff. On a computer, press the **Quick notes** icon on the rail of the right-hand panel, next to the calendar (a red number on it shows today's note reminders). On a phone or in a narrow window, the notepad opens as a drawer from the bottom. **Notes** in the menu opens the full screen. You can also add the **Quick notes** card to your dashboard: **+ Add widget → Quick notes**.
 
 [[open: #notes | Open Notes]]
 

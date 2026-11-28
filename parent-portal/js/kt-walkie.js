@@ -99,6 +99,20 @@
   }
   /* Walkie sounds on? My settings › Notifications › 📻 Walkie-talkie (walkie_prefs.sounds). Emergency always beeps. */
   function soundsOn() { return !(S.me && S.me.prefs && S.me.prefs.sounds === false); }
+  /* WALKIE VIBRATION (2026-11-28, Anthony: "walkie-talkie should also vibrate phone"). A tiny tick when you press to
+     talk and when you let go (the press registered), a short buzz as a talk comes in, a long triple one for the
+     emergency channel (which, like its beep, always comes through). Off with "Walkie vibration" in My settings ›
+     Notifications; nothing in Do not disturb. navigator.vibrate: Android Chrome and the app's WebView; iPhone Safari
+     has none (skipped). With the app listening natively (screen off / closed) KtWalkie.buzz() does it instead. */
+  function vibOn() { return !(S.me && S.me.prefs && S.me.prefs.vibrate === false); }
+  var BUZZ = { press: [14], release: [8, 50, 8], rx: [90, 70, 90], em: [400, 150, 400, 150, 600] };
+  function buzz(kind) {
+    try {
+      if (!navigator.vibrate) return;
+      if (kind !== 'em' && (!vibOn() || (kind === 'rx' && S.me && S.me.prefs && S.me.prefs.dnd))) return;
+      navigator.vibrate(BUZZ[kind] || 0);
+    } catch (e) {}
+  }
   /* REAL RADIO SOUNDS (2026-11-27, Anthony chose them; licences allow commercial use, credited in My settings › About,
      KT.walkie.creditsCard). Recorded walkie sounds, trimmed / mono / made quieter (ffmpeg), served from /sounds/:
        press    "Function Beep.wav" by JustinBW (Freesound 70106, CC BY 4.0)
@@ -151,6 +165,7 @@
     api().get('/walkie/inbox').then(function (r) {
       (r.live || []).forEach(function (t) { if (!S.played[t.id]) { S.played[t.id] = 1; S.queue.push(t); } });
       (r.replies || []).forEach(function (x) { var k = x.tx + ':' + x.from; if (!S.replies[k]) { S.replies[k] = 1; toast('📻', x.from + ' can\'t talk right now', 'Walkie-talkie reply', '#B45309'); } });
+      emit('kt:walkie-inbox', { unplayed: +r.unplayed || 0, latest: r.latest || null });
       next();
     }).catch(function () {});
   }
@@ -161,27 +176,148 @@
     play(t).then(function () { S.busyPlay = false; next(); }, function () { S.busyPlay = false; next(); });
   }
 
+  /* THE REPLY CARD (2026-11-28, Anthony: "if a message comes through pop up the mic button to talk"). Someone talks to
+     you anywhere in the portal or the app (walkie on, not Do not disturb): ONE card on top (just under the urgent and
+     idle-warning layers) with who is talking + a live dot, a BIG hold-to-talk mic that answers straight back to them
+     (their direct line for a direct talk, the channel for a channel talk; it becomes the last chat), ▶ Replay once they
+     finish, and ✕. A new talk updates the same card (never a stack). It goes ~20s after the talk ends unless touched.
+     Not on the Walkie-talkie screen (it has its own mic) and not for the emergency channel (its own alert stays). */
+  var MIC = '<svg class="wt-mic" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8.6" y="2.2" width="6.8" height="12.2" rx="3.4" fill="#fff" stroke="none"/><path d="M5 11a7 7 0 0 0 14 0M12 18.2v3.3M8.4 21.5h7.2"/></svg>';
+  /* ONE HOLD-TO-TALK HANDLER for every talk button (the screen, the top-bar popover / phone sheet, the reply card).
+     Press: pointerdown (finger, mouse, pen) or Space/Enter held on it. Let go: pointerup / pointercancel / touchend /
+     touchcancel ANYWHERE on the page (the button may be re-drawn, disabled or under the finger no more), the finger
+     sliding well off the button (> 48px), the window losing focus, the app/tab going to the background, the button
+     leaving the page. Long-press callout, text selection and the context menu are blocked on it. getKey() says who to
+     talk to; ui.state() as talkStart. Returns { release }. */
+  function bindPtt(btn, getKey, ui) {
+    if (!btn || btn._ptt) return btn && btn._ptt;
+    var held = null, wd = null, box = null;
+    btn.style.touchAction = 'none'; btn.style.webkitUserSelect = 'none'; btn.style.userSelect = 'none'; btn.style.webkitTouchCallout = 'none';
+    btn.setAttribute('draggable', 'false');
+    function on(t, f, o) { w.addEventListener(t, f, o); }
+    function off(t, f, o) { w.removeEventListener(t, f, o); }
+    function arm() {
+      on('pointerup', onUp, true); on('pointercancel', onUp, true); on('pointermove', onMove, true);
+      on('touchend', onTouch, true); on('touchcancel', onTouch, true); on('blur', release); on('pagehide', release);
+      d.addEventListener('visibilitychange', onVis);
+      wd = setInterval(function () { if (held === null) return; if (!btn.isConnected || (S.talk === null && !btn.classList.contains('on') && Date.now() - held.t > 1500)) release(); }, 700);
+    }
+    function disarm() {
+      off('pointerup', onUp, true); off('pointercancel', onUp, true); off('pointermove', onMove, true);
+      off('touchend', onTouch, true); off('touchcancel', onTouch, true); off('blur', release); off('pagehide', release);
+      d.removeEventListener('visibilitychange', onVis); clearInterval(wd);
+    }
+    function press(pid, e) {
+      if (held !== null || btn.disabled) return;
+      var k = getKey(); if (!k) return;
+      if (e && e.preventDefault) e.preventDefault();
+      held = { id: pid, t: Date.now() }; box = btn.getBoundingClientRect();
+      arm(); buzz('press'); talkStart(k, ui);
+    }
+    function release() { if (held === null) return; held = null; disarm(); buzz('release'); talkEnd(); }
+    function onUp(e) { if (held !== null && (held.id === 'key' || e.pointerId === held.id || e.type === 'pointercancel')) release(); }
+    function onTouch(e) { if (held !== null && held.id !== 'key' && (!e.touches || !e.touches.length)) release(); }
+    function onVis() { if (d.hidden) release(); }
+    function onMove(e) {
+      if (held === null || e.pointerId !== held.id || !box) return;
+      var m = 48; if (e.clientX < box.left - m || e.clientX > box.right + m || e.clientY < box.top - m || e.clientY > box.bottom + m) release();
+    }
+    btn.addEventListener('pointerdown', function (e) { if (e.button && e.button !== 0) return; try { btn.setPointerCapture(e.pointerId); } catch (x) {} press(e.pointerId, e); });
+    btn.addEventListener('lostpointercapture', function () { if (held !== null && !btn.isConnected) release(); });
+    btn.addEventListener('touchstart', function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });   // no long-press callout, no emulated mouse
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    btn.addEventListener('click', function (e) { e.preventDefault(); });
+    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) press('key', e); else if (e.key === ' ' || e.key === 'Enter') e.preventDefault(); });
+    btn.addEventListener('keyup', function (e) { if ((e.key === ' ' || e.key === 'Enter') && held && held.id === 'key') { e.preventDefault(); release(); } });
+    warm();
+    btn._ptt = { release: release, held: function () { return held !== null; } };
+    return btn._ptt;
+  }
+  function onWalkieScreen() { return /^#walkie\b/.test(location.hash || ''); }
   function showCard(t, needTap) {
+    if (S.card && S.card.talking) return S.card.el;   // replying right now: leave that card (and the held mic) alone
     hideCard();
-    var c = d.createElement('div'); c.id = 'kt-wt-card'; c.setAttribute('role', 'alert');
-    c.className = t.emergency ? 'em' : '';
-    c.innerHTML = '<div class="wt-ch">' + (t.emergency ? '🚨 ' : '📻 ') + esc(T(t.label)) + '</div><div class="wt-who"><b data-no-i18n>' + esc(t.from) + '</b> ' + esc(T('is talking')) + '</div>'
-      + '<div class="wt-act">' + (needTap ? '<button type="button" class="btn btn-primary" data-wt="listen">▶ ' + esc(T('Listen')) + '</button>' : '')
-      + '<button type="button" class="btn" data-wt="busy">' + esc(T('Busy, can\'t talk')) + '</button>'
-      + '<button type="button" class="btn" data-wt="reply">🎙 ' + esc(T('Reply')) + '</button></div>';
+    var reply = !t.emergency && !onWalkieScreen() && !!(t.back || t.channel);
+    var c = d.createElement('div'); c.id = 'kt-wt-card'; c.setAttribute('role', 'alert'); c.setAttribute('data-kt-iconized', '1');
+    c.className = (t.emergency ? 'em' : '') + (reply ? ' wt-rc' : '');
+    var who = '<div class="wt-who"><i class="wt-livedot" aria-hidden="true"></i><span><b data-no-i18n>' + esc(t.from) + '</b> <span data-wt-state>' + esc(T('is talking')) + '</span></span></div>';
+    if (!reply) {
+      c.innerHTML = '<div class="wt-ch">' + (t.emergency ? '🚨 ' : '📻 ') + esc(T(t.label)) + '</div>' + who
+        + '<div class="wt-act">' + (needTap ? '<button type="button" class="btn btn-primary" data-wt="listen">▶ ' + esc(T('Listen')) + '</button>' : '')
+        + '<button type="button" class="btn" data-wt="busy">' + esc(T('Busy, can\'t talk')) + '</button>'
+        + '<button type="button" class="btn" data-wt="reply">🎙 ' + esc(T('Reply')) + '</button></div>';
+    } else {
+      c.innerHTML = '<div class="wt-ch"><span>📻 ' + esc(T(t.label)) + '</span><button type="button" class="wt-rx" data-wt="x" aria-label="' + esc(T('Close')) + '" data-kttip="' + esc(T('Close')) + '">✕</button></div>'
+        + '<div class="wt-rbody"><button type="button" class="wt-rmic kt-ptt-o busy" data-wt-rmic aria-label="' + esc(T('Hold to reply')) + '">' + MIC + '</button><div class="wt-rside">' + who
+        + '<div class="wt-rst" aria-live="polite">' + esc(T('Hold the mic to reply')) + '</div>'
+        + '<div class="wt-act">' + (needTap ? '<button type="button" class="btn btn-primary" data-wt="listen">▶ ' + esc(T('Listen')) + '</button>' : '')
+        + '<button type="button" class="btn" data-wt="replay" hidden>▶ ' + esc(T('Replay')) + '</button>'
+        + '<button type="button" class="btn" data-wt="busy">' + esc(T('Busy, can\'t talk')) + '</button></div></div></div>';
+    }
     d.body.appendChild(c);
-    S.card = { el: c, t: t };
+    var card = S.card = { el: c, t: t, reply: reply, talking: false, touched: false, hideT: null };
+    if (reply) wireReply(card);
+    emit('kt:walkie-live', { on: true, from: t.from, label: t.label, channel: t.channel, emergency: !!t.emergency });
     return c;
   }
-  function hideCard() { if (S.card && S.card.el) S.card.el.remove(); S.card = null; }
+  function wireReply(card) {
+    var c = card.el, t = card.t, mic = c.querySelector('[data-wt-rmic]'), st = c.querySelector('.wt-rst'), key = t.back || t.channel;
+    function touch() { card.touched = true; clearTimeout(card.hideT); }
+    c.addEventListener('pointerdown', touch, true);
+    c.addEventListener('keydown', touch, true);
+    var ui = { state: function (s, x) {
+      card.talking = s === 'live' || s === 'opening';
+      mic.classList.toggle('on', card.talking);
+      if (s === 'opening') st.textContent = T('Starting…');
+      else if (s === 'live') st.textContent = T('Talking…') + (x && x.recipients !== undefined ? ' · ' + x.recipients + ' ' + T('hearing') : '');
+      else st.textContent = x && x.duration_ms ? T('Sent') + ' · ' + (Math.round(x.duration_ms / 100) / 10) + 's' : T('Hold the mic to reply');
+      if (!card.talking && !S.card) c.remove();   // dismissed while talking: let go, then go
+    } };
+    bindPtt(mic, function () { remember(key); return key; }, ui);
+    c.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-wt]'); if (!b) return;
+      var a = b.getAttribute('data-wt');
+      if (a === 'x') { if (card.talking) talkEnd(); hideCard(); }
+      if (a === 'replay') { b.disabled = true; playClip(t.id).then(function (secs) { setTimeout(function () { b.disabled = false; }, Math.round((+secs || 0) * 1000)); }); }
+    });
+  }
+  /* They finished: the reply card stays (live dot off, ▶ Replay), and goes ~20s later unless touched. */
+  function endCard(t) {
+    var card = S.card; if (!card || card.t !== t) return false;
+    if (!card.reply) return false;
+    var c = card.el; c.classList.add('ended');
+    var rm = c.querySelector('[data-wt-rmic]'); if (rm) rm.classList.remove('busy');
+    var s = c.querySelector('[data-wt-state]'); if (s) s.textContent = T('talked to you') + (t.label && t.label !== 'Direct' ? ' · ' + T(t.label) : '');
+    var rp = c.querySelector('[data-wt="replay"]'); if (rp) rp.hidden = false;
+    var ls1 = c.querySelector('[data-wt="listen"]'); if (ls1) ls1.remove();
+    emit('kt:walkie-live', { on: false });
+    clearTimeout(card.hideT);
+    if (!card.touched) card.hideT = setTimeout(function () { if (S.card === card && !card.touched && !card.talking) hideCard(); }, 20000);
+    return true;
+  }
+  function hideCard() {
+    var had = !!S.card, card = S.card;
+    if (card) { clearTimeout(card.hideT); if (!card.talking && card.el) card.el.remove(); }
+    S.card = null; if (had) emit('kt:walkie-live', { on: false });
+  }
+  /* Hooks for the top-bar 📻 quick popover (kt-walkie-quick.js, 2026-11-28): window events, never a fetch of their own.
+     kt:walkie-me (the /walkie/me answer), kt:walkie-inbox {unplayed, latest}, kt:walkie-live {on, from, label}. */
+  function emit(name, detail) { try { w.dispatchEvent(new CustomEvent(name, { detail: detail })); } catch (e) {} }
+  function remember(k) {
+    if (!k || (S.me && S.me.last === k)) return;
+    if (S.me) S.me.last = k;
+    emit('kt:walkie-last', { key: k });
+    api().request('/walkie/prefs', { method: 'PUT', body: { last: k }, quiet: true }).catch(function () {});
+  }
 
   function play(t) {
     return new Promise(function (resolve) {
       var c = ctx();
       var playHere = !S.nativeOn && isLeader() && !!c && !!(w.crypto && w.crypto.subtle);
       var card = showCard(t, playHere && !unlocked());
+      if (!S.nativeOn) buzz(t.emergency ? 'em' : 'rx');   // the app's own listener buzzes when it is the one playing
       var stop = false, done = false, key = null, heard = false;
-      function finish() { if (done) return; done = true; setTimeout(function () { if (S.card && S.card.t === t) hideCard(); if (S.view && d.querySelector('[data-wt-hist]')) S.view.history(); resolve(); }, 900); }
+      function finish() { if (done) return; done = true; setTimeout(function () { if (S.card && S.card.t === t && (stop || !endCard(t))) hideCard(); if (S.view && d.querySelector('[data-wt-hist]')) S.view.history(); resolve(); }, 900); }
       function markHeard(busy) { if (heard && !busy) return; heard = true; api().post('/walkie/tx/' + t.id + '/heard', { busy: !!busy }, { quiet: true }).catch(function () {}); }
       card.addEventListener('click', function (e) {
         var b = e.target.closest('[data-wt]'); if (!b) return;
@@ -232,16 +368,48 @@
   }
 
   /* ---- talking ---- */
+  /* A QUICK, NEVER-STUCK TALK BUTTON (2026-11-28, Anthony: "the walkie talkie is not quick on the mobile app, the mic
+     button tends to stick"). Causes found: (1) every press asked for the microphone again (getUserMedia: the Android
+     WebView goes through its permission bridge each time, ~0.3-1s) and the button only went "live" after the server
+     answered too; (2) the release was heard only by the button itself - a re-drawn or disabled button, a finger lifted
+     off it, a long-press callout or the app going to the background lost the "up" and the talk ran on, and a talk whose
+     microphone or server answer never came left S.talk set, so every later press was ignored.
+     Now: the microphone stays open ("warm") while a talk button is on screen and for 30s after the last talk, recording
+     starts the moment it is pressed (the press sound and the red button with it) while the server start runs alongside
+     (pieces wait for it), the release is caught anywhere on the page (bindPtt), and a watchdog lets go of anything that
+     did not finish (no microphone after 6s, no server answer 8s after letting go, the button gone). */
+  var WARM_MS = 30000, AUDIO = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } };
+  function liveStream(st) { return !!(st && st.getAudioTracks && st.getAudioTracks().some(function (x) { return x.readyState === 'live'; })); }
+  function cool() { clearTimeout(S.warmT); if (S.talk) { S.warmT = setTimeout(cool, WARM_MS); return; } var st = S.warm; S.warm = null; try { st && st.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {} }
+  function keepWarm() { clearTimeout(S.warmT); S.warmT = setTimeout(cool, WARM_MS); }
+  /* Open the microphone ahead of the press - only when it is already allowed (never a permission prompt just for
+     opening a screen). Where the browser cannot tell, the first talk opens it and later ones reuse it. */
+  function warm() {
+    keepWarm();
+    if (liveStream(S.warm) || S.warming) return;
+    var md = navigator.mediaDevices, pq = navigator.permissions && navigator.permissions.query;
+    if (!md || !md.getUserMedia || !pq) return;
+    S.warming = true;
+    navigator.permissions.query({ name: 'microphone' }).then(function (r) {
+      if (r.state !== 'granted') { S.warming = false; return; }
+      return md.getUserMedia(AUDIO).then(function (st) { S.warming = false; if (liveStream(S.warm)) { st.getTracks().forEach(function (x) { x.stop(); }); return; } S.warm = st; keepWarm(); });
+    }).catch(function () { S.warming = false; });
+  }
   function talkStart(channel, ui) {
-    if (S.talk) return;
+    if (S.talk) {   // a talk that never finished (no microphone / no server answer): let go of it rather than refuse
+      if (Date.now() - S.talk.t0 < 1500 || S.talk.id) return;
+      forceEnd(S.talk);
+    }
     var md = navigator.mediaDevices;
     if (!md || !md.getUserMedia) { toast('⚠️', 'This browser cannot use the microphone', '', '#DC2626'); return; }
     var c = ctx(); if (!c) return;
+    if (S.me && channel && channel.indexOf('emergency') !== 0) { S.me.last = channel; emit('kt:walkie-last', { key: channel }); }
     var tk = S.talk = { channel: channel, id: null, seq: 0, pend: [], buf: new Float32Array(PIECE), fill: 0, pos: 0, ups: [], released: false, t0: Date.now(), ui: ui };
     ui && ui.state('opening');
-    md.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }).then(function (stream) {
-      if (tk.failed) { stream.getTracks().forEach(function (x) { x.stop(); }); return; }   // the start was refused meanwhile
-      tk.stream = stream;
+    var gotMic = function (stream) {
+      clearTimeout(tk.micT);
+      if (tk.failed || tk.forced) { if (stream !== S.warm) { S.warm = liveStream(S.warm) ? S.warm : stream; } keepWarm(); return; }   // the start was refused meanwhile: keep the mic warm for the next press
+      tk.stream = stream; S.warm = stream; keepWarm();
       var src = c.createMediaStreamSource(stream), proc = c.createScriptProcessor(2048, 1, 1), ratio = c.sampleRate / RATE;
       tk.src = src; tk.proc = proc;
       proc.onaudioprocess = function (e) {
@@ -255,21 +423,31 @@
         tk.pos -= inp.length;
       };
       src.connect(proc); proc.connect(c.destination);
+      // Recording from here: the press sound and the live button now, not after the server answers (it runs alongside).
+      if (!tk.released) { sound(c, 'press', c.currentTime + 0.01); tk.liveUi = true; ui && ui.state('live', tk.ack || null); }
       if (tk.released) talkEnd();
-    }, function () {
-      tk.failed = true; teardown(tk); S.talk = null; ui && ui.state('idle');
+    };
+    var noMic = function () {
+      clearTimeout(tk.micT);
+      if (tk.failed || tk.forced) return;
+      tk.failed = true; teardown(tk); if (S.talk === tk) S.talk = null; ui && ui.state('idle');
       if (tk.id) api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {});
       toast('🎙', 'Microphone blocked', 'Allow the microphone for KiddieTrac to talk.', '#DC2626');
-    });
+    };
+    if (liveStream(S.warm)) gotMic(S.warm);   // warm: recording starts now, no wait at all
+    else {
+      md.getUserMedia(AUDIO).then(gotMic, noMic);
+      tk.micT = setTimeout(function () { if (!tk.stream && !tk.failed) { noMic(); } }, 6000);   // a permission bridge that never answers
+    }
     api().post('/walkie/talk', { channel: channel }, { quiet: true }).then(function (r) {
       tk.id = r.id;
-      if (tk.failed) { api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {}); return; }   // no microphone
-      sound(c, 'press', c.currentTime + 0.01);   // the channel is yours: talk
-      ui && ui.state('live', r);
+      if (tk.failed || tk.forced) { api().post('/walkie/talk/' + tk.id + '/end', { chunks: 0 }, { quiet: true }).catch(function () {}); return; }   // no microphone / let go of
+      tk.ack = r;
+      if (tk.liveUi && !tk.released) ui && ui.state('live', r);   // now with how many are hearing
       tk.pend.splice(0).forEach(function (p) { send(tk, p); });
       if (tk.released) talkEnd();
     }, function (e) {
-      tk.failed = true; teardown(tk); S.talk = null; ui && ui.state('idle');
+      tk.failed = true; teardown(tk); if (S.talk === tk) S.talk = null; ui && ui.state('idle');
       if (e && e.status === 409) toast('📻', (e.data && e.data.talking ? e.data.talking + ' is talking' : 'Someone is talking'), 'Try again in a moment.', '#B45309');
       else toast('⚠️', 'Could not start talking', errMsg(e), '#DC2626');
     });
@@ -289,18 +467,32 @@
   function teardown(tk) {
     tk.stopped = true;
     try { tk.proc && tk.proc.disconnect(); tk.src && tk.src.disconnect(); } catch (e) {}
-    try { tk.stream && tk.stream.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {}
-    clearTimeout(tk.cap);
+    // The microphone itself stays open a little while (warm) for the next press; cool() closes it.
+    if (tk.stream && tk.stream !== S.warm) { try { tk.stream.getTracks().forEach(function (x) { x.stop(); }); } catch (e) {} }
+    keepWarm();
+    clearTimeout(tk.cap); clearTimeout(tk.micT); clearTimeout(tk.relT);
+  }
+  /* Let go of a talk that cannot finish normally (no server answer after the release): the button is free again. */
+  function forceEnd(tk) {
+    if (!tk || tk.forced) return;
+    tk.forced = true; teardown(tk); if (S.talk === tk) S.talk = null;
+    if (tk.id) api().post('/walkie/talk/' + tk.id + '/end', { chunks: tk.seq }, { quiet: true }).catch(function () {});
+    tk.ui && tk.ui.state('idle');
   }
   function talkEnd() {
     var tk = S.talk; if (!tk) return;
     tk.released = true;
-    if (!tk.id || !tk.stream) { if (tk.failed) S.talk = null; return; }   // finishes when the start / mic answers
+    if (!tk.id || !tk.stream) {   // finishes when the start / mic answers - but never waits forever
+      if (tk.failed) S.talk = null;
+      else { if (tk.stream && tk.fill > 0) piece(tk); clearTimeout(tk.relT); tk.relT = setTimeout(function () { forceEnd(tk); }, 8000); }
+      return;
+    }
     if (tk.fill > 0) piece(tk);
     teardown(tk);
     if (S.ctx) sound(S.ctx, 'release', S.ctx.currentTime + 0.02);   // roger: the mic is already off
     S.talk = null;
     var ui = tk.ui;
+    ui && ui.state('idle');   // the button lets go at once; "Sent · 2.1s" follows when the server has it all
     Promise.all(tk.ups).then(function () { return api().post('/walkie/talk/' + tk.id + '/end', { chunks: tk.seq }, { quiet: true }); }).then(function (r) {
       ui && ui.state('idle', r); if (S.view) S.view.history();
     }, function () { ui && ui.state('idle'); });
@@ -309,6 +501,7 @@
   /* ---- boot ---- */
   function load() {
     return api().get('/walkie/me').then(function (r) {
+      emit('kt:walkie-me', r || null);
       if (!r || !r.enabled) { S.me = r && r.me ? r : null; S.bell = null; return r; }
       S.me = r; S.bell = r.bell;
       var n = native();
@@ -324,7 +517,7 @@
       }
       return r;
     }, function (e) {
-      S.me = null; S.bell = null;
+      S.me = null; S.bell = null; emit('kt:walkie-me', null);
       var n = native(); if (n && n.disable && e && (e.status === 401 || e.status === 403)) { try { n.disable(); } catch (x) {} }
       throw e;
     });
@@ -351,10 +544,41 @@
       + '#kt-wt-card.em{border-left-color:#DC2626;}#kt-wt-card .wt-ch{font-size:12px;font-weight:800;color:#0E7490;text-transform:uppercase;letter-spacing:.04em;}#kt-wt-card.em .wt-ch{color:#B91C1C;}'
       + '#kt-wt-card .wt-who{margin:4px 0 9px;font-size:15px;}#kt-wt-card .wt-act{display:flex;gap:6px;flex-wrap:wrap;}#kt-wt-card .btn{height:30px;padding:0 10px;font-size:13px;}'
       + '@media (max-width:760px){#kt-wt-card{bottom:calc(env(safe-area-inset-bottom,0px) + 84px);}}'
+      + '#kt-wt-card .wt-livedot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#16A34A;margin-right:7px;vertical-align:1px;animation:wtLive 1s ease-in-out infinite;}#kt-wt-card.em .wt-livedot{background:#DC2626;}#kt-wt-card.ended .wt-livedot{animation:none;background:#94A3B8;}'
+      + '@keyframes wtLive{50%{opacity:.25;}}'
+      + '#kt-wt-card.wt-rc{width:min(360px,calc(100vw - 24px));padding:10px 12px 12px;color:#0F172A;}'
+      + '#kt-wt-card.wt-rc .wt-ch{display:flex;align-items:center;justify-content:space-between;gap:8px;}'
+      + '#kt-wt-card button.wt-rx{width:28px;height:28px;min-width:0;min-height:0;padding:0;border:0;border-radius:8px;background:transparent;color:#334155;font-size:15px;font-weight:800;cursor:pointer;}#kt-wt-card button.wt-rx:hover{background:#F1F5F9;}'
+      + '#kt-wt-card .wt-rbody{display:flex;align-items:center;gap:12px;margin-top:6px;}'
+      + '#kt-wt-card button.wt-rmic{flex:0 0 auto;width:96px;height:96px;min-height:0;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,#2DB3C7,#0E5A75);color:#fff;font-size:44px;box-shadow:0 8px 22px rgba(14,90,117,.35);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s;}'
+      + '#kt-wt-card button.wt-rmic.on{transform:scale(.96);background:radial-gradient(circle at 35% 30%,#F87171,#B91C1C);box-shadow:0 0 0 9px rgba(220,38,38,.15),0 8px 22px rgba(185,28,28,.35);}'
+      + '#kt-wt-card button.wt-rmic:focus-visible{outline:3px solid #0E7490;outline-offset:3px;}'
+      + '#kt-wt-card .wt-rside{flex:1;min-width:0;}#kt-wt-card.wt-rc .wt-who{margin:0 0 3px;}#kt-wt-card .wt-rst{font-size:13px;font-weight:600;color:#334155;margin-bottom:8px;}'
+      + '#kt-wt-card .btn[hidden]{display:none;}'
+      /* phones: the reply mic big and central (2026-11-28, Anthony: "the mic button needs to be bigger") */
+      + '@media (max-width:600px){#kt-wt-card.wt-rc .wt-rbody{flex-direction:column;align-items:stretch;gap:8px;}#kt-wt-card.wt-rc button.wt-rmic{align-self:center;width:clamp(150px,44vw,172px);height:clamp(150px,44vw,172px);font-size:clamp(62px,18vw,74px);order:2;}'
+      +   '#kt-wt-card.wt-rc .wt-rside{display:contents;}#kt-wt-card.wt-rc .wt-who{order:1;}#kt-wt-card.wt-rc .wt-rst{order:3;text-align:center;margin:0;}#kt-wt-card.wt-rc .wt-act{order:4;justify-content:center;}}'
+      /* THE TALK BUTTON IS ORANGE (2026-11-28, Anthony: "the hold-to-talk mic button should be a bold ORANGE that stands
+         out"). Same everywhere (this screen, the top-bar popover, the phone sheet, the reply card): bright #F97316 rim
+         into a #C2410C middle so the white mic sits on 5.2:1 (white on #F97316 alone is 2.8:1); transmitting = deeper
+         #9A3412 with a glowing orange ring; someone else talking = slate; the emergency channel keeps red. A functional
+         colour: white-label tints never restyle it. */
+      + '.kt-ptt-o{background:radial-gradient(circle at 50% 50%,#C2410C 0,#C2410C 44%,#EA580C 68%,#F97316 100%) !important;color:#fff !important;box-shadow:0 8px 22px rgba(194,65,12,.38),inset 0 2px 0 rgba(255,255,255,.25) !important;}'
+      + '.kt-ptt-o:hover{filter:brightness(1.05);}'
+      + '.kt-ptt-o.on{background:radial-gradient(circle at 50% 50%,#9A3412 0,#9A3412 50%,#C2410C 78%,#EA580C 100%) !important;box-shadow:0 0 0 8px rgba(249,115,22,.30),0 0 26px 8px rgba(249,115,22,.45) !important;animation:ktPttGlow 1.1s ease-in-out infinite;}'
+      + '@keyframes ktPttGlow{50%{box-shadow:0 0 0 12px rgba(249,115,22,.18),0 0 32px 12px rgba(249,115,22,.30);}}'
+      + '.kt-ptt-o.busy:not(.on){background:radial-gradient(circle at 50% 50%,#475569 0,#475569 50%,#64748B 100%) !important;box-shadow:0 0 0 3px rgba(100,116,139,.25) !important;}'
+      + '.kt-ptt-o.em:not(.busy){background:radial-gradient(circle at 50% 50%,#991B1B 0,#991B1B 46%,#B91C1C 72%,#DC2626 100%) !important;box-shadow:0 8px 22px rgba(153,27,27,.4) !important;}'
+      + '.kt-ptt-o.em.on{background:radial-gradient(circle at 50% 50%,#7F1D1D 0,#7F1D1D 50%,#991B1B 100%) !important;box-shadow:0 0 0 8px rgba(220,38,38,.28),0 0 26px 8px rgba(220,38,38,.4) !important;}'
+      + '.kt-ptt-o[disabled]{opacity:.45;}.kt-ptt-o .wt-mic{display:block;margin:auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25));}'
+      + '@media (prefers-reduced-motion:reduce){.kt-ptt-o.on{animation:none;}}'
       + '.wt-wrap{display:grid;grid-template-columns:minmax(250px,320px) 1fr;gap:12px;height:560px;min-height:0;}'
       + '.wt-list{display:flex;flex-direction:column;min-height:0;background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}'
       + '.wt-lhead{padding:8px;border-bottom:1px solid #E2E8F0;background:#F8FAFC;flex:0 0 auto;}.wt-q{display:block;width:100%;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 9px;font-size:13px;box-sizing:border-box;}'
       + '.wt-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#CBD5E1 transparent;}.wt-scroll::-webkit-scrollbar{width:6px;}.wt-scroll::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:6px;}'
+      + '.wt-gh[data-gtog]{cursor:pointer;user-select:none;}.wt-gh[data-gtog]:hover{filter:brightness(.97);}.wt-gh[data-gtog]:focus-visible{outline:2px solid #0E7490;outline-offset:-2px;}'
+      + '.wt-gchev{display:inline-block;margin-right:5px;transition:transform .15s;}.wt-gcol .wt-gchev{transform:rotate(-90deg);}'
+      + '.wt-list:not(.wt-searching) .wt-grp.wt-gcol > .wt-row{display:none !important;}'
       + '.wt-gh{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;gap:6px;padding:6px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;background:#F1F7F9;border-bottom:1px solid #E2E8F0;}.wt-gn{font-weight:700;color:#64748B;text-transform:none;letter-spacing:0;white-space:nowrap;}'
       + '.wt-row{display:flex;align-items:center;gap:9px;width:100%;padding:5px 12px;border:0;border-bottom:1px solid #F1F5F9;background:#fff;text-align:left;font-size:13.5px;cursor:pointer;min-height:38px;}.wt-row:hover{background:#F0FAFC;}.wt-row.on{background:#E0F4F7;box-shadow:inset 3px 0 0 #159FB4;}'
       + '.wt-rt{display:flex;flex-direction:column;min-width:0;flex:1;}.wt-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wt-sub{font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
@@ -363,12 +587,17 @@
       + '.wt-empty{padding:12px;font-size:13px;color:#64748B;}'
       + '.wt-right{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;}'
       + '.wt-talk{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:10px 14px;flex:0 0 auto;}'
+      + '.wt-tto{font-size:13px;font-weight:700;color:#475569;}.wt-chg{border:0;background:none;padding:0;min-height:0;color:#0E7490;font-size:13px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}'
       + '.wt-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}.wt-head h2{margin:0;font-size:17px;}.wt-state{font-size:13px;font-weight:700;color:#B45309;}'
       + '.wt-ptt{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0 4px;}'
-      + '.wt-btn{width:120px;height:120px;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,#2DB3C7,#0E5A75);color:#fff;font-size:40px;box-shadow:0 10px 26px rgba(14,90,117,.35);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s;}'
+      + '.wt-btn{width:136px;height:136px;border-radius:50%;border:0;background:radial-gradient(circle at 35% 30%,#2DB3C7,#0E5A75);color:#fff;font-size:58px;line-height:1;box-shadow:0 10px 26px rgba(14,90,117,.35);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .08s;}'
       + '.wt-btn:active,.wt-btn.on{transform:scale(.96);background:radial-gradient(circle at 35% 30%,#F87171,#B91C1C);box-shadow:0 0 0 10px rgba(220,38,38,.15),0 10px 26px rgba(185,28,28,.35);}.wt-btn[disabled]{opacity:.45;cursor:not-allowed;}'
       + '.wt-hint{font-size:12px;color:#64748B;text-align:center;}.wt-tip{cursor:help;color:#64748B;font-size:13px;}'
       + '.wt-recent{display:flex;flex-direction:column;flex:1;min-height:0;background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden;}'
+      + 'button.wt-rtog{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:2px 4px;min-height:0;margin:0;color:#0F172A;font:inherit;cursor:pointer;border-radius:6px;}button.wt-rtog:hover{background:#EEF2F6;}'
+      + '.wt-rchev{display:inline-block;font-size:12px;color:#475569;transition:transform .15s;}'
+      + '@media (min-width:861px){.wt-recent.wt-rcol{flex:0 0 auto;}.wt-recent.wt-rcol .wt-rchev{transform:rotate(-90deg);}.wt-recent.wt-rcol .wt-chips,.wt-recent.wt-rcol .wt-auto,.wt-recent.wt-rcol [data-wt-hist]{display:none;}.wt-recent.wt-rcol .wt-rhead{border-bottom:0;}}'
+      + '@media (max-width:860px){button.wt-rtog{display:none;}}'
       + '.wt-rhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;border-bottom:1px solid #E2E8F0;background:#F8FAFC;flex:0 0 auto;}.wt-rt-title{font-size:13px;}'
       + '.wt-chips{display:flex;gap:4px;flex-wrap:wrap;}.wt-wrap .wt-chips button.wt-chip{height:26px;min-height:0;padding:0 10px;border-radius:13px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;line-height:24px;font-weight:600;color:#334155;cursor:pointer;box-shadow:none;}.wt-wrap .wt-chips button.wt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}'
       + '.wt-auto{margin-left:auto;font-size:12.5px;color:#334155;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;}'
@@ -385,7 +614,7 @@
       + '@media (max-width:860px){.wt-wrap{display:flex;flex-direction:column;gap:8px;}.wt-right{display:contents;}.wt-talk{order:1;padding:8px 12px;}'
       + '.wt-seg{order:2;display:flex;gap:4px;background:#EEF2F6;border-radius:10px;padding:3px;flex:0 0 auto;}.wt-seg button{flex:1;height:32px;min-height:0;border:0;border-radius:8px;background:none;font-size:13.5px;font-weight:700;color:#475569;}.wt-seg button.on{background:#fff;color:#0E7490;box-shadow:0 1px 3px rgba(15,23,42,.12);}'
       + '.wt-list,.wt-recent{order:3;flex:1;min-height:0;}.wt-wrap:not(.show-recent) .wt-recent{display:none;}.wt-wrap.show-recent .wt-list{display:none;}'
-      + '.wt-btn{width:88px;height:88px;font-size:30px;}.wt-ptt{margin:4px 0 2px;}.wt-hint{display:none;}.wt-head h2{font-size:15px;}.wt-talk .wt-links{margin:2px 0 0;font-size:12.5px;gap:10px;}.wt-rhead .wt-rt-title{display:none;}}'
+      + '.wt-btn{width:clamp(150px,46vw,180px);height:clamp(150px,46vw,180px);font-size:clamp(64px,19vw,78px);}.wt-ptt{margin:4px 0 2px;}.wt-hint{display:none;}.wt-head h2{font-size:15px;}.wt-talk .wt-links{margin:2px 0 0;font-size:12.5px;gap:10px;}.wt-rhead .wt-rt-title{display:none;}}'
       + '.wt-sec{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;margin:16px 0 8px;}'
       + '.wt-set{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr));gap:10px;}.wt-set label{display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:3px;}.wt-set select,.wt-set input[type=text],.wt-set input[type=number]{width:100%;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:13px;}'
       + '.wt-note{font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;margin-top:10px;}'
@@ -470,7 +699,10 @@
     var all = {}; r.channels.forEach(function (c) { all[c.key] = { key: c.key, label: c.label, icon: c.icon, can_talk: c.can_talk, emergency: c.emergency, talking: c.talking }; });
     r.people.forEach(function (p) { all[p.key] = { key: p.key, label: p.name, person: p, can_talk: true, talking: p.talking }; });
     var first = r.channels.filter(function (c) { return c.can_talk && !c.emergency; })[0] || r.channels[0] || null;
-    S.sel = all[q.ch] ? q.ch : (S.sel && all[S.sel] ? S.sel : (first ? first.key : null));
+    /* THE LAST CHAT (2026-11-28, Anthony: "keep that as the last chat to make it easier to continue talking"): the person
+       or channel last talked to or picked, kept per person and agency on the server (/walkie/me "last") - so a refresh,
+       another device and the top-bar 📻 all open on it. Gone out of reach: the default channel. */
+    S.sel = all[q.ch] ? q.ch : (S.sel && all[S.sel] ? S.sel : (r.last && all[r.last] ? r.last : (first ? first.key : null)));
 
     // People by centre: the agency-wide people (admins, no centre) first, then each centre; on shift / listening first.
     var groups = {}, order = [], LEAD = T('Admins and leaders');
@@ -484,7 +716,7 @@
     var pRows = order.map(function (g) {
       var list = groups[g].slice().sort(function (a, b) { return up(a) - up(b) || String(a.name).localeCompare(String(b.name)); });
       var on = list.filter(function (p) { return up(p) === 0; }).length;
-      return '<div class="wt-grp" data-grp><div class="wt-gh"><span data-no-i18n>' + esc(g) + '</span><span class="wt-gn">' + (on ? on + ' ' + esc(T('on now')) + ' · ' : '') + list.length + '</span></div>'
+      return '<div class="wt-grp" data-grp data-gk="' + esc(g) + '"><div class="wt-gh" data-gtog role="button" tabindex="0" aria-expanded="true"><span data-no-i18n><span class="wt-gchev" aria-hidden="true">▾</span>' + esc(g) + '</span><span class="wt-gn">' + (on ? on + ' ' + esc(T('on now')) + ' · ' : '') + list.length + '</span></div>'
         + list.map(function (p) {
           var st = p.on_shift ? T('On shift') : (p.listening ? T('Phone listening') : '');
           return '<button type="button" class="wt-row" data-ch="' + esc(p.key) + '" data-name="' + esc(String(p.name).toLowerCase()) + '"><span class="wt-av">' + avatar(p) + (up(p) === 0 ? '<i class="wt-dot' + (p.on_shift ? '' : ' ph') + '"></i>' : '') + '</span>'
@@ -497,16 +729,16 @@
     var chip = function (k, l) { return '<button type="button" class="wt-chip" data-scope="' + k + '">' + esc(T(l)) + '</button>'; };
     body.innerHTML = '<div class="wt-wrap" data-i18n-ctx="walkie" data-kt-nofill>'
       + '<div class="wt-list"><div class="wt-lhead"><input class="wt-q" type="search" data-wtq placeholder="' + esc(T('Search channels and people')) + '"></div>'
-      + '<div class="wt-scroll" data-wt-lscroll><div class="wt-gh wt-ghc">' + esc(T('Channels')) + '</div>' + chRows
+      + '<div class="wt-scroll" data-wt-lscroll><div class="wt-grp" data-grp data-gk="__channels"><div class="wt-gh wt-ghc" data-gtog role="button" tabindex="0" aria-expanded="true"><span><span class="wt-gchev" aria-hidden="true">▾</span>' + esc(T('Channels')) + '</span><span class="wt-gn">' + r.channels.length + '</span></div>' + chRows + '</div>'
       + (pRows || '<div class="wt-empty">' + esc(T('Nobody to call yet.')) + '</div>') + '<div class="wt-empty" data-wt-none hidden>' + esc(T('No match.')) + '</div></div></div>'
-      + '<div class="wt-right"><div class="wt-talk"><div class="wt-head"><h2 data-wt-title data-no-i18n></h2><span class="wt-state" data-wt-state></span></div>'
-      + '<div class="wt-ptt"><button type="button" class="wt-btn" data-wt-ptt aria-label="' + esc(T('Hold to talk')) + '">🎙</button>'
+      + '<div class="wt-right"><div class="wt-talk"><div class="wt-head"><span class="wt-tto">' + esc(T('Talking to:')) + '</span><h2 data-wt-title data-no-i18n></h2><button type="button" class="wt-chg" data-wt-change data-kt-iconized="1">' + esc(T('change')) + '</button><span class="wt-state" data-wt-state></span></div>'
+      + '<div class="wt-ptt"><button type="button" class="wt-btn kt-ptt-o" data-wt-ptt data-kt-iconized="1" aria-label="' + esc(T('Hold to talk')) + '">' + MIC + '</button>'
       + '<div class="wt-hint">' + esc(T('Hold to talk, let go to finish.')) + (matchMedia('(pointer:fine)').matches ? ' ' + esc(T('On a computer you can hold the spacebar.')) : '') + '</div></div>'
       + '<div class="wt-links">' + (r.prefs && r.prefs.dnd ? '<span class="wt-dndon">🔕 ' + esc(T('Do not disturb is on')) + '</span>' : '')
       + '<a href="' + MY_LINK + '">⚙️ ' + esc(T('My walkie settings')) + '</a>' + (r.can_admin ? '<a href="' + AGENCY_LINK + '">⚙️ ' + esc(T('Agency walkie settings')) + '</a>' : '')
       + '<span class="wt-tip" data-kttip="' + esc(tipNote + ' ' + T('The emergency channel always plays.') + ' ' + T('Talks are kept for') + ' ' + (r.settings.retention_days || 30) + ' ' + T('days, encrypted.')) + '">ⓘ</span></div></div>'
       + '<div class="wt-seg" role="tablist"><button type="button" role="tab" data-seg="list">' + esc(T('Talk to')) + '</button><button type="button" role="tab" data-seg="recent">' + esc(T('Recent talks')) + ' <span class="wt-badge" data-wt-newn hidden></span></button></div>'
-      + '<div class="wt-recent"><div class="wt-rhead"><b class="wt-rt-title">' + esc(T('Recent talks')) + '</b><div class="wt-chips" data-kt-noband>' + chip('all', 'All') + chip('to_me', 'To me') + chip('mine', 'Mine') + chip('channel', 'This channel') + '</div>'
+      + '<div class="wt-recent"><div class="wt-rhead"><button type="button" class="wt-rtog" data-wt-rtog aria-expanded="true" data-kt-iconized="1"><span class="wt-rchev" aria-hidden="true">▾</span><b class="wt-rt-title">' + esc(T('Recent talks')) + '</b><span class="wt-badge" data-wt-newn2 hidden></span></button><div class="wt-chips" data-kt-noband>' + chip('all', 'All') + chip('to_me', 'To me') + chip('mine', 'Mine') + chip('channel', 'This channel') + '</div>'
       + '<label class="wt-auto"><input type="checkbox" data-wt-auto> ' + esc(T('Play next')) + '</label></div>'
       + '<div class="wt-scroll" data-wt-hist></div></div></div></div>';
 
@@ -519,42 +751,63 @@
     }
     body.querySelectorAll('[data-seg]').forEach(function (b) { b.addEventListener('click', function () { seg(b.getAttribute('data-seg')); }); });
     seg(q.play ? 'recent' : 'list');
-    function select(k) {
+    function select(k, keep) {
       S.sel = k; var c = all[k];
+      if (keep && c && c.can_talk && !c.emergency) remember(k);
       body.querySelectorAll('.wt-row').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-ch') === k); });
       title.textContent = c ? ((c.icon ? c.icon + ' ' : '📻 ') + c.label) : T('Pick a channel or person');
       btn.disabled = !c || !c.can_talk;
+      btn.classList.toggle('busy', !!(c && c.talking)); btn.classList.toggle('em', !!(c && c.emergency));
       state.textContent = c && !c.can_talk ? T('Listen only') : (c && c.talking ? c.talking + ' ' + T('is talking') : '');
       var chc = body.querySelector('[data-scope="channel"]'); if (chc) chc.title = c ? c.label : '';
       if (HSCOPE === 'channel') history();
     }
     var ui = { state: function (s, x) {
+      clearInterval(ui._iv);
       btn.classList.toggle('on', s === 'live' || s === 'opening');
       if (s === 'opening') state.textContent = T('Starting…');
       else if (s === 'live') { var t0 = Date.now(); state.textContent = T('Talking…') + (x && x.recipients !== undefined ? ' · ' + x.recipients + ' ' + T('hearing') : ''); ui._iv = setInterval(function () { if (!btn.classList.contains('on')) return clearInterval(ui._iv); state.textContent = T('Talking…') + ' ' + Math.round((Date.now() - t0) / 1000) + 's' + (x && x.recipients !== undefined ? ' · ' + x.recipients + ' ' + T('hearing') : ''); }, 500); }
       else { clearInterval(ui._iv); state.textContent = x && x.duration_ms ? T('Sent') + ' · ' + (Math.round(x.duration_ms / 100) / 10) + 's' : ''; }
     } };
-    function down(e) { if (btn.disabled || !S.sel) return; if (e) e.preventDefault(); talkStart(S.sel, ui); }
-    function upEv(e) { if (e) e.preventDefault(); talkEnd(); }
-    btn.addEventListener('pointerdown', function (e) { try { btn.setPointerCapture(e.pointerId); } catch (x) {} down(e); });
-    btn.addEventListener('pointerup', upEv); btn.addEventListener('pointercancel', upEv);
-    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    var ptt = bindPtt(btn, function () { return S.sel; }, ui);
+    function down(e) { if (btn.disabled || !S.sel || S.talk) return; if (e) e.preventDefault(); talkStart(S.sel, ui); }
+    function upEv(e) { if (e) e.preventDefault(); if (ptt && ptt.held()) ptt.release(); else talkEnd(); }
     function kd(e) { if (e.code !== 'Space' || e.repeat || !d.body.contains(btn) || /INPUT|TEXTAREA|SELECT|BUTTON/.test((d.activeElement || {}).tagName || '') || (d.activeElement && d.activeElement.isContentEditable)) return; down(e); }
     function ku(e) { if (e.code !== 'Space' || !d.body.contains(btn)) return; if (S.talk) upEv(e); }
     if (S.keys) { d.removeEventListener('keydown', S.keys[0]); d.removeEventListener('keyup', S.keys[1]); }
     S.keys = [kd, ku]; d.addEventListener('keydown', kd); d.addEventListener('keyup', ku);
-    body.querySelectorAll('.wt-row').forEach(function (b) { b.addEventListener('click', function () { select(b.getAttribute('data-ch')); b.blur(); }); });
+    body.querySelectorAll('.wt-row').forEach(function (b) { b.addEventListener('click', function () { select(b.getAttribute('data-ch'), true); b.blur(); }); });
+    var chg = body.querySelector('[data-wt-change]');
+    if (chg) chg.addEventListener('click', function () { seg('list'); var q2 = body.querySelector('[data-wtq]'); if (q2) { try { q2.focus({ preventScroll: true }); } catch (e) {} } });
     var qi = body.querySelector('[data-wtq]');
     qi.addEventListener('input', function () {
       var s = qi.value.trim().toLowerCase(), any = false;
       body.querySelectorAll('[data-wt-lscroll] .wt-row').forEach(function (b) { var hit = !s || b.getAttribute('data-name').indexOf(s) >= 0; b.style.display = hit ? '' : 'none'; if (hit) any = true; });
       body.querySelectorAll('[data-grp]').forEach(function (g) { g.style.display = [].some.call(g.querySelectorAll('.wt-row'), function (b) { return b.style.display !== 'none'; }) ? '' : 'none'; });
-      var cg = body.querySelector('.wt-ghc'); if (cg) cg.style.display = [].some.call(body.querySelectorAll('[data-wt-lscroll] > .wt-row'), function (b) { return b.style.display !== 'none'; }) ? '' : 'none';
+      body.querySelector('.wt-list').classList.toggle('wt-searching', !!s);   // a search looks inside folded groups too
       body.querySelector('[data-wt-none]').hidden = any;
+    });
+
+    /* Groups fold (2026-11-28, Anthony: "make CHANNELS collapsible too"): Channels, Admins and leaders and each centre;
+       tap the header (▾), kept per person. */
+    var gkey = 'kt_wt_gcol_' + ((r.me && r.me.id) || 0), gcol = {};
+    try { gcol = JSON.parse(ls(gkey) || '{}') || {}; } catch (e) { gcol = {}; }
+    function gfold(g, col) { g.classList.toggle('wt-gcol', col); var h = g.querySelector('[data-gtog]'); if (h) h.setAttribute('aria-expanded', col ? 'false' : 'true'); }
+    body.querySelectorAll('[data-grp]').forEach(function (g) {
+      gfold(g, !!gcol[g.getAttribute('data-gk')]);
+      var h = g.querySelector('[data-gtog]'); if (!h) return;
+      function tog(e) { if (e) e.preventDefault(); var k = g.getAttribute('data-gk'), col = !g.classList.contains('wt-gcol'); gfold(g, col); if (col) gcol[k] = 1; else delete gcol[k]; ls(gkey, Object.keys(gcol).length ? JSON.stringify(gcol) : null); }
+      h.addEventListener('click', tog);
+      h.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') tog(e); });
     });
 
     /* ---- Recent talks ---- */
     var hist = body.querySelector('[data-wt-hist]'), auto = body.querySelector('[data-wt-auto]');
+    /* Recent talks folds (2026-11-28, Anthony: "make the recent list collapsible"): ▾ + the unplayed count, kept per person. */
+    var rtog = body.querySelector('[data-wt-rtog]'), rpane = body.querySelector('.wt-recent'), rkey = 'kt_wt_rcol_' + ((r.me && r.me.id) || 0);
+    function rfold(col) { rpane.classList.toggle('wt-rcol', col); rtog.setAttribute('aria-expanded', col ? 'false' : 'true'); }
+    rfold(ls(rkey) === '1');
+    rtog.addEventListener('click', function () { var col = !rpane.classList.contains('wt-rcol'); rfold(col); ls(rkey, col ? '1' : null); });
     try { auto.checked = ls('kt_walkie_autonext') === '1'; } catch (e) {}
     auto.addEventListener('change', function () { ls('kt_walkie_autonext', auto.checked ? '1' : null); });
     function chips() { body.querySelectorAll('[data-scope]').forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-scope") === HSCOPE); }); /* class only: #appMain button[aria-pressed] is restyled by kt-consistency-polish */ }
@@ -569,6 +822,7 @@
         items = h.items || [];
         var fresh = items.filter(function (it) { return !it.mine && !it.played; }).length, badge = body.querySelector('[data-wt-newn]');
         if (badge) { badge.hidden = !fresh; badge.textContent = fresh; }
+        var badge2 = body.querySelector('[data-wt-newn2]'); if (badge2) { badge2.hidden = !fresh; badge2.textContent = fresh; }
         if (!items.length) { hist.innerHTML = '<div class="wt-empty">' + esc(T(HSCOPE === 'all' ? 'No talks yet. Hold the button to say something.' : 'Nothing here yet.')) + '</div>'; return; }
         var day = null, out = '';
         items.forEach(function (it) {
@@ -598,7 +852,7 @@
         var mk = function (l, fn) { var b = d.createElement('button'); b.type = 'button'; b.textContent = l; b.addEventListener('click', fn); return b; };
         var acts = [mk('▶ ' + T('Play', 'walkie'), function () { playRow(row, it); })];
         if (it.back) acts.push(mk('↩ ' + T('Talk back'), function () { talkBack(it); }));
-        if (all[it.channel] && it.channel !== S.sel) acts.push(mk('📻 ' + T('Open this channel'), function () { select(it.channel); seg('list'); }));
+        if (all[it.channel] && it.channel !== S.sel) acts.push(mk('📻 ' + T('Open this channel'), function () { select(it.channel, true); seg('list'); }));
         if (!it.mine && !it.played) acts.push(mk('✓ ' + T('Mark as heard'), function () {
           api().post('/walkie/tx/' + it.id + '/heard', { busy: false }, { quiet: true }).then(function () { it.played = true; row.classList.remove('new'); var n = row.querySelector('.wt-new'); if (n) n.remove(); });
         }));
@@ -608,7 +862,7 @@
     });
     function talkBack(it) {
       if (!all[it.back]) { toast('📻', 'You cannot call them from here', '', '#B45309'); return; }
-      select(it.back); seg('list');
+      select(it.back, true); seg('list');
       var row = body.querySelector('.wt-row[data-ch="' + it.back.replace(/"/g, '') + '"]'); if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
       toast('📻', 'Hold the button to talk back', '', '#0E7490');
     }
@@ -654,11 +908,12 @@
   }
 
   function playClip(id) {
-    var c = ctx(); if (!c) return;
-    api().get('/walkie/tx/' + id + '/audio').then(function (a) {
-      var u = unb64(a.data || ''); if (!u.length) return;
+    var c = ctx(); if (!c) return Promise.resolve(0);
+    return api().get('/walkie/tx/' + id + '/audio').then(function (a) {
+      var u = unb64(a.data || ''); if (!u.length) return 0;
       var at = sound(c, 'rx', c.currentTime + 0.05) + 0.04; at = schedule(c, u, at); sound(c, 'rxEnd', at + 0.03);
-    }, function (e) { toast('⚠️', 'Could not play it', errMsg(e), '#DC2626'); });
+      return Math.max(0, at - c.currentTime);   // seconds until it finishes
+    }, function (e) { toast('⚠️', 'Could not play it', errMsg(e), '#DC2626'); return 0; });
   }
 
   function settingsHtml(r) {
@@ -710,12 +965,15 @@
     function opt(v, l) { return '<option value="' + v + '">' + esc(T(l)) + '</option>'; }
     var nativeNote = native() ? T('This phone listens all the time, even with the screen off, unless you turn on Do not disturb.')
       : (/iPhone|iPad/.test(navigator.userAgent) ? T('On iPhone, talks arrive as a notification: tap it to listen.') : T('In a browser you hear talks only while a KiddieTrac tab is open. The Android app listens all the time.'));
-    box.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie')), 'Do not disturb and the radio sounds. Only for you.')
+    box.innerHTML = cardHead('📻 ' + esc(T('Walkie-talkie')), 'Do not disturb, the radio sounds and vibration. Only for you.')
       + '<div class="wt-set">'
       + '<div><label>' + esc(T('Do not disturb')) + '</label><select data-wt-dnd>' + opt('off', 'Off') + opt('60', 'For 1 hour') + opt('240', 'For 4 hours') + opt('0', 'Until I turn it off') + '</select>'
       + '<div class="wt-sub" data-wt-dndnote style="font-size:12px;color:#64748B;margin-top:3px;"></div></div>'
       + '<div><label>' + esc(T('Walkie sounds')) + '</label><div style="display:flex;gap:6px;"><select data-wt-snd style="flex:1;">' + opt('1', 'On (radio beeps)') + opt('0', 'Off') + '</select>'
       + '<button type="button" class="btn" data-wt-try style="height:30px;font-size:13px;white-space:nowrap;">▶ ' + esc(T('Try')) + '</button></div></div>'
+      + '<div><label>' + esc(T('Walkie vibration')) + '</label><div style="display:flex;gap:6px;"><select data-wt-vib style="flex:1;">' + opt('1', 'On') + opt('0', 'Off') + '</select>'
+      + (navigator.vibrate || native() ? '<button type="button" class="btn" data-wt-vtry style="height:30px;font-size:13px;white-space:nowrap;">📳 ' + esc(T('Try')) + '</button>' : '') + '</div>'
+      + (navigator.vibrate || native() ? '' : '<div class="wt-sub" style="font-size:12px;color:#64748B;margin-top:3px;">' + esc(T('This device cannot vibrate from a web page (iPhone). The Android app and Android Chrome can.')) + '</div>') + '</div>'
       + '</div><div class="wt-note">' + esc(T('A beep when you press to talk, a roger beep when you let go, a chirp when someone starts talking to you and a soft squelch when they finish. The emergency channel always beeps and always plays.'))
       + ' ' + esc(nativeNote) + '</div>'
       + (r.enabled ? '<div class="wt-links"><a href="#walkie">📻 ' + esc(T('Open the Walkie-talkie')) + '</a></div>' : '<div class="wt-note">' + esc(T('The walkie-talkie is switched off for your agency.')) + '</div>');
@@ -727,6 +985,13 @@
     }
     showDnd(p);
     snd.value = p.sounds === false ? '0' : '1';
+    var vib = box.querySelector('[data-wt-vib]'); vib.value = p.vibrate === false ? '0' : '1';
+    vib.addEventListener('change', function () { save({ vibrate: vib.value === '1' }); });
+    var vtry = box.querySelector('[data-wt-vtry]');
+    if (vtry) vtry.addEventListener('click', function () {
+      if (vib.value !== '1') { toast('📴', 'Walkie vibration is off', '', '#475569'); return; }
+      try { navigator.vibrate && navigator.vibrate([14, 400, 90, 70, 90, 400, 8, 50, 8]); } catch (e) {}
+    });
     function save(body, after) {
       return api().request('/walkie/prefs', { method: 'PUT', body: body }).then(function (x) {
         if (S.me) S.me.prefs = Object.assign({}, S.me.prefs || {}, x);
@@ -777,5 +1042,7 @@
     ['agency_admin', 'centre_director', 'educator', 'home_visitor'].forEach(function (role) { KT.Shell.registerScreen(role + ':walkie', render); });
   }
   reg();
-  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, myCard: myCard, agencyPane: agencyPane, creditsCard: creditsCard, sound: function (n) { var c = ctx(); return c ? sound(c, n, c.currentTime + 0.02) : 0; }, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
+  KT.walkie = { talkStart: talkStart, talkEnd: talkEnd, bindPtt: bindPtt, warm: warm, myCard: myCard, agencyPane: agencyPane, creditsCard: creditsCard,
+    me: function () { return S.me; }, load: load, remember: remember, playClip: playClip, refresh: function () { if (S.me && S.bell) inbox(); }, talking: function () { return !!S.talk; },
+    live: function () { return S.card ? { from: S.card.t.from, label: S.card.t.label, emergency: !!S.card.t.emergency } : null; }, myLink: MY_LINK, sound: function (n) { var c = ctx(); return c ? sound(c, n, c.currentTime + 0.02) : 0; }, state: function () { return { me: !!S.me, native: S.nativeOn, leader: isLeader(), unlocked: unlocked(), queue: S.queue.length }; } };
 })(window, document);

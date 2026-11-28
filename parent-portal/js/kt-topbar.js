@@ -772,6 +772,7 @@
   }
   var _fitT = null;
   function fitSoon() { if (_fitT) return; _fitT = setTimeout(function () { _fitT = null; fitBar(); }, 120); }
+  try { (window.KT = window.KT || {}).topbarFit = fitSoon; } catch (e) {}   // a button shown later (📻) re-fits the bar
   window.addEventListener('resize', fitSoon);
 
   function ensure() {
@@ -818,6 +819,14 @@
     var phoneBtn = iconBtn('📞', 'Phone · dial pad', function () { if (window.KT && window.KT.dialpad) window.KT.dialpad.toggle(); }, 'kt-tb-phone-badge');
     phoneBtn.id = 'kt-tb-phone'; phoneBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(phoneBtn);
+    /* The walkie-talkie, next to the phone (2026-11-28, Anthony: "add walkie-talkie to the top bar with a quick action
+       for walkie-talkie functions"). kt-walkie-quick.js shows it once /walkie/me says the walkie is on for this person
+       in this agency, opens its quick popover (hold to talk, who to, play the latest, Do not disturb) and keeps the
+       unplayed count and the "someone is talking" glow on it. */
+    var wtBtn = iconBtn('📻', 'Walkie-talkie', function () { if (window.KT && window.KT.walkieQuick) window.KT.walkieQuick.open(wtBtn); else location.hash = '#walkie'; }, 'kt-tb-walkie-badge');
+    wtBtn.id = 'kt-tb-walkie'; wtBtn.style.display = 'none'; wtBtn.setAttribute('aria-haspopup', 'menu');
+    right.appendChild(wtBtn);
+    try { if (window.KT && window.KT.walkieQuick) window.KT.walkieQuick.paint(); } catch (e) {}
     if (effAdmin) right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
     right.appendChild(iconBtn('💬', 'Message Centre', function () { go('#chat'); }, 'kt-tb-msg-badge'));
     // The email client for admins and directors; the sales@ mailbox for whoever may open it (sales team, superadmins).
@@ -843,10 +852,9 @@
     var calcBtn = iconBtn('🧮', 'Calculator (Alt+C)', function () { if (window.KT && window.KT.toggleCalculator) window.KT.toggleCalculator(); });
     calcBtn.id = 'kt-tb-calc'; calcBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(calcBtn);
-    // Quick notes (2026-11-26): the notepad drawer - private notes and the agency's shared ones (kt-quick-notes.js).
-    var notesBtn = iconBtn('📃', 'Quick notes', function () { if (window.KT && window.KT.quickNotes) window.KT.quickNotes.toggle(); else location.hash = '#notes'; });
-    notesBtn.id = 'kt-tb-notes'; notesBtn.setAttribute('aria-pressed', 'false');
-    right.appendChild(notesBtn);
+    /* Quick notes moved to the right panel (2026-11-28, Anthony: "add quick notes to the side right bar where the popout
+       calendar is and remove from the top bar"): its own icon on the panel's rail (kt-right-panel.js). Below the
+       panel's width, the Notes screen in the menu and the phone drawer (KT.quickNotes.toggle) still reach it. */
     /* ONE AI BUTTON (Anthony, 2026-11-03: "should be combined into one on the top bar"). It was 🤖 (the help
        assistant) beside ✨ (Ask KiddieTrac). Decided at the tap, not when the bar is drawn, because kt-ask.js can load
        after the first bar: an admin or director with the AI Bundle gets the assistant that answers both "who owes

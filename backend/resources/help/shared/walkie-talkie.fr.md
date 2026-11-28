@@ -11,6 +11,38 @@ accès.
 
 [[open: #walkie | Ouvrir le Walkie-talkie]]
 
+## Le walkie rapide (📻)
+
+- **Sur un ordinateur :** appuyez sur **📻** dans la barre du haut (à côté de 📞). Un petit panneau s’ouvre avec la
+  personne à qui **vous parlez**, le gros bouton orange **maintenir pour parler**, une recherche au-dessus de
+  **Récents**, **Canaux** et **Personnes** (touchez ▾ sur un titre pour le replier), **▶ Écouter le dernier** et
+  **À l’écoute** (touchez pour Ne pas déranger pendant une heure). **⚙️** ouvre vos réglages du walkie, **⤢** ouvre le
+  walkie-talkie complet et **✕** ferme le panneau.
+- **Sur un téléphone (et l’application Android) :** la première tuile de l’**Accès rapide** de votre accueil est
+  **📻 Walkie-talkie**. Elle est toujours la première et ne peut être ni déplacée ni retirée. Elle ouvre le même panneau
+  depuis le bas de l’écran.
+- Le chiffre rouge sur 📻 compte les messages qui vous ont été envoyés et que vous n’avez pas encore écoutés. Le bouton
+  s’illumine pendant que quelqu’un vous parle.
+- Le walkie se souvient de la dernière personne à qui vous avez parlé ou que vous avez choisie, sur tous vos appareils,
+  et s’ouvre sur elle la fois suivante (**Vous parlez à : *nom* · changer**). Si vous ne pouvez plus la joindre, il
+  revient à votre canal habituel.
+- Sur l’écran complet, touchez ▾ sur **Canaux**, un centre ou **Messages récents** pour le replier ; il reste replié pour vous.
+
+## Répondre tout de suite
+
+Quand quelqu’un vous parle, où que vous soyez dans KiddieTrac, une carte s’affiche avec la personne qui parle et un gros
+micro orange. Maintenez le micro pour lui répondre aussitôt (un message direct revient à cette personne, un message de
+canal au canal). Quand elle a fini, **▶ Réécouter** le rejoue. La carte disparaît environ 20 secondes plus tard sauf si
+vous la touchez ; **✕** la ferme. Le canal d’urgence garde sa propre carte.
+
+## Vibration
+
+Votre téléphone fait un petit tic quand vous appuyez pour parler et quand vous relâchez, une courte vibration quand un
+message arrive et une longue pour le canal d’urgence. Désactivez-la avec **Vibration du walkie-talkie** dans **Mes
+réglages › Notifications › 📻 Walkie-talkie** (appuyez sur **📳 Essayer** pour la sentir). Rien ne vibre en mode Ne pas
+déranger, sauf le canal d’urgence. Les navigateurs d’iPhone ne peuvent pas vibrer ; l’application Android et Chrome sur
+Android le peuvent.
+
 Il se trouve sous **Opérations › Walkie-talkie** (administrateurs et directions) ou **Walkie-talkie** dans votre menu
 (éducatrices et visiteuses à domicile). L’écran tient dans votre fenêtre : **Parler à** à gauche (recherche, canaux,
 puis personnes par centre), le bouton pour parler en haut à droite et **Prises de parole récentes** en dessous. Chaque

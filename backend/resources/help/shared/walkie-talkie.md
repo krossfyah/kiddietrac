@@ -14,6 +14,33 @@ agency's own staff only. Parents are never on it.
 
 [[open: #walkie | Open Walkie-talkie]]
 
+## The quick walkie (📻)
+
+- **On a computer:** press **📻** in the top bar (next to 📞). A small panel opens with who you are **Talking to**, the
+  big orange **hold-to-talk** button, a search box over **Recent**, **Channels** and **People** (tap ▾ on a heading to
+  fold it), **▶ Play latest** and **Listening** (tap for Do not disturb for an hour). **⚙️** opens your walkie
+  settings, **⤢** opens the full Walkie-talkie and **✕** closes the panel.
+- **On a phone (and the Android app):** the first tile in **Quick access** on your home screen is **📻 Walkie-talkie**.
+  It is always first and cannot be moved or removed. It opens the same panel from the bottom of the screen.
+- The red number on 📻 counts talks sent to you that you have not played yet. The button glows while someone talks to you.
+- The walkie remembers who you last talked to or picked, on every device, and opens on them next time
+  (**Talking to: *name* · change**). Someone you can no longer reach falls back to your usual channel.
+- On the full screen, tap ▾ on **Channels**, a centre or **Recent talks** to fold it; it stays folded for you.
+
+## Answering straight away
+
+When someone talks to you, wherever you are in KiddieTrac, a card pops up with who is talking and a big orange mic.
+Hold the mic to answer them straight back (a direct talk goes back to that person, a channel talk to the channel).
+When they finish, **▶ Replay** plays it again. The card goes about 20 seconds later unless you touch it; **✕** closes
+it. The emergency channel keeps its own card.
+
+## Vibration
+
+Your phone gives a tiny tick when you press to talk and when you let go, a short buzz when a talk comes in, and a long
+one for the emergency channel. Turn it off with **Walkie vibration** in **My settings › Notifications › 📻
+Walkie-talkie** (press **📳 Try** to feel it). Nothing buzzes during Do not disturb, except the emergency channel.
+iPhone browsers cannot vibrate; the Android app and Android Chrome can.
+
 Find it under **Operations › Walkie-talkie** (admins and directors) or **Walkie-talkie** in your menu (educators and
 home visitors). The screen fits your window: **Talk to** on the left (search, channels, then people by centre), the
 talk button top right, and **Recent talks** under it. Each list scrolls on its own, so the talk button never moves. On

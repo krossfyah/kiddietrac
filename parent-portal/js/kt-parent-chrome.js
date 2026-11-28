@@ -364,6 +364,16 @@
         oneTapBtn.insertAdjacentHTML('afterbegin', '<svg width="22" height="22" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="display:block;"><defs><linearGradient id="ktOtmTop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#12307A"/><stop offset="1" stop-color="#0A1E55"/></linearGradient></defs><rect width="64" height="64" rx="17" fill="url(#ktOtmTop)"/><path d="M19.55 31.01 A13 13 0 0 1 32.99 44.45" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="1"/><path d="M19.27 23.01 A21 21 0 0 1 40.99 44.73" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="0.8"/><path d="M18.99 15.02 A29 29 0 0 1 48.98 45.01" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="0.6"/><circle cx="20" cy="44" r="7.2" fill="#fff"/><circle cx="20" cy="44" r="2.6" fill="#1DB9C3"/></svg>');
         wrap.appendChild(oneTapBtn);
       }
+      /* 📻 The walkie-talkie for educators and home visitors (2026-11-28, Anthony: "add walkie-talkie to the top bar
+         with a quick action for walkie-talkie functions"). kt-walkie-quick.js shows it when the walkie is on for them
+         and opens the same quick popover as the admins' top bar. On a phone this row is hidden: the 📻 there is the
+         round button on the gear's row (#kt-wtq-fab). */
+      if (role === 'educator' || role === 'home_visitor') {
+        var wtBtn = iconBtn('📻', 'Walkie-talkie', function () { if (window.KT && window.KT.walkieQuick) window.KT.walkieQuick.open(wtBtn); else location.hash = '#walkie'; }, 'kt-pc-walkie-badge');
+        wtBtn.id = 'kt-pc-walkie'; wtBtn.style.display = 'none'; wtBtn.setAttribute('aria-haspopup', 'menu');
+        wrap.appendChild(wtBtn);
+        try { if (window.KT && window.KT.walkieQuick) setTimeout(window.KT.walkieQuick.paint, 0); } catch (e) {}
+      }
       if (role === 'sales_rep') {
         // Sales rep messaging is the shared portal chat dock (restricted to the sales
         // team + superadmins). Pipeline + Messages (unread indicator) + inbox.

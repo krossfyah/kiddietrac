@@ -33,6 +33,10 @@
      events join the calendar dots, the agenda, Coming up and Meetings (blue bar; the agency's private events read
      "Busy"). One GET /me/calendar-connections/events per open section, cached 5 minutes here and on the server; when
      nothing is connected the panel stops asking for the session and offers "Connect Outlook or Google calendar".
+   • Quick notes (2026-11-28, Anthony: "add quick notes to the side right bar where the popout calendar is and remove
+     from the top bar"): its own rail icon, the notepad (KT.quickNotes.panel: write, search, My notes / Agency notes) in
+     the panel, and a red count on the icon for note reminders due today. The 📃 top-bar button is gone; anything that
+     calls KT.quickNotes.toggle() opens this section when the panel is available (the drawer otherwise).
    • State per person in localStorage kt_rp_<user id>: { open, section, days }.
    • Times and "today" are the agency's (KT.agencyToday / KT.fmtTime). Text is translated by kt-i18n's sweep.
    ═══════════════════════════════════════════════════════════════════ */
@@ -42,13 +46,14 @@
   var KT = (w.KT = w.KT || {});
 
   var MIN_W = 1200, PUSH_W = 1440, RAIL = 44, BODY_W = 300;
-  var SECTIONS = ['calendar', 'meetings', 'tasks', 'today'];
-  var LABEL = { calendar: 'Calendar', meetings: 'Meetings', tasks: 'Tasks', today: 'Today at the centre' };
+  var SECTIONS = ['calendar', 'meetings', 'tasks', 'notes', 'today'];
+  var LABEL = { calendar: 'Calendar', meetings: 'Meetings', tasks: 'Tasks', notes: 'Quick notes', today: 'Today at the centre' };
   var ICON = {
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M16 3v4M8 3v4M3 10h18"/>',
     meetings: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/>',
     tasks: '<rect x="3" y="3" width="18" height="18" rx="3.5"/><path d="m8 12.5 2.8 2.8L16.5 9"/>',
     today: '<path d="M3 12h4l2.5-6.5 5 13 2.5-6.5h4"/>',
+    notes: '<path d="M6 3.5h9l4 4V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M15 3.5V8h4.5M8.5 12h7M8.5 15.5h7M8.5 8.5h3.5"/>',
     fold: '<path d="m9 6 6 6-6 6"/>',
     unfold: '<path d="m15 6-6 6 6 6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -108,7 +113,8 @@
   function eligible() { return !!roleNow() && w.innerWidth >= MIN_W && !phoneChrome() && !!uid(); }
   // Platform view: a super admin with no agency picked, or a sales rep (the KiddieTrac team calendar, no centre).
   function platformView() { return !agency() || roleNow() === 'sales'; }
-  function sections() { return platformView() ? ['calendar', 'meetings', 'tasks'] : SECTIONS; }
+  function sections() { return platformView() ? ['calendar', 'meetings', 'tasks', 'notes'] : SECTIONS; }
+  function notesOn() { return !!(KT.quickNotes && KT.quickNotes.panel); }
   function meetingScope() { return platformView() ? 'platform' : 'agency'; }
 
   /* ── remembered state, per person ─────────────────────────────────── */
@@ -230,7 +236,21 @@
   w.addEventListener('kt:quick-notes-changed', function () {
     try { Object.keys(C).forEach(function (k) { if (k.indexOf('qn:') === 0) delete C[k]; }); Object.keys(C.at || {}).forEach(function (k) { if (k.indexOf('qn:') === 0) delete C.at[k]; }); } catch (e) {}
     try { if (isOpen() && (S.section === 'calendar' || S.section === 'tasks')) renderSection(); } catch (e) {}
+    try { noteDot(); } catch (e) {}
   });
+  /* The red number on the rail's Quick notes icon: note reminders due today (theirs and the shared ones they see). */
+  function noteDot() {
+    if (!rail || !notesOn()) return;
+    var t = today();
+    getNotes(t, t).then(function (list) {
+      var b = rail && rail.querySelector('[data-rp-sec="notes"]'); if (!b) return;
+      var n = (list || []).length, dot = b.querySelector('.kt-rp-dot');
+      if (!n) { if (dot) dot.remove(); b.setAttribute('aria-label', T(LABEL.notes)); return; }
+      if (!dot) { dot = d.createElement('span'); dot.className = 'kt-rp-dot'; b.appendChild(dot); }
+      var txt = n > 9 ? '9+' : String(n); if (dot.textContent !== txt) dot.textContent = txt;
+      b.setAttribute('aria-label', T(LABEL.notes) + ', ' + n + ' ' + T(n === 1 ? 'reminder today' : 'reminders today'));
+    });
+  }
   /* Outlook / Google events (ExternalCalendar). xcalNone: nothing connected - not asked again this session/agency. */
   function getExternal(from, to) {
     var c = cache();
@@ -469,10 +489,12 @@
     if (!isOpen()) html += '<button type="button" class="kt-rp-rb" data-rp="toggle" data-kttip="' + esc(T('Expand')) + '" aria-label="Expand" aria-expanded="false">' + svg('unfold', 18) + '</button><span class="kt-rp-sep"></span>';
     else html += '<span style="height:38px;flex:0 0 auto"></span><span class="kt-rp-sep"></span>';
     secs.forEach(function (s) {
+      if (s === 'notes' && !notesOn()) return;
       var on = isOpen() && S.section === s;
       html += '<button type="button" class="kt-rp-rb' + (on ? ' on' : '') + '" data-rp-sec="' + s + '" data-kttip="' + esc(T(LABEL[s])) + '" aria-label="' + esc(LABEL[s]) + '" aria-pressed="' + on + '">' + svg(s, 20) + '</button>';
     });
     rail.innerHTML = html;
+    noteDot();
   }
   function onRailClick(e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -542,6 +564,15 @@
     if (!scroller || !isOpen()) return;
     var seq = ++renderSeq, s = S.section;
     if (titleEl) titleEl.textContent = LABEL[s];
+    /* Quick notes: the notepad is mounted once and keeps itself current (kt:quick-notes-changed), so a half-written
+       note survives the 2-minute refresh; only the header's refresh button (force) mounts it again. */
+    if (s === 'notes') {
+      if (!notesOn()) { S.section = 'calendar'; return renderSection(force); }
+      if (scroller.getAttribute('data-sec') === 'notes' && scroller.firstChild && !force) return;
+      scroller.setAttribute('data-sec', 'notes');
+      KT.quickNotes.panel(scroller);
+      return;
+    }
     if (!scroller.firstChild || scroller.getAttribute('data-sec') !== s) scroller.innerHTML = '<div class="kt-rp-skel"></div><div class="kt-rp-skel"></div><div class="kt-rp-skel"></div>';
     scroller.setAttribute('data-sec', s);
     var done = function (html) { if (seq !== renderSeq || S.section !== s) return; scroller.innerHTML = html; wire(s); };
@@ -963,6 +994,7 @@
     var items = [];
     if (canMeet()) items.push({ icon: '📅', label: 'New meeting', run: function () { newMeeting(S.section === 'calendar' ? S.sel : today()); } });
     items.push({ icon: '☑️', label: 'New task', run: function () { S.section = 'tasks'; save(); apply(true); renderSection(); setTimeout(function () { var i = scroller.querySelector('#kt-rp-add [name=title]'); if (i) i.focus(); }, 400); } });
+    if (notesOn()) items.push({ icon: '📃', label: 'New note', run: function () { openNotes(true); } });
     if (!items.length) return;
     if (KT.quickPop) KT.quickPop({ anchor: anchor, items: items, label: 'New' }); else items[0].run();
   }
@@ -974,6 +1006,7 @@
     if (Date.now() - lastTick < 120000) return;
     lastTick = Date.now();
     if (d.activeElement && root.contains(d.activeElement) && /INPUT|SELECT|TEXTAREA/.test(d.activeElement.tagName)) return;   // never under someone's typing
+    if (S.section === 'notes') { noteDot(); return; }   // the notepad keeps itself current
     renderSection(true);
   }
   // The badges poll is the heartbeat; the listener only schedules (never fetches inside it).
@@ -1022,7 +1055,18 @@
   function start() { if (started) return; started = true; boot(); }
   w.addEventListener('kt:screen-settled', function () { setTimeout(start, 300); }, { once: true });
   setTimeout(start, 6000);
+  /* Quick notes from anywhere (KT.quickNotes.toggle, ＋ New note): open the panel on the notepad; the same again folds it.
+     focus = put the cursor in "Write a quick note". false when the panel is not available here (a phone, a narrow window). */
+  function openNotes(focus, toggle) {
+    if (!eligible() || !notesOn()) return false;
+    if (!root) apply();
+    if (toggle && isOpen() && S.section === 'notes') { setOpen(false); return true; }
+    S.section = 'notes'; save(); setOpen(true);
+    if (focus) setTimeout(function () { var ta = scroller && scroller.querySelector('.qn-add textarea'); if (ta) ta.focus(); }, 350);
+    return true;
+  }
   KT.rightPanel = { open: function (s) { if (s && SECTIONS.indexOf(s) !== -1) S.section = s; setOpen(true); }, close: function () { setOpen(false); }, refresh: function () { cacheFor = null; renderSection(true); },
+    available: function () { return eligible(); }, openNotes: openNotes,
     // My settings > My day panel uses these (the same per-person "days ahead" as the panel's gear).
     ranges: RANGES, getDays: function () { if (!booted) load(); return S.days; }, setDays: setDays, loadDays: function () {
       return api().get('/auth/me/ui-prefs').then(function (j) { var n = okDays(j && j.prefs && j.prefs.my_day && j.prefs.my_day.days); if (n) { S.days = n; save(); } return S.days; }).catch(function () { return S.days; });

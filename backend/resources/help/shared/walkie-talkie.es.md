@@ -10,6 +10,33 @@ pequeños cinco minutos?»). Es solo para el personal de su agencia. Los padres 
 
 [[open: #walkie | Abrir Walkie-talkie]]
 
+## El walkie rápido (📻)
+
+- **En una computadora:** pulse **📻** en la barra superior (junto a 📞). Se abre un pequeño panel con la persona con la
+  que está **hablando**, el gran botón naranja **mantener para hablar**, una búsqueda sobre **Recientes**, **Canales** y
+  **Personas** (toque ▾ en un título para plegarlo), **▶ Reproducir el último** y **Escuchando** (toque para No molestar
+  durante una hora). **⚙️** abre sus ajustes del walkie, **⤢** abre el walkie-talkie completo y **✕** cierra el panel.
+- **En un teléfono (y la app de Android):** el primer mosaico de **Acceso rápido** en su inicio es **📻 Walkie-talkie**.
+  Siempre es el primero y no se puede mover ni quitar. Abre el mismo panel desde la parte inferior de la pantalla.
+- El número rojo en 📻 cuenta los mensajes que le enviaron y que aún no ha escuchado. El botón brilla mientras alguien le habla.
+- El walkie recuerda con quién habló o a quién eligió por última vez, en todos sus dispositivos, y se abre con esa
+  persona la próxima vez (**Hablando con: *nombre* · cambiar**). Si ya no puede comunicarse con ella, vuelve a su canal habitual.
+- En la pantalla completa, toque ▾ en **Canales**, un centro o **Mensajes recientes** para plegarlo; queda plegado para usted.
+
+## Responder enseguida
+
+Cuando alguien le habla, esté donde esté en KiddieTrac, aparece una tarjeta con quién habla y un gran micrófono naranja.
+Mantenga el micrófono para responderle al instante (un mensaje directo vuelve a esa persona; uno de canal, al canal).
+Cuando termina, **▶ Volver a oír** lo reproduce de nuevo. La tarjeta desaparece unos 20 segundos después salvo que la
+toque; **✕** la cierra. El canal de emergencia conserva su propia tarjeta.
+
+## Vibración
+
+Su teléfono da un pequeño toque al pulsar para hablar y al soltar, una vibración corta cuando llega un mensaje y una
+larga para el canal de emergencia. Desactívela con **Vibración del walkie-talkie** en **Mis ajustes › Notificaciones ›
+📻 Walkie-talkie** (pulse **📳 Probar** para sentirla). Nada vibra en No molestar, salvo el canal de emergencia. Los
+navegadores de iPhone no pueden vibrar; la app de Android y Chrome en Android sí.
+
 Está en **Operaciones › Walkie-talkie** (administradores y directores) o **Walkie-talkie** en su menú (educadores y
 visitadores a domicilio). La pantalla cabe en su ventana: **Hablar con** a la izquierda (búsqueda, canales y luego
 personas por centro), el botón para hablar arriba a la derecha y **Charlas recientes** debajo. Cada lista se desplaza

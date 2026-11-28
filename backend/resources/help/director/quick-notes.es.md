@@ -3,7 +3,7 @@ title: Notas rápidas
 ---
 # Notas rápidas
 
-Un bloc de notas para lo que necesita recordar: escriba una nota en segundos y guárdela solo para usted, o compártala con su personal. Pulse el botón **📃** de la barra superior para abrir el bloc lateral, o abra **Notas** en la barra lateral (en Operaciones) para la pantalla completa. También puede agregar la tarjeta **Notas rápidas** a su panel: **+ Add widget → Quick notes**.
+Un bloc de notas para lo que necesita recordar: escriba una nota en segundos y guárdela solo para usted, o compártala con su personal. En una computadora, pulse el icono **Notas rápidas** en la barra del panel derecho, junto al calendario (un número rojo muestra los recordatorios de notas de hoy). En un teléfono o en una ventana estrecha, el bloc de notas se abre como un cajón desde abajo. **Notas** en el menú abre la pantalla completa. También puede agregar la tarjeta **Notas rápidas** a su panel: **+ Add widget → Quick notes**.
 
 [[open: #notes | Abrir Notas]]
 

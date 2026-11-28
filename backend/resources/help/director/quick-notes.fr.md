@@ -3,7 +3,7 @@ title: Notes rapides
 ---
 # Notes rapides
 
-Un bloc-notes pour ce que vous devez retenir : écrivez une note en quelques secondes et gardez-la pour vous, ou partagez-la avec votre personnel. Appuyez sur le bouton **📃** dans la barre du haut pour ouvrir le tiroir du bloc-notes, ou ouvrez **Notes** dans le menu latéral (sous Opérations) pour l’écran complet. Vous pouvez aussi ajouter la carte **Notes rapides** à votre tableau de bord : **+ Add widget → Quick notes**.
+Un bloc-notes pour ce que vous devez retenir : écrivez une note en quelques secondes et gardez-la pour vous, ou partagez-la avec votre personnel. Sur un ordinateur, appuyez sur l’icône **Notes rapides** dans la barre du panneau de droite, à côté du calendrier (un chiffre rouge indique les rappels de notes du jour). Sur un téléphone ou dans une fenêtre étroite, le bloc-notes s’ouvre en tiroir depuis le bas. **Notes** dans le menu ouvre l’écran complet. Vous pouvez aussi ajouter la carte **Notes rapides** à votre tableau de bord : **+ Add widget → Quick notes**.
 
 [[open: #notes | Ouvrir les notes]]
 

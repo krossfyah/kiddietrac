@@ -105,10 +105,68 @@ final class WalkieController extends Controller
         return response()->json([
             'enabled' => $s['enabled'], 'me' => ['id' => $me, 'kind' => $who['kind'], 'name' => Walkie::firstName($me)],
             'bell' => Walkie::bellPath($me), 'channels' => $channels, 'people' => $people,
-            'prefs' => ['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me)],
+            'prefs' => ['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me), 'vibrate' => self::vibrate($me)],
             'settings' => $isAdmin ? $s : ['listen' => $s['listen'], 'retention_days' => $s['retention_days'], 'emergency' => $s['emergency'], 'emergency_name' => $s['emergency_name']],
             'can_admin' => $isAdmin, 'rate' => Walkie::SAMPLE_RATE, 'max_secs' => Walkie::MAX_SECS,
-        ]);
+            'last' => self::lastFor($p, $aid, $channels, $people),
+        ] + self::unplayed($aid, $me));
+    }
+
+    /**
+     * The top-bar 📻 badge (2026-11-28): finished talks sent to me that I have not played yet - the same rows the
+     * Recent talks list marks "New" (not heard, not "busy"; missed while on Do not disturb or off shift count too) -
+     * and the newest of them for "▶ Play latest". Only this agency's talks (the person's active agency).
+     */
+    /**
+     * THE LAST CHAT (2026-11-28, Anthony: "when using walkie talkie and selected a user to chat keep that as the last chat
+     * to make it easier to continue talking"): the person or channel last talked to or picked, per agency
+     * (walkie_prefs.last_targets). Saved on every talk (start) and every pick (PUT walkie/prefs {last}); handed back by
+     * me() only while still reachable - someone who left or moved out of reach falls back to the default channel.
+     */
+    /** "Walkie vibration" on? (walkie_prefs.vibrate, on unless turned off; 2026-11-28) */
+    private static function vibrate(int $uid): bool
+    {
+        $v = DB::table('walkie_prefs')->where('user_id', $uid)->value('vibrate');
+
+        return $v === null ? true : (bool) $v;
+    }
+
+    private static function lastFor($p, int $aid, array $channels, array $people): ?string
+    {
+        $all = $p && ! empty($p->last_targets) ? (json_decode((string) $p->last_targets, true) ?: []) : [];
+        $k = (string) ($all[(string) $aid] ?? '');
+        if ($k === '') return null;
+        foreach ($channels as $c) if ($c['key'] === $k) return $c['can_talk'] && ! $c['emergency'] ? $k : null;
+        foreach ($people as $x) if ($x['key'] === $k) return $k;
+
+        return null;
+    }
+
+    private static function setLast(int $me, int $aid, string $key): void
+    {
+        $p = DB::table('walkie_prefs')->where('user_id', $me)->first();
+        $all = $p && ! empty($p->last_targets) ? (json_decode((string) $p->last_targets, true) ?: []) : [];
+        if (($all[(string) $aid] ?? null) === $key) return;
+        $all[(string) $aid] = $key;
+        $set = ['last_targets' => json_encode($all), 'updated_at' => now()];
+        if (! $p) $set['created_at'] = now();
+        DB::table('walkie_prefs')->updateOrInsert(['user_id' => $me], $set);
+    }
+
+    public static function unplayed(int $aid, int $me): array
+    {
+        $q = DB::table('walkie_recipients as r')->join('walkie_transmissions as t', 't.id', '=', 'r.transmission_id')
+            ->where('r.user_id', $me)->where('t.agency_id', $aid)->where('t.status', 'done')->where('t.speaker_user_id', '<>', $me)
+            ->whereNotIn('r.status', ['heard', 'busy']);
+        $n = (clone $q)->count();
+        $t = $n ? $q->orderByDesc('t.started_at')->orderByDesc('t.id')->first(['t.id', 't.speaker_user_id', 't.to_user_id', 't.channel', 't.channel_label', 't.emergency', 't.duration_ms', 't.started_at']) : null;
+
+        return ['unplayed' => $n, 'latest' => $t ? [
+            'id' => (int) $t->id, 'from' => Walkie::firstName((int) $t->speaker_user_id),
+            'label' => $t->to_user_id ? 'Direct' : (string) $t->channel_label, 'back' => Walkie::dmKey($me, (int) $t->speaker_user_id),
+            'emergency' => (bool) $t->emergency, 'seconds' => round((int) $t->duration_ms / 1000, 1),
+            'ago_s' => max(0, now()->getTimestamp() - \Carbon\Carbon::parse((string) $t->started_at, config('app.timezone'))->getTimestamp()),
+        ] : null];
     }
 
     /** POST walkie/talk {channel} - take the floor and start a transmission. 409 when someone else is talking. */
@@ -158,6 +216,7 @@ final class WalkieController extends Controller
         if (! $txId) {
             return response()->json(['message' => Walkie::firstName((int) $busy) . ' is talking. Try again in a moment.', 'talking' => Walkie::firstName((int) $busy)], 409);
         }
+        if (! $emergency) rescue(fn () => self::setLast($me, $aid, $key), null, false);
 
         // Who hears it: the channel's people, less Do not disturb (and, when the agency chose it, people not clocked in).
         // The emergency channel always plays.
@@ -290,7 +349,7 @@ final class WalkieController extends Controller
             ->where('t.speaker_user_id', $me)->where('t.agency_id', $aid)->where('r.status', 'busy')->where('r.replied_at', '>=', now()->subMinutes(2))
             ->get(['r.user_id', 'r.replied_at', 't.id'])->map(fn ($r) => ['tx' => (int) $r->id, 'from' => Walkie::firstName((int) $r->user_id), 'at' => self::local($r->replied_at, $aid)])->values()->all();
 
-        return response()->json(['live' => array_values(array_filter(self::liveFor($me), fn ($x) => true)), 'replies' => $replies]);
+        return response()->json(['live' => array_values(array_filter(self::liveFor($me), fn ($x) => true)), 'replies' => $replies] + self::unplayed($aid, $me));
     }
 
     /** POST walkie/tx/{id}/heard {busy} - played it (or: "Busy, can't talk"). */
@@ -405,16 +464,33 @@ final class WalkieController extends Controller
             Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.dnd', 'entity_type' => 'user', 'entity_id' => $me,
                 'payload' => ['do_not_disturb' => $on, 'until' => $until ? (string) $until : null]]);
         }
+        if ($request->has('vibrate')) {   // "Walkie vibration" (2026-11-28)
+            $set['vibrate'] = $request->boolean('vibrate');
+            Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.vibrate', 'entity_type' => 'user', 'entity_id' => $me,
+                'payload' => ['walkie_vibrate' => $set['vibrate']]]);
+        }
         if ($request->has('sounds')) {
             $set['sounds'] = $request->boolean('sounds');
             Audit::write(['user_id' => $me, 'agency_id' => $aid, 'action' => 'walkie.sounds', 'entity_type' => 'user', 'entity_id' => $me,
                 'payload' => ['walkie_sounds' => $set['sounds']]]);
         }
-        if (! DB::table('walkie_prefs')->where('user_id', $me)->exists()) $set['created_at'] = now();
-        DB::table('walkie_prefs')->updateOrInsert(['user_id' => $me], $set);
+        $last = null;
+        if ($request->has('last')) {
+            $k = (string) $request->input('last', '');
+            [, , $who] = $this->ctx($request);
+            if (($o = Walkie::dmOther($k, $me)) !== null) $ok = in_array($o, Walkie::reach($aid, $me, $who), true);
+            else { $ch = Walkie::channels($aid, $me, $who)[$k] ?? null; $ok = $ch && $ch['can_talk'] && ! $ch['emergency']; }
+            abort_unless($ok, 422, 'You cannot talk to them from here.');
+            $last = $k;
+        }
+        if (count($set) > 1) {
+            if (! DB::table('walkie_prefs')->where('user_id', $me)->exists()) $set['created_at'] = now();
+            DB::table('walkie_prefs')->updateOrInsert(['user_id' => $me], $set);
+        }
+        if ($last !== null) self::setLast($me, $aid, $last);
         $p = DB::table('walkie_prefs')->where('user_id', $me)->first();
 
-        return response()->json(['dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd && $p->dnd_until ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me)]);
+        return response()->json(['last' => $last, 'dnd' => Walkie::dnd($me), 'dnd_until' => $p && $p->dnd && $p->dnd_until ? self::local($p->dnd_until, $aid) : null, 'sounds' => Walkie::sounds($me), 'vibrate' => self::vibrate($me)]);
     }
 
     /** PUT walkie/settings - agency admins: on/off, listening, retention, emergency channel. */
@@ -474,7 +550,7 @@ final class WalkieController extends Controller
     {
         $d = self::deviceUser($request);
 
-        return response()->json(['live' => self::liveFor((int) $d->user_id), 'dnd' => Walkie::dnd((int) $d->user_id), 'sounds' => Walkie::sounds((int) $d->user_id)]);
+        return response()->json(['live' => self::liveFor((int) $d->user_id), 'dnd' => Walkie::dnd((int) $d->user_id), 'sounds' => Walkie::sounds((int) $d->user_id), 'vibrate' => self::vibrate((int) $d->user_id)]);
     }
 
     /** POST walkie/device/heard {tx, busy} (header X-KT-Walkie) */

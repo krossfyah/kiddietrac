@@ -21,7 +21,7 @@
      alone. Everything returns the moment the dialog closes. (Anthony, 2026-09-07) */
   var DUCK_CSS = 'body.kt-dialog-open #kt-mobilenav,'
     + 'body.kt-dialog-open #kt-gear,'
-    + 'body.kt-dialog-open #kt-hrq-fab,'
+    + 'body.kt-dialog-open #kt-hrq-fab,body.kt-dialog-open #kt-wtq-fab,'
     + 'body.kt-dialog-open #kt-agency-switcher{z-index:500 !important;}'
     // The dial pad's floating 📞 sat ON TOP of every popup (z 9300). Gone while one is open (2026-10-23).
     + 'body.kt-dialog-open #kt-dp-fab{display:none !important;}'
@@ -327,10 +327,10 @@
          gear hides it too (2026-11-27, Anthony's phone: the "+" stayed over a team chat thread's "+ Add people" after
          the gear had gone - the gear is hidden here by CSS the moment the thread draws, and kt-hr-quick only looked
          again on a hash change). */
-      '@media(min-width:' + GEARBP + 'px){#kt-gear,#kt-hrq-fab{display:none !important;}}',
-      'body.kt-mnav-open #kt-gear,body.kt-mnav-open #kt-hrq-fab{display:none;}',
+      '@media(min-width:' + GEARBP + 'px){#kt-gear,#kt-hrq-fab,#kt-wtq-fab{display:none !important;}}',
+      'body.kt-mnav-open #kt-gear,body.kt-mnav-open #kt-hrq-fab,body.kt-mnav-open #kt-wtq-fab{display:none;}',
       // Hide the gear while a full-screen chat thread is open (it would float over the header).
-      'body:has(.kt-thread-compose) #kt-gear,body:has(.kt-thread-compose) #kt-hrq-fab{display:none !important;}',
+      'body:has(.kt-thread-compose) #kt-gear,body:has(.kt-thread-compose) #kt-hrq-fab,body:has(.kt-thread-compose) #kt-wtq-fab{display:none !important;}',
       // The 📞 docked beside the gear (body.kt-dp-docked) is on that row too: it floated over a parent's chat thread.
       'body.kt-dp-docked:has(.kt-thread-compose) #kt-dp-fab,body.kt-dp-docked.kt-mnav-open #kt-dp-fab{display:none !important;}'
     ].join('');
@@ -409,6 +409,18 @@
     }
     dockDialFab(want);
     dockHrq(want);
+    dockWtq(want);
+  }
+
+  /* THE 📻 BESIDE THEM (2026-11-28, Anthony: "add walkie-talkie to the top bar with a quick action"): kt-walkie-quick.js
+     adds #kt-wtq-fab for staff whose walkie is on. Same row, next one left: gear, 📞 (when docked), HR "＋", then 📻. */
+  function wtqOn() { return !!document.getElementById('kt-wtq-fab'); }
+  function dockWtq(top) {
+    var f = document.getElementById('kt-wtq-fab');
+    if (!f) return;
+    var right = (60 + (dialFabOn() && document.body.classList.contains('kt-dp-docked') ? 48 : 0) + (hrqOn() ? 48 : 0)) + 'px';
+    if (f.style.getPropertyValue('top') !== top || f.style.getPropertyPriority('top') !== 'important') f.style.setProperty('top', top, 'important');
+    if (f.style.getPropertyValue('right') !== right) f.style.setProperty('right', right, 'important');
   }
 
   /* THE HR "＋" BESIDE THE GEAR (HR Phase 4 batch 10, 2026-11-27): kt-hr-quick.js adds #kt-hrq-fab (quick requests:
@@ -448,7 +460,7 @@
        (2026-10-29). The eyebrow clears nothing. Its row is tighter (kt-phone-compact.css trims
        the logo's side padding), so the gap it needs is just the button and a breath. */
     var eyebrow = !!document.getElementById('kt-pc-navgreet');
-    var pad = (((document.getElementById('kt-eduqr') || dialFabOn()) ? (eyebrow ? 94 : 106) : (eyebrow ? 46 : 58)) + (hrqOn() ? 48 : 0)) + 'px';
+    var pad = (((document.getElementById('kt-eduqr') || dialFabOn()) ? (eyebrow ? 94 : 106) : (eyebrow ? 46 : 58)) + (hrqOn() ? 48 : 0) + (wtqOn() ? 48 : 0)) + 'px';
     if (nu.style.paddingRight !== pad) nu.style.setProperty('padding-right', pad, 'important');
   }
 

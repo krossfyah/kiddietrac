@@ -367,6 +367,13 @@
     }
     main.insertAdjacentHTML('beforeend', html);
 
+    /* 📻 Walkie-talkie, pinned first in Quick access on phones (2026-11-28; kt-walkie-quick.js pinTile decides who). */
+    var _qg = main.querySelector('.kt-quickaccess > .kt-tile-grid');
+    if (_qg) {
+      _qg.setAttribute('data-wtq-pin', '1');
+      if (KT.walkieQuick && KT.walkieQuick.pinTile) { try { KT.walkieQuick.pinTile(_qg); } catch (e) {} }
+    }
+
     // Sign-out (parents have no bottom-bar Menu, so the launcher carries it).
     var signout = main.querySelector('#kt-home-signout');
     if (signout) signout.addEventListener('click', signOutNow);

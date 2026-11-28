@@ -5,11 +5,12 @@
    • Two kinds, chosen per note: "Just me" (private: only the person who wrote it, ever - super admins included) and
      "Agency" (every staff member who can see it may read and edit it; agency-wide or one centre). Server rules:
      App\Support\QuickNotes. Parents never have a notepad.
-   • Where it shows: the 📃 top-bar button (admins, directors, super admins) opens a drawer (a bottom sheet on a
-     phone); the Notes screen (#notes) in every staff role's menu (educators and home visitors: their top nav); the
-     "Quick notes" dashboard widget; a Notes card on child, family and staff records; reminders in the right panel.
+   • Where it shows: the right panel's Quick notes section (admins, directors, super admins on a computer, 2026-11-28 -
+     it replaced the 📃 top-bar button; KT.quickNotes.panel); the drawer (a bottom sheet on a phone) wherever there is
+     no right panel; the Notes screen (#notes) in every staff role's menu (educators and home visitors: their top nav);
+     the "Quick notes" dashboard widget; a Notes card on child, family and staff records; reminders in the right panel.
    • Quick add: type and press Enter (Shift+Enter = new line). Pin, colour, search, edit, history, delete per note.
-   KT.quickNotes = { toggle, open(id), openDrawer, closeDrawer, widget(), recordCard(type, id), render(main) }
+   KT.quickNotes = { toggle, open(id), openDrawer, closeDrawer, panel(host), widget(), recordCard(type, id), render(main) }
    Every change fires window 'kt:quick-notes-changed' so the right panel and the other open views refresh.
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
@@ -150,7 +151,12 @@
       + '.qn-panel{background:var(--qn-card);border:1px solid var(--qn-line);border-radius:12px;padding:12px 14px;margin-top:14px;}'
       /* record card */
       + '.qn-rec{border:1px solid var(--qn-line);border-radius:12px;padding:10px 12px;margin-top:12px;background:var(--qn-card);}'
-      + '.qn-rec-h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--qn-sub);}';
+      + '.qn-rec-h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--qn-sub);}'
+      /* the right panel's narrow column (300px): who-sees-it on its own row, Save always shown, no keyboard hint */
+      + '.qn-narrow .qn-hint{display:none;}.qn-narrow .qn-save{display:inline-block;}'
+      + '.qn-narrow .qn-add-row .qn-seg{display:flex;flex:1 1 100%;}.qn-narrow .qn-add-row .qn-seg button{flex:1 1 0;}'
+      + '.qn-narrow .qn-add-row select.qn-in{flex:1 1 100%;max-width:none!important;}'
+      + '.qn-pfoot{display:flex;justify-content:flex-end;margin-top:10px;}';
     document.head.appendChild(s);
   }
   /* A note's title for every list: its own title, or else the first line of its words with markdown marks taken
@@ -240,7 +246,7 @@
     css();
     opts = opts || {};
     var st = { tab: opts.tab || 'mine', q: '', notes: [], colour: '', vis: opts.link ? 'agency' : null, centre: '', pics: [] };
-    var root = document.createElement('div'); root.className = 'qn-root' + (opts.grid ? ' qn-grid' : '');
+    var root = document.createElement('div'); root.className = 'qn-root' + (opts.grid ? ' qn-grid' : '') + (opts.narrow ? ' qn-narrow' : '');
     host.innerHTML = ''; host.appendChild(root);
     var timer = null, seq = 0;
 
@@ -717,7 +723,23 @@
     setPressed(false);
   }
   function setPressed(on) { var b = document.getElementById('kt-tb-notes'); if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
-  function toggle() { if (drawer) closeDrawer(); else openDrawer(); }
+  /* Quick notes from a shortcut: the right panel's Quick notes section where that panel is (a computer, admins,
+     directors, super admins), the drawer everywhere else (phones, educators, home visitors, narrow windows). */
+  function toggle() {
+    if (drawer) { closeDrawer(); return; }
+    try { if (KT.rightPanel && KT.rightPanel.openNotes && KT.rightPanel.openNotes(true, true)) return; } catch (e) {}
+    openDrawer();
+  }
+
+  /* ── the right panel's Quick notes section (kt-right-panel.js, 2026-11-28) ─────────────────────────────── */
+  function panel(host) {
+    css();
+    mountList(host, { tab: 'mine', narrow: true });
+    var foot = document.createElement('div'); foot.className = 'qn-pfoot';
+    foot.innerHTML = '<button type="button" class="qn-b" data-qn-screen>' + esc(T('Open Notes')) + ' →</button>';
+    foot.firstChild.addEventListener('click', function () { location.hash = '#notes'; });
+    host.appendChild(foot);
+  }
 
   /* Open one note (from the right panel's calendar or a link): fetch it, then the editor. */
   function open(id, o) {
@@ -759,7 +781,7 @@
     return wrap;
   }
 
-  KT.quickNotes = { titleOf: titleOf, toggle: toggle, open: open, openDrawer: openDrawer, closeDrawer: closeDrawer, widget: widget, recordCard: recordCard, render: render, edit: openEditor };
+  KT.quickNotes = { titleOf: titleOf, toggle: toggle, open: open, openDrawer: openDrawer, closeDrawer: closeDrawer, panel: panel, widget: widget, recordCard: recordCard, render: render, edit: openEditor };
 
   function registerScreens() {
     if (!KT.Shell || !KT.Shell.registerScreen) return false;
