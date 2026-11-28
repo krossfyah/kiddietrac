@@ -232,6 +232,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/maintenance/status', [\App\Http\Controllers\Api\MaintenanceController::class, 'show']);
     // Public: the Google Play build numbers the app compares itself with (update prompts, 2026-10-30).
     Route::get('/app/versions', [\App\Http\Controllers\Api\AppVersionController::class, 'show'])->middleware('throttle:120,1,r-app-versions');
+    // Public: the oldest Android/iPhone build still allowed - the app asks before it loads the portal (forced update gate, 2026-11-27).
+    Route::get('/app/min-version', [\App\Http\Controllers\Api\AppVersionController::class, 'minVersion'])->middleware('throttle:240,1,r-app-min-version');
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1,r-auth-register');
 /* PASSKEYS — public half. Sign-in names no account: the credential does, which is what
    eight accounts sharing three email addresses actually needs. Throttled like the other

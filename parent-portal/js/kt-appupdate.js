@@ -66,6 +66,16 @@
     } catch (e) { return Promise.resolve(_ktDist = 'sideload'); }
   }
 
+  var _ktGate = null;
+  function nativeGate() {
+    if (_ktGate !== null) return Promise.resolve(_ktGate);
+    try {
+      var bio = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KtBio;
+      if (!bio || typeof bio.updateGate !== 'function') return Promise.resolve(_ktGate = false);
+      return bio.updateGate().then(function (r) { return (_ktGate = !!(r && r.native)); }, function () { return (_ktGate = false); });
+    } catch (e) { return Promise.resolve(_ktGate = false); }
+  }
+
   /* GOOGLE PLAY UPDATES (2026-10-30, Anthony: "if there is a new google play release can the app notify the user or
      force the user to download the new release?" → "Both, staged"). Platform → Maintenance → Mobile app updates sets
      the latest Play build and the oldest build still allowed (GET /app/versions, public):
@@ -156,14 +166,16 @@
       ov.id = 'kt-update-required';
       ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'kt-ur-title');
       ov.setAttribute('data-kt-no-close', '1'); ov.setAttribute('data-kt-keep-open', '1');
-      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(8,17,33,.62);display:flex;align-items:center;justify-content:center;'
+      /* NOTHING BEHIND IT (2026-11-27, Anthony: "the app should not show anything in the background and force user to
+         update"): a solid navy screen, not a dimmed view of the app. */
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:linear-gradient(135deg,#081C41 0%,#1B3A5C 55%,#1F5F6B 100%);display:flex;align-items:center;justify-content:center;'
         + 'padding:calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 20px) 20px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 20px);'
         + 'font-family:system-ui,-apple-system,sans-serif;touch-action:none;overscroll-behavior:contain;animation:kt-ur-fade .2s ease both;';
       var st = document.createElement('style'); st.id = 'kt-ur-css';
       st.textContent = '@keyframes kt-ur-fade{from{opacity:0}to{opacity:1}}@keyframes kt-ur-pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}'
         + 'html.kt-ur-on,html.kt-ur-on body{overflow:hidden!important}'
         // The portal's phone popup rules top-anchor dialogs and theme buttons; this card stays centred and teal.
-        + 'html body #kt-update-required{display:flex!important;align-items:center!important;justify-content:center!important;background:rgba(8,17,33,.62)!important;'
+        + 'html body #kt-update-required{display:flex!important;align-items:center!important;justify-content:center!important;background:linear-gradient(135deg,#081C41 0%,#1B3A5C 55%,#1F5F6B 100%)!important;'
         + 'position:fixed!important;inset:0!important;z-index:2147483646!important;opacity:1!important;visibility:visible!important;transform:none!important}'
         + 'html body #kt-update-required #kt-ur-card{margin:auto!important;position:relative!important;top:auto!important;max-height:none!important}'
         + 'html body #kt-update-required #kt-ur-go{background:#0E7C90!important;color:#fff!important;border:0!important;height:44px!important;width:100%!important;border-radius:12px!important;font-size:15px!important;font-weight:800!important}'
@@ -297,8 +309,13 @@
        latest → the "Update available" banner (they cannot tell whether Play has really released it). */
     var AU = auPlugin(), pi = AU ? await playInfo() : null;
     var playKnows = !!(pi && typeof pi.updateAvailability === 'number');
-    if (playKnows) {
-      if (pi.updateAvailability !== 2 && pi.updateAvailability !== 3) { noUpdate(); return; }
+    /* PLAY'S "NO UPDATE" IS NOT THE LAST WORD (2026-11-27, Anthony: "the kiddietrac app is not detecting the new updated
+       app in the google playstore and forcing the user to download this"). Up to now Play's "no update" (1) ended the check
+       here, so the minimum build set in Platform › Maintenance was never looked at. Play caches that answer for hours,
+       a staged rollout or another track can skip the phone, and Play answers "no update" for an install it does not own -
+       so a release could be live and nobody was ever asked to take it. Now only Play's "yes" short-cuts; anything else
+       falls through to the server numbers below (below the minimum = the forced card, which opens the store page). */
+    if (playKnows && (pi.updateAvailability === 2 || pi.updateAvailability === 3)) {
       var avail = parseInt(pi.availableVersionCode, 10) || 0;
       var f = { pkg: pkg, message: (forced && forced.message) || '', installedLabel: cur.label, availableLabel: avail > installed ? 'Build ' + avail : 'Newer version' };
       forceScreen(f);   // straight away; the agency's wording follows when the server answers
@@ -403,6 +420,9 @@
       return;
     }
     if ((await appDist()) === 'play') {            // Google Play: the Play build numbers, not the sideload APK
+      /* THE APP DECIDES (3.13.3 / 79+, KtUpdateGate): it checks Google Play and GET /app/min-version before the portal
+         loads and shows its own full-screen "Update required". No second card from the page. */
+      if (await nativeGate()) { noUpdate(); return; }
       var pinfo = await appInfo();
       if (pinfo) { if (!forced) showRemembered(pinfo); await checkPlay(pinfo); }
       return;

@@ -161,6 +161,41 @@ class AppVersionController extends Controller
         return response()->json(['play' => $play, 'ios' => $ios])->header('Cache-Control', 'no-store, max-age=0');
     }
 
+    /* FORCED UPDATE, NATIVE GATE (2026-11-27, Anthony: "the kiddietrac app is not detecting the new updated app in the
+       google playstore and forcing the user to download this, also if it does the app should not show anything in the
+       background and force user to update"). From Android 3.13.3 (79) the app itself asks this before it loads the
+       portal: installed build below min_version_code → a full-screen "Update required" (Google Play's own update when
+       Play offers it, else the store page). It is asked on every launch and every return to the app, so it reads only
+       the stored settings: no Google Play / App Store lookups that could make a launch wait (GET /app/versions does
+       those). Public, no sign-in, no agency. The app lets people in when this does not answer (offline, server down).
+       min_version_code never exceeds latest_version_code (save() refuses that), so nobody is blocked waiting for a
+       release that is not out. */
+    /** GET /app/min-version?platform=android|ios (public, cached 60 s). */
+    public function minVersion(Request $r): JsonResponse
+    {
+        $platform = strtolower((string) $r->query('platform', 'android')) === 'ios' ? 'ios' : 'android';
+        if ($platform === 'ios') {
+            $out = [
+                'platform' => 'ios',
+                'min_version' => (string) PlatformSettings::get('app.ios.min_version', ''),
+                'latest_version' => (string) PlatformSettings::get('app.ios.latest_version', ''),
+                'message' => (string) PlatformSettings::get('app.ios.message', ''),
+            ];
+        } else {
+            $d = self::data();
+            $out = [
+                'platform' => 'android',
+                'package' => $d['package'],
+                'min_version_code' => (int) $d['min_build'],
+                'latest_version_code' => (int) $d['latest_build'],
+                'latest_version_name' => $d['version_name'],
+                'message' => $d['message'],
+                'store_url' => 'https://play.google.com/store/apps/details?id=' . $d['package'],
+            ];
+        }
+        return response()->json($out)->header('Cache-Control', 'public, max-age=60');
+    }
+
     /** GET /platform/app-versions (asks the App Store afresh, so the admin sees a release as soon as Apple lists it). */
     public function settings(): JsonResponse
     {

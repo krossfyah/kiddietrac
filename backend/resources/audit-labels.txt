@@ -1177,6 +1177,7 @@ post sales/prospects/parse | Read a list to import into cold reach (preview only
 post sales/prospects/parse-file | Read a spreadsheet to import into cold reach (preview only)
 post sales/prospects-settings/test | Sent a test of a cold-reach email
 put platform/app-versions | Changed the mobile app update settings (Google Play build / iPhone version)
+get app/min-version | Checked the oldest app version still allowed (app update gate)
 post marketing-site/demo-session | Started a live demo from the website (fictional demo account)
 post demo/pulse | A fictional demo notification arrived in the website's demo phone
 patch sales/prospect-batches/{id} | Renamed a cold-reach batch

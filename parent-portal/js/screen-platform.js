@@ -1609,7 +1609,8 @@
       var p = d.play || {};
       card.innerHTML = '<div style="font-weight:700;color:#0F172A;margin-bottom:4px;">📱 Mobile app updates (Google Play)</div>'
         + '<p style="color:#64748B;font-size:12.5px;margin:0 0 10px;">Live on Google Play: <b style="color:#0F172A;">' + esc(p.version_name || '—') + ' (build ' + esc(p.latest_build) + ')</b>. '
-        + 'Apps older than the <b>latest</b> build see “Update available”; older than the <b>minimum</b> build see a blocking “Update required”. Raise “Latest” after each Play release goes live.</p>'
+        + 'Apps older than the <b>latest</b> build see “Update available”; older than the <b>minimum</b> build get a full-screen “Update required” and cannot be used until they update (from build 79 the app checks before it opens; Google Play’s own update screen when Play offers it). '
+        + 'Apps also force any update Google Play offers them. After each Play release is live for everyone (100% rollout), raise “Latest” and, to force it, “Minimum” to that build.</p>'
         + (p.store_version && p.store_version !== p.version_name
           ? '<p style="margin:0 0 10px;padding:8px 11px;border-radius:9px;background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;font-size:12.5px;font-weight:600;">⚠️ Google Play now lists <b>' + esc(p.store_version) + '</b>. Set Latest build to that release\'s build number and Version name to ' + esc(p.store_version) + ', then Save.</p>'
           : '')
