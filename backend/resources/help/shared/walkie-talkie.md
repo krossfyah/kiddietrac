@@ -52,8 +52,8 @@ Admins reach the whole agency. Directors and educators reach the staff of their 
 
 ## Hearing and answering a talk
 
-- **Android app:** your phone listens all the time, even with the screen off, and plays the talk out loud. The
-  notification bar shows "Walkie-talkie on".
+- **Android app:** your phone listens all the time, even with the screen off, and plays the talk out loud. It uses the app's
+  usual "KiddieTrac is ready" notification (app 3.13.2 and later).
 - **iPhone:** a notification says "Walkie-talkie from *name*": tap it to listen.
 - **Browser:** you hear talks only while a KiddieTrac tab is open. If your browser blocks sound, tap **▶ Listen** on
   the card.

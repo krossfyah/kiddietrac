@@ -53,7 +53,7 @@ centres et leur direction.
 ## Entendre une prise de parole et y répondre
 
 - **Appli Android :** votre téléphone écoute en tout temps, même écran éteint, et joue la prise de parole à voix
-  haute. La barre de notifications affiche « Walkie-talkie on ».
+  haute. Il utilise la notification habituelle de l’appli, « KiddieTrac is ready » (appli 3.13.2 ou plus récente).
 - **iPhone :** une notification indique « Walkie-talkie from *nom* » : touchez-la pour écouter.
 - **Navigateur :** vous entendez les prises de parole seulement quand un onglet KiddieTrac est ouvert. Si le navigateur
   bloque le son, touchez **▶ Écouter** sur la carte.

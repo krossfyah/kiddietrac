@@ -52,7 +52,7 @@ a sus líderes.
 ## Oír y responder
 
 - **App de Android:** su teléfono escucha todo el tiempo, incluso con la pantalla apagada, y reproduce la intervención
-  en voz alta. La barra de notificaciones muestra «Walkie-talkie on».
+  en voz alta. Usa la notificación habitual de la app, «KiddieTrac is ready» (app 3.13.2 o posterior).
 - **iPhone:** una notificación dice «Walkie-talkie from *nombre*»: tóquela para escuchar.
 - **Navegador:** solo oye las intervenciones mientras haya una pestaña de KiddieTrac abierta. Si el navegador bloquea
   el sonido, toque **▶ Escuchar** en la tarjeta.
