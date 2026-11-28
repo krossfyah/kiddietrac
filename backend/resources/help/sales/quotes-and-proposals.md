@@ -2,7 +2,7 @@
 title: Building quotes and proposals
 category: Proposals
 order: 1
-screens: sales-quotes
+screens: ~sales-quotes
 ---
 
 # Building quotes and proposals

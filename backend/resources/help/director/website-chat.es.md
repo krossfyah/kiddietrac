@@ -1,69 +1,80 @@
 ---
 title: Chat del sitio web
-category: Sales
-order: 60
-roles: agency_admin, platform_admin
 ---
 # Chat del sitio web
 
-> **Nota:** Esto es para la plataforma KiddieTrac y el equipo de ventas. Los administradores de agencia no tienen esta pantalla.
+Los visitantes de **kiddietrac.com** pueden chatear con nosotros desde la burbuja de la esquina de cada página.
+**Sales › Website chat** es donde el equipo les responde, en vivo. Cuando nadie está disponible responde **Maya**, la
+asistente virtual, y siempre dice que es la asistente virtual, nunca una persona. Abra esta pantalla siempre que esté
+de turno para el sitio web.
 
-Los visitantes de **kiddietrac.com** pueden chatear con nosotros desde la burbuja situada en la esquina de cada
-página. **Ventas → Chat del sitio web** es donde el equipo les responde, en vivo. Cuando nadie está
-disponible, **Maya**, nuestra asistente virtual, responde, y siempre aclara que es la
-asistente virtual, nunca una persona.
+[[open: #sales-webchat | Abrir el chat del sitio web]]
 
-[[open: #sales-webchat | Open Website chat]]
+> ℹ️ Esta pantalla es para la plataforma KiddieTrac y el equipo de ventas. Los administradores de agencia no la tienen.
 
-## Conectarse
+## Ponerse en línea
 
-Marque **Disponible para el chat del sitio web** en la parte superior de la pantalla. Mientras esté marcada y el
-portal esté abierto, cuenta como conectado y a los visitantes se les informa de que hay una persona presente.
-Si cierra el portal o la desmarca, pasa a estar desconectado en un par de minutos.
+1. Abra **Sales › Website chat**.
+2. Marque **Disponible para el chat del sitio web** en la parte superior de la pantalla.
+3. Mantenga el portal abierto. Mientras la casilla esté marcada y el portal abierto, usted cuenta como en línea y a los visitantes se les dice que hay una persona.
+4. Desmárquela (o cierre el portal) cuando termine. Queda fuera de línea en un par de minutos.
 
-[[show: #sales-webchat @ Available for website chat | Show me the availability switch]]
+[[show: #sales-webchat @ Available for website chat | Muéstreme la casilla de disponibilidad]]
 
-Cuando un visitante escribe, el elemento **Chat del sitio web** del menú muestra una insignia, y el portal
-muestra una alerta con un sonido, incluso si está en otra pantalla.
+Cuando un visitante escribe, **Chat del sitio web** en el menú muestra una insignia y el portal muestra un aviso con un
+sonido, incluso en otra pantalla. El aviso dice «Nobody online — Maya is answering» cuando no hay nadie disponible.
 
 ## Responder a un visitante
 
-- [ ] Elija la conversación en la lista **Abierto** de la izquierda.
-- [ ] Pulse **Unirse**: el chat ahora es suyo y Maya deja de responder.
-- [ ] Escriba su respuesta y pulse **Enviar**. El visitante ve que usted está escribiendo.
-- [ ] Si es un cliente potencial real, pulse **🎯 Añadir como cliente potencial** (o **🎯 Abrir cliente potencial** si ya lo es). La transcripción se adjunta al cliente potencial.
-- [ ] Pulse **Cerrar** cuando la conversación haya terminado.
+1. Elija la conversación en la lista de la izquierda (**Abierto** se muestra primero).
+2. Pulse **Unirse**. El chat es suyo y Maya deja de responder. Si un compañero ya lo tiene, el botón dice **Tomar el control**.
+3. Escriba en el cuadro de respuesta y pulse **Enviar** (o **Enter**). El visitante ve que usted está escribiendo. Escribir una respuesta también le quita el chat a Maya.
+4. Si el visitante dejó de escribir, pulse **👋 Recordar** («They will see it in the chat on the website.»).
+5. Si es un prospecto real, pulse **🎯 Añadir como cliente potencial** (o **🎯 Abrir cliente potencial** si ya lo es). «The transcript is on the lead as a note.»
+6. Pulse **Cerrar chat** cuando termine la conversación.
 
-Simplemente escribir una respuesta también le quita el chat a Maya. Si un compañero ya lo tiene, el
-botón dice **Tomar el control**.
+## Ausentarse
 
-## Maya le cubre
+1. Pulse **Devolver a Maya** antes de dejar un chat que tiene usted.
+2. Maya retoma la conversación, incluido lo que el visitante preguntó y usted aún no había respondido.
 
-- Cuando **nadie está conectado**, Maya responde de inmediato.
-- Cuando hay personas conectadas pero **nadie responde en unos 45 segundos**, Maya responde para que
-  el visitante no se quede esperando.
-- **Nunca mientras una persona tenga el chat.** Pulse **Devolver a Maya** cuando tenga que
-  ausentarse; ella retoma la conversación, incluido lo que el visitante haya preguntado y
-  usted no haya respondido todavía.
+Maya también lo cubre: cuando **no hay nadie en línea** responde de inmediato, y cuando hay personas en línea pero nadie
+contesta en unos 45 segundos, responde para que el visitante no se quede esperando. Nunca responde mientras una persona
+tiene el chat.
 
-## Qué le indica la lista
+## Lo que le dice la lista
 
-- **Quiere hablar con una persona**: el visitante pidió un humano.
-- **Maya está respondiendo**: nadie se ha unido todavía.
-- **En el sitio web ahora** / **Salió de la página**: indica si el visitante sigue ahí.
-- **Cerrado**: escribir en un chat cerrado lo reabre para el visitante si todavía está en
-  la página.
+- **Quiere hablar con una persona** — el visitante pidió hablar con una persona.
+- **With Maya** / **Maya está respondiendo** — nadie se ha unido todavía.
+- **En el sitio web ahora** / **Salió de la página** — si el visitante sigue ahí.
+- **Cerrado** — escribir aquí lo reabre si sigue en la página.
 
-Alterne entre **Abierto** y **Cerrado** en la parte superior derecha para encontrar conversaciones anteriores.
+Cambie entre **Abierto** y **Cerrado** arriba para encontrar conversaciones anteriores.
 
-## Transcripciones y alertas
+## Transcripciones y avisos
 
-Un visitante que llega cuando nadie está conectado genera una alerta push para el equipo. Un correo electrónico
-de «hay visitantes esperando» y las transcripciones finalizadas se envían a la dirección configurada en
-**Sitio web → Enviar transcripciones a** (un ajuste del administrador de la plataforma); si está vacío, las alertas son solo push.
+Un visitante que llega cuando no hay nadie en línea envía una alerta push al equipo. Un correo de «hay visitantes
+esperando» y las transcripciones terminadas van a la dirección que un administrador de plataforma configura en
+**Website › Chat transcripts to**; si está vacía, los avisos son solo push. Los superadministradores también ven los
+chats del sitio en **Message Centre › 🌐 Website**.
 
-## Preguntas
+## Quién puede hacer qué
 
-??? ¿El visitante sabe cuándo está hablando con Maya? | Sí. Maya siempre se presenta como la asistente virtual, y cuando se une una persona se anuncia en el chat.
-??? Me uní a un chat y tengo que irme. | Pulse Devolver a Maya. Ella toma el control y responde todo lo que quede sin responder.
-??? ¿Puedo atender un chat desde mi teléfono? | Sí. En un teléfono la conversación se abre a pantalla completa; use ‹ Chats para volver a la lista.
+| Rol | Puede |
+|---|---|
+| Representante de ventas | Ponerse en línea, unirse, responder, recordar, agregar prospectos y cerrar chats. |
+| Administrador de plataforma (superadministrador) | Lo mismo, más la pestaña **🌐 Sitio web** del Message Centre y la dirección de transcripciones. |
+
+## Preguntas frecuentes y cuando algo sale mal
+
+??? ¿Sabe el visitante cuándo habla con Maya? | Sí. Maya siempre se presenta como la asistente virtual, y la llegada de una persona se anuncia en el chat.
+??? Me uní a un chat y tengo que irme. | Pulse **Devolver a Maya**. Ella toma el relevo y responde lo que quede pendiente.
+??? «No open website chats. New ones appear here the moment a visitor writes.» | Nadie está chateando ahora. Mantenga la pantalla abierta: los chats nuevos aparecen con un sonido.
+??? «Could not join» | Puede que un compañero acabe de tomar el chat, o se cortó la conexión. Actualice la lista e inténtelo de nuevo.
+??? ¿Puedo atender un chat desde mi teléfono? | Sí. En un teléfono la conversación se abre a pantalla completa; use **Atrás** para volver a la lista.
+
+## Pantallas relacionadas
+
+[[open: #sales-leads | Prospectos]] [[open: #sales | Pipeline]] [[open: #sales-bookings | Reservas]]
+
+Vea también [[sales-pipeline]] y [[sales-email]].
