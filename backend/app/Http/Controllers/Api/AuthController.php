@@ -1687,7 +1687,8 @@ final class AuthController extends Controller
             /* A CUSTOM ROLE (2026-11-28): its name(s) and the permissions it turns off. Absent for built-in roles, whose
                payload is unchanged. The screens it hides are in hidden_screens above, so the menu, tiles, search and
                route guard follow it; the API refuses the same (EnforceCustomRole). */
-            ...($customRole !== null ? ['custom_role' => ['roles' => $customRole['roles'], 'refused' => $customRole['refused']]] : []),
+            ...($customRole !== null ? ['custom_role' => ['roles' => $customRole['roles'], 'refused' => $customRole['refused'],
+                'hidden_screens' => \App\Support\CustomRoles::hiddenScreens($customRole)]] : []),
             /* The fingerprint the plan fields above were computed from (App\Support\PlanStamp, 2026-11-26). GET /badges
                carries the current one; when they differ the open tab asks /auth/me again and adopts the new plan. */
             'plan_v' => rescue(fn () => \App\Support\PlanStamp::forAgency($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? [], (int) $user->id), null, false),

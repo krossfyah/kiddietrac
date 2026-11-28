@@ -3359,6 +3359,8 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'Account status': { fr: 'État du compte', es: 'Estado de la cuenta', hi: 'खाते की स्थिति' },
     'Screen not available': { fr: 'Écran non disponible', es: 'Pantalla no disponible', hi: 'स्क्रीन उपलब्ध नहीं' },
     'No screen registered for this role + page.': { fr: 'Aucun écran n’est prévu pour ce rôle et cette page.', es: 'No hay ninguna pantalla para este rol y esta página.', hi: 'इस भूमिका और पृष्ठ के लिए कोई स्क्रीन नहीं है।' },
+    'Your role doesn’t include this screen': { fr: 'Votre rôle ne comprend pas cet écran', es: 'Su rol no incluye esta pantalla', hi: 'आपकी भूमिका में यह स्क्रीन शामिल नहीं है' },
+    'Ask your agency admin if you need it.': { fr: 'Demandez à l’administrateur de votre agence si vous en avez besoin.', es: 'Pida al administrador de su agencia si lo necesita.', hi: 'ज़रूरत हो तो अपने एजेंसी एडमिन से पूछें।' },
     'Not included in this plan': { fr: 'Non inclus dans ce forfait', es: 'No incluido en este plan', hi: 'इस प्लान में शामिल नहीं' },
     'This account has no access yet': { fr: 'Ce compte n’a pas encore d’accès', es: 'Esta cuenta aún no tiene acceso', hi: 'इस खाते को अभी पहुँच नहीं है' },
     'Your account does not have a role assigned yet, so parts of the app are unavailable.': { fr: 'Aucun rôle n’est encore attribué à votre compte; certaines parties de l’application ne sont donc pas disponibles.', es: 'Su cuenta aún no tiene un rol asignado, por lo que partes de la aplicación no están disponibles.', hi: 'आपके खाते को अभी कोई भूमिका नहीं दी गई है, इसलिए ऐप के कुछ हिस्से उपलब्ध नहीं हैं।' },

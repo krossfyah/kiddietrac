@@ -3767,6 +3767,19 @@
         __ktDropSnapshot();
         return;
       }
+      /* A screen the person's CUSTOM ROLE turns off (2026-11-28, App\Support\CustomRoles) is not a plan matter: say so. */
+      if (_hidden.indexOf(hash) !== -1 && user && user.custom_role && Array.isArray(user.custom_role.hidden_screens)
+          && user.custom_role.hidden_screens.indexOf(hash) !== -1) {
+        ensureTopbar(hash);
+        main.appendChild(emptyState(
+          '🔒',
+          'Your role doesn’t include this screen',
+          'Ask your agency admin if you need it.'
+        ));
+        _ktReveal(true);
+        __ktDropSnapshot();
+        return;
+      }
       if (_hidden.indexOf(hash) !== -1) {
         ensureTopbar(hash);
         main.appendChild(emptyState(

@@ -1288,8 +1288,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord'])->middleware(KT_PROVIDER_ROLES);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
         // Tour emails to the family (2026-11-28): the optional thank-you after a completed tour (App\Support\TourNotice).
-        Route::get   ('/admin/tours/settings',      [\App\Http\Controllers\Api\CareController::class, 'tourSettings']);
-        Route::put   ('/admin/tours/settings',      [\App\Http\Controllers\Api\CareController::class, 'saveTourSettings']);
+        // Role middleware too (2026-11-28): directors read (the screen shows it read-only), only an agency admin saves.
+        Route::get   ('/admin/tours/settings',      [\App\Http\Controllers\Api\CareController::class, 'tourSettings'])->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::put   ('/admin/tours/settings',      [\App\Http\Controllers\Api\CareController::class, 'saveTourSettings'])->middleware('role:agency_admin,platform_admin');
         Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);
 
         // v22p34 — Marketing campaigns (directors + agency_admin + platform_admin).
