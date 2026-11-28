@@ -3,7 +3,6 @@ title: Your plan and add-ons — what's included and how to add more
 category: Administration
 order: 40
 roles: agency_admin, platform_admin
-screens: licences
 ---
 # Your plan and add-ons
 

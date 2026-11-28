@@ -1,60 +1,74 @@
 ---
-title: Factures de la plateforme (facturation des agences)
-category: Billing
-order: 90
-roles: agency_admin, platform_admin
+title: Comptabilité AR/AP (facturer les agences pour KiddieTrac)
 ---
-# Factures de la plateforme
+# Comptabilité AR/AP (facturer les agences pour KiddieTrac)
 
-**Revendeur → Factures.** C’est ce que les agences doivent à KiddieTrac pour la plateforme : le prix de chaque agence, les factures émises pour elle et si elles ont été payées. C’est distinct des factures que les agences envoient aux familles.
+**Platform › 🏦 Accounting AR/AP** est la comptabilité de KiddieTrac : les factures que les agences doivent pour la plateforme, les paiements faits, les frais et crédits supplémentaires, le forfait de facturation de chaque agence et les dépenses de KiddieTrac. C'est séparé des factures que les agences envoient aux familles. Seuls les super-administrateurs de la plateforme peuvent l'ouvrir.
 
-[[open: #sales-invoices | Ouvrir les factures de la plateforme]]
+[[open: #sales-invoices | Ouvrir la comptabilité AR/AP]]
 
-## Plans de facturation : ce que chaque agence paie
+Les onglets du haut sont **🧾 Invoices**, **💳 Payments**, **➕ Extra line items**, **🤝 Referral credits**, **🏷️ Billing plans**, **⚙️ Settings** et **📤 Expenses (AP)**.
 
-[[show: #sales-invoices @ Billing plans | Me montrer les Plans de facturation]]
+## Créer les factures dues
 
-**Plans de facturation** ouvre un tableau avec une ligne par agence :
+1. Ouvrez **🧾 Invoices**.
+2. Appuyez sur **Raise invoices due now**.
+3. Lisez l'aperçu : chaque agence qui sera facturée et le montant, et sous **Not due**, les agences laissées de côté et pourquoi.
+4. Appuyez sur **Raise invoices** pour les créer, ou sur **Cancel** pour arrêter. Rien n'est créé avant votre confirmation.
+5. Les nouvelles factures apparaissent sous **Open** comme brouillons. La prochaine date de facturation de chaque agence avance selon son intervalle.
 
-- **Prix**, **Devise** (CAD ou USD) et **Tous les** (la fréquence de facturation de l’agence).
-- **Taxe** : un taux et son nom, p. ex. 13 % TVH. Un taux supérieur à 0 doit avoir un nom, car une taxe sans nom s’imprimerait comme une simple ligne « Taxe ».
-- **Total** : le prix plus la taxe. Il se met à jour pendant la saisie, ce qui vous permet de voir la taxe avant d’enregistrer.
-- **Prochaine facture** : la date de la prochaine facturation de l’agence. **Une agence sans date de prochaine facture n’est pas en facturation récurrente** et n’est jamais facturée automatiquement. Utilisez ceci pour mettre une agence en pause sans perdre sa tarification.
-- **Entreprise…** : les renseignements de l’agence pour le bloc **Facturé à**, tels que la dénomination sociale, l’adresse, le numéro d’inscription aux taxes et le courriel de facturation. Tout champ laissé vide est omis de la facture.
+> ℹ️ Une agence sans prochaine date de facturation n'est pas en facturation récurrente et n'est jamais facturée automatiquement. Les renouvellements de licence sont facturés ici aussi.
 
-Cliquez sur **Enregistrer** sur la ligne. Le prix et les renseignements de l’entreprise sont enregistrés ensemble.
+## Faire une facture ponctuelle
 
-## Émettre des factures
-
-**Émettre les factures dues maintenant** facture chaque agence dont la date de prochaine facture est arrivée, et avance chaque date selon l’intervalle de facturation de l’agence. Un aperçu s’affiche d’abord, nommant chaque agence et chaque montant et listant celles qui ont été ignorées, avec la raison. Rien n’est créé tant que vous n’avez pas confirmé.
-
-Les factures sont émises comme **brouillons**.
+1. Appuyez sur **＋ New invoice**.
+2. Choisissez l'**Agency**, réglez la **Due date**, le **Tax %** et le **Tax name** (un taux au-dessus de 0 a besoin d'un nom, comme TVH).
+3. Ajoutez des lignes avec **＋ Add a line** : **Description**, **Qty**, **Price** et **Taxed**. Le sous-total, les taxes et le total se mettent à jour pendant que vous tapez.
+4. Ajoutez une **Note on the invoice (optional)** et appuyez sur **Save draft**. Un message indique **Draft … created**.
 
 ## Travailler avec une facture
 
-Des onglets en haut affichent **Ouvertes**, **Payées** et **Annulées**, avec les totaux pour chaque devise. Chaque ligne n’offre que ce qui s’applique à elle :
+Les onglets **Open**, **Paid** et **Voided** affichent chacun leur nombre, avec des tuiles facturé, perçu, à recevoir, taxes et en retard par devise. Un ⚠ à côté de **Due** veut dire en retard. Chaque ligne n'offre que ce qui s'applique :
 
-- **Voir la facture** : ouvre le PDF. Cela fonctionne sur toutes les lignes, y compris les annulées.
-- **Émettre** : brouillons seulement. Émettre enregistre la date; aucun courriel n’est envoyé.
-- **Envoyer la facture par courriel** : demande l’adresse chaque fois. Si vous n’en donnez aucune, rien n’est envoyé. Vous pouvez l’utiliser sur toute facture non annulée, y compris une déjà émise.
-- **Marquer comme payée** : demande une confirmation.
-- **Annuler** : demande une confirmation. La facture reste au dossier, estompée, mais ne compte plus comme due.
-- **Modifier la facture** : brouillons seulement. Changez le montant avant taxe, la date d’échéance et le taux de taxe.
-- **Supprimer le brouillon** : seulement pour un brouillon jamais envoyé par courriel. Dès qu’une agence en détient une copie, la facture ne peut plus qu’être annulée.
+1. **View invoice** ouvre le PDF (sur chaque ligne, même annulée).
+2. **Émettre** (brouillons seulement) enregistre la date d'émission. Rien n'est envoyé par courriel.
+3. **Envoyer la facture par courriel** demande l'adresse chaque fois ; sans adresse, rien n'est envoyé. Le bouton fonctionne sur toute facture non annulée : vous pouvez donc renvoyer une copie.
+4. **Enregistrer le paiement** enregistre l'argent reçu.
+5. **Lines & payments** ajoute une ligne, retire un supplément, utilise **Waive late fees** ou marque un paiement **Returned (NSF)…**.
+6. **Edit invoice** modifie les lignes, la date d'échéance et les taxes, avec une **Reason for the change** gardée au journal d'audit.
+7. **Reissue** annule la facture et crée une copie corrigée selon la licence actuelle ; **Void** l'annule mais la garde au dossier, estompée, sans montant dû.
+8. **Refund…** apparaît une fois un paiement enregistré, pour rembourser. **Delete draft** n'apparaît que pour un brouillon jamais envoyé par courriel.
 
-## Facturation automatique
+## Confirmer les paiements déclarés par les agences
 
-**Paramètres → Facturation → 🏦 Facturation de la plateforme** contrôle l’exécution nocturne de 06:00. Avec les deux interrupteurs désactivés, rien ne se produit de lui-même.
+1. Ouvrez **💳 Payments**. **Payments to confirm** liste ce que les administrateurs d'agence ont déclaré depuis leur page Licence.
+2. Appuyez sur **Confirm received** pour l'enregistrer et envoyer un reçu par courriel, ou sur **Not received** et donnez une raison ; l'administrateur d'agence qui l'a déclaré est averti.
+3. Plus bas, le **Payment ledger** liste chaque paiement, remboursement et paiement retourné avec **Date**, **Agency**, **Invoice**, **Method**, **Amount**, **Receipt** et **Status**.
 
-[[show: #billing-settings @ Platform billing > Raise invoices automatically | Me montrer la Facturation de la plateforme]]
+## Forfaits de facturation, suppléments et réglages
 
-- **Émettre les factures automatiquement** : crée des brouillons pour toute agence dont la date de facturation est arrivée. Rien n’est envoyé.
-- **Les envoyer automatiquement par courriel à l’agence** : émet chaque facture et l’envoie par courriel au contact de l’agence avec le PDF en pièce jointe. Une agence sans adresse de contact utilisable reste en brouillon.
+1. **🏷️ Billing plans** : une ligne par agence avec **Before discounts**, **Discounts / complimentary**, **Every**, **Tax**, **Total**, **Next invoice** et **Bill to**. Appuyez sur **View** pour régler **Price**, **Currency**, **Every**, **Tax %**, **Tax name**, **Next invoice** et les **Business details on the invoice**, puis **Save**. Les agences marquées **billed from licences** prennent leur prix dans **Platform › 🔑 Licences**.
+2. **➕ Extra line items** : ajoutez des frais à la prochaine facture d'une agence ou à chacune (**Every invoice** / **Next invoice only**), puis **Pause**, **Resume** ou **Delete**.
+3. **🤝 Referral credits** : un crédit unique sur la facture d'un mois choisi.
+4. **⚙️ Settings** : **🔁 Recurring invoices** (**On**, **Raise invoices at**, **Which agencies**, **Invoices are due**, **BCC on invoices**, **Email them automatically**, puis **Save recurring invoices**), ainsi que les rappels et reçus, les frais de retard, les frais de paiement retourné et les suppléments selon le mode de paiement (**Save settings**).
 
-**Les renseignements de votre entreprise**, l’**Adresse professionnelle** et le **numéro d’inscription TPS/TVH**, sont imprimés sur chaque facture émise par KiddieTrac. L’envoi automatique par courriel **ne peut pas fonctionner tant que les deux ne sont pas remplis**, et l’onglet l’indique. Sans eux, chaque PDF partirait marqué comme incomplet.
+> ⚠️ Activer **Email them automatically** demande une confirmation : les factures sont alors envoyées aux agences dès leur création. Au Canada, les suppléments sur carte de crédit sont plafonnés à 2,4 % et interdits sur le débit.
 
-## Qui peut l’utiliser
+## Qui peut faire quoi
 
-**Admins de la plateforme** seulement. Aucun rôle d’agence ne peut le voir.
+**Super-administrateurs de la plateforme** seulement. Aucun rôle d'agence, représentant des ventes ou revendeur ne voit les comptes à recevoir de KiddieTrac. Les administrateurs d'agence voient leurs propres factures et déclarent leurs paiements depuis leur page Licence.
 
-Voir aussi : [Configuration et paramètres de facturation](billing-setup) · [Aperçu de l’admin de la plateforme](platform-admin-overview)
+## Questions fréquentes et problèmes
+
+??? « No invoices yet » | Réglez le prix d'une agence dans **🏷️ Billing plans** (ou donnez-lui une licence), puis utilisez **Raise invoices due now**.
+??? « Every line needs a description and a price » | Remplissez les deux sur chaque ligne, ou retirez la ligne vide avec ✕.
+??? « A tax rate needs a name (HST, GST) » | Tapez le nom de la taxe ; une taxe sans nom s'imprimerait comme une simple ligne « Tax ».
+??? Pourquoi ne puis-je pas supprimer une facture? | Seul un brouillon jamais envoyé peut être supprimé. Dès qu'une agence en a une copie, utilisez **Void** ou **Reissue**.
+??? L'agence indique « no address on file ». | Ouvrez **🏷️ Billing plans**, appuyez sur **View** et remplissez les coordonnées d'entreprise. Ce qui reste vide n'apparaît pas sur la facture.
+??? Émettre envoie-t-il la facture? | Non. Utilisez **Envoyer la facture par courriel**, ou activez l'envoi automatique dans **⚙️ Settings**.
+
+## Écrans liés
+
+[[open: #licences | Licences]] · [[open: #platform-sales | Rapports de ventes]] · [[open: #admin-mrr | Tableau MRR]] · [[open: #sales-expenses | Dépenses]]
+
+Voir aussi : [[platform-licences]] · [[platform-sales-reports]] · [[billing-setup]] · [[platform-admin-overview]]
