@@ -165,6 +165,7 @@ final class PayslipPdf
             'colour' => $colour,
             'ink' => Brand::heroText($colour, null, $colour) === 'light' ? '#FFFFFF' : '#0F172A',
             'logo' => self::logo($logoUrl),
+            'initials' => self::initials((string) ($a->name ?? '')),
             'white_label' => $wl,
         ];
     }
@@ -549,7 +550,7 @@ final class PayslipPdf
             . '<div class="al"' . $nt . ' style="color:' . $sub . ';">' . e(implode('  ·  ', array_filter([$a['phone'], $a['email']]))) . '</div>'
             . ($a['rp'] ? '<div class="al" style="color:' . $sub . ';">CRA business number <span' . $nt . '>' . e($a['rp']) . '</span></div>' : '')
             . ($a['centre'] ? '<div class="al" style="color:' . $sub . ';">Centre: <span' . $nt . '>' . e($a['centre']) . '</span></div>' : '')
-            . '</td><td class="badge-cell"><div class="badge">' . ($a['logo'] ? '<img src="' . $a['logo'] . '">' : '') . '</div></td></tr></table></div>';
+            . '</td>' . self::logoPanel($a) . '</tr></table></div>';
 
         // The card: three columns.
         $col1 = '<div class="ch">Employee</div><table class="kv">'
@@ -649,8 +650,10 @@ final class PayslipPdf
             . '.band{margin:-34px -36px 0 -36px;padding:20px 40px 54px 40px;}'
             . '.bt{width:100%;border-collapse:collapse;}.bt td{vertical-align:top;padding:0;}'
             . '.an{font-size:21px;font-weight:bold;line-height:1.15;margin-bottom:5px;}.al{font-size:8.8px;line-height:1.4;}'
-            . '.badge-cell{width:104px;text-align:right;}.badge{width:92px;height:92px;border-radius:46px;background:#FFFFFF;text-align:center;margin-left:auto;}'
-            . '.badge img{width:60px;height:60px;margin-top:16px;}'
+            . '.logo-cell{text-align:right;vertical-align:top;padding-left:14px !important;}'
+            . '.logo-panel{background:#FFFFFF;border-radius:10px;margin-left:auto;}'
+            . '.logo-panel img{display:block;}'
+            . '.logo-init{font-weight:bold;text-align:center;letter-spacing:1px;}'
             . '.card{background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;margin:-46px 4px 0 4px;padding:14px 16px 12px 16px;}'
             . '.cols{width:100%;border-collapse:collapse;}.cols td.c{vertical-align:top;padding:0 10px 0 0;}'
             . '.ch{font-size:8px;font-weight:bold;text-transform:uppercase;letter-spacing:.8px;color:#64748B;border-bottom:1px solid #E2E8F0;padding-bottom:3px;margin-bottom:4px;}'
@@ -761,11 +764,64 @@ final class PayslipPdf
         return sprintf('#%02X%02X%02X', ...array_map(fn ($v) => (int) round($v * $f * 0.8), $rgb));
     }
 
-    /** The logo as a data: URI (Dompdf never fetches). Our own /storage files are read from disk. */
-    private static function logo(?string $url): string
+    /** LOGO PANEL (2026-11-27, Anthony: "make the logo area for the payslip better for logos such as iLearn's").
+     *  A white rounded rectangle that takes the logo's own shape: a wide wordmark gets a wide panel (up to 220 x 80), a
+     *  square or round mark a square one. The logo is contained, never cropped or stretched, with the same padding on
+     *  every side. No logo -> the agency's initials in its colour. */
+    private static function logoPanel(array $a): string
+    {
+        $pad = 10;
+        $maxW = 220 - 2 * $pad;
+        $maxH = 80 - 2 * $pad;
+        $l = $a['logo'] ?? null;
+        if (is_array($l) && ! empty($l['src']) && $l['w'] > 0 && $l['h'] > 0) {
+            $r = $l['w'] / $l['h'];
+            // Square-ish marks are drawn a little smaller than the full height so they do not dominate the band.
+            [$w, $h] = $r >= $maxW / $maxH ? [$maxW, $maxW / $r] : [$maxH * $r, $maxH];
+            if ($r < 1.25) {
+                [$w, $h] = [$w * 0.92, $h * 0.92];
+            }
+            $w = round($w, 1);
+            $h = round($h, 1);
+
+            return '<td class="logo-cell" style="width:' . round($w + 2 * $pad + 14) . 'px;"><div class="logo-panel" style="width:' . $w . 'px;height:' . $h
+                . 'px;padding:' . $pad . 'px;"><img src="' . $l['src'] . '" style="width:' . $w . 'px;height:' . $h . 'px;"></div></td>';
+        }
+        $ini = (string) ($a['initials'] ?? '');
+        if ($ini === '') {
+            return '<td></td>';
+        }
+
+        return '<td class="logo-cell" style="width:84px;"><div class="logo-panel" style="width:56px;height:56px;padding:7px;">'
+            . '<div class="logo-init" data-kt-no-translate style="color:' . e($a['colour']) . ';font-size:' . ($fs = mb_strlen($ini) > 2 ? 18 : 22) . 'px;line-height:1;padding-top:' . round((56 - $fs) / 2 - 1) . 'px;">'
+            . e($ini) . '</div></div></td>';
+    }
+
+    /** Up to three initials from the agency name ("iLearn Home Childcare Inc" -> "IHC"); legal words are skipped. */
+    private static function initials(string $name): string
+    {
+        $out = '';
+        foreach (preg_split('/[\s\-&]+/u', trim($name)) ?: [] as $w) {
+            if ($w === '' || preg_match('/^(inc|ltd|llc|corp|co|the|of|and)\.?$/i', $w)) {
+                continue;
+            }
+            $out .= mb_strtoupper(mb_substr($w, 0, 1));
+            if (mb_strlen($out) >= 3) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /** The logo, ready for print: ['src' => data: URI, 'w' => px, 'h' => px] or null. Dompdf never fetches.
+     *  Our own /storage files are read from disk (the ORIGINAL upload, not a thumbnail). The picture is flattened onto
+     *  white (so transparent PNGs print cleanly), the empty margin around the mark is trimmed (so a wordmark saved on a
+     *  big canvas still fills its panel), SVG is rasterised when Imagick can, and anything over 1200 px is scaled down. */
+    private static function logo(?string $url): ?array
     {
         if (! $url) {
-            return '';
+            return null;
         }
         try {
             $path = null;
@@ -777,25 +833,77 @@ final class PayslipPdf
                     }
                 }
             }
+            if (! $path && preg_match('#^https://app\.kiddietrac\.com/([A-Za-z0-9_\-./]+)$#', $url, $mm) && ! str_contains($mm[1], '..')) {
+                $p = base_path('../parent-portal/' . $mm[1]);
+                if (is_file($p)) {
+                    $path = $p;
+                }
+            }
             if ($path) {
                 $data = (string) file_get_contents($path);
             } elseif (preg_match('#^https://#i', $url)) {
                 $res = \Illuminate\Support\Facades\Http::timeout(5)->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])->get($url);
                 $data = $res->successful() ? (string) $res->body() : '';
             } else {
-                return '';
+                return null;
             }
-            if ($data === '' || strlen($data) > 3000000) {
-                return '';
+            if ($data === '' || strlen($data) > 6000000) {
+                return null;
             }
             $type = (new \finfo(FILEINFO_MIME_TYPE))->buffer($data);
-            if (! in_array($type, ['image/png', 'image/jpeg', 'image/gif'], true)) {
-                return '';
+            $svg = in_array($type, ['image/svg+xml', 'image/svg'], true) || ($type === 'text/xml' && str_contains($data, '<svg'));
+            if (! $svg && ! in_array($type, ['image/png', 'image/jpeg', 'image/gif', 'image/webp'], true)) {
+                return null;
+            }
+            if (class_exists(\Imagick::class)) {
+                try {
+                    $im = new \Imagick();
+                    if ($svg) {
+                        $im->setResolution(300, 300);
+                    }
+                    $im->readImageBlob($data);
+                    $im->setIteratorIndex(0);
+                    $im = $im->getImage();
+                    // Trim only what is truly empty: clear pixels first, then near-pure white (2%), never a light colour
+                    // that belongs to the mark (a pale gradient at the top of an icon is part of it).
+                    $trimmed = function (\Imagick $x, float $fuzz): \Imagick {
+                        $t = clone $x;
+                        $t->trimImage($fuzz * \Imagick::getQuantum());
+                        $t->setImagePage(0, 0, 0, 0);
+
+                        return $t->getImageWidth() >= 8 && $t->getImageHeight() >= 8 ? $t : $x;
+                    };
+                    if ($im->getImageAlphaChannel()) {
+                        $im = $trimmed($im, 0.0);
+                    }
+                    $im->setImageBackgroundColor('white');
+                    $im = $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
+                    $im->setImageAlphaChannel(\Imagick::ALPHACHANNEL_REMOVE);
+                    $im = $trimmed($im, 0.02);
+                    if ($im->getImageWidth() > 1200 || $im->getImageHeight() > 1200) {
+                        $im->thumbnailImage(1200, 1200, true);
+                    }
+                    $im->setImageFormat('png');
+                    $out = $im->getImageBlob();
+
+                    return ['src' => 'data:image/png;base64,' . base64_encode($out), 'w' => $im->getImageWidth(), 'h' => $im->getImageHeight()];
+                } catch (\Throwable $e) {
+                    if ($svg) {
+                        return null;
+                    }
+                }
+            }
+            if ($svg || $type === 'image/webp') {
+                return null;
+            }
+            $sz = @getimagesizefromstring($data);
+            if (! $sz || $sz[0] < 1 || $sz[1] < 1) {
+                return null;
             }
 
-            return 'data:' . $type . ';base64,' . base64_encode($data);
+            return ['src' => 'data:' . $type . ';base64,' . base64_encode($data), 'w' => (int) $sz[0], 'h' => (int) $sz[1]];
         } catch (\Throwable $e) {
-            return '';
+            return null;
         }
     }
 }
