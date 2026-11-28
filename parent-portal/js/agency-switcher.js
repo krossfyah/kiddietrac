@@ -237,6 +237,17 @@
     try { window.dispatchEvent(new CustomEvent('kt:platform-nav')); } catch (e) {}
   }
 
+  /* The new agency's plan into kt_user before the reload (2026-11-28): without it kt-topbar's plan check reloaded
+     the app a second time on the first boot in that agency. Never waits more than 4 s; a failure only costs the
+     old extra reload. */
+  function primeUser(agencyId) {
+    try {
+      if (!(window.KT && typeof window.KT.primeUserFor === 'function')) return Promise.resolve(false);
+      return Promise.race([window.KT.primeUserFor(agencyId), new Promise(function (r) { setTimeout(function () { r(false); }, 4000); })]);
+    } catch (e) { return Promise.resolve(false); }
+  }
+  if (window.KT) window.KT.primeAgencyUser = primeUser;
+
   async function setActiveServer(agencyId) {
     var t = token();
     if (!t) return false;
@@ -418,6 +429,8 @@
         }
         sessionStorage.setItem(STORAGE_KEY, String(aid));
         if (target) sessionStorage.setItem(ACTIVE_NAME, target.name);
+        // Store the new agency's plan first (KT.primeUserFor, kt-topbar.js) so the reload is the only boot.
+        await primeUser(aid);
         // Reload to ensure every screen re-fetches with the new agency scope
         window.location.reload();
       });

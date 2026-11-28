@@ -971,6 +971,35 @@
   }
   window.KT = window.KT || {};
   window.KT.refreshPlan = function (opts) { return refreshUser(opts || {}); };
+  /* ONE BOOT AFTER AN AGENCY SWITCH (2026-11-28). The saved kt_user carries the plan of the agency it was last
+     answered for, so the first boot in a newly chosen agency saw a different plan in /auth/me and planRedraw()
+     loaded the whole app a second time. Before the switcher (or a "Choose an agency" card) reloads, it asks
+     /auth/me for the NEW agency and stores the same plan fields refreshUserNow() would adopt, so that check finds
+     nothing to change. Resolves true when stored; any failure just falls back to the old one extra reload. */
+  window.KT.primeUserFor = function (agencyId) {
+    var t = store('kt_token');
+    if (!t || !/^[0-9]+$/.test(String(agencyId))) return Promise.resolve(false);
+    return fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + t, 'X-Active-Agency-Id': String(agencyId) }, cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        var fresh = d && (d.user || d); var cur = user();
+        if (!fresh || !cur || !cur.id || fresh.id !== cur.id || !Array.isArray(fresh.hidden_screens)) return false;
+        var adopt = function (u) {
+          u.hidden_screens = fresh.hidden_screens; u.ai_bundle = !!fresh.ai_bundle; u.play_spark = !!fresh.play_spark;
+          u.licence_lapsed = !!fresh.licence_lapsed; u.licence_label = fresh.licence_label || null;
+          u.locked_screens = fresh.locked_screens || {}; u.plan_v = fresh.plan_v || null;
+          return u;
+        };
+        sessionStorage.setItem('kt_user', JSON.stringify(adopt(cur)));
+        // The shared sign-in keeps the same plan fields in step, exactly as refreshUserNow() does.
+        try {
+          var lu = JSON.parse(localStorage.getItem('kt_user') || 'null');
+          if (lu && lu.id === cur.id) localStorage.setItem('kt_user', JSON.stringify(adopt(lu)));
+        } catch (e) {}
+        return true;
+      })
+      .catch(function () { return false; });
+  };
   window.addEventListener('kt:plan-changed', function (e) {
     try { refreshUser({ now: !!(e && e.detail && e.detail.now) }); } catch (x) {}
   });

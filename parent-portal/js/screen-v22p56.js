@@ -40,6 +40,8 @@
       catch (e) { sel.disabled = false; msg.style.color = '#B91C1C'; msg.textContent = 'That agency could not be opened. Please try again.'; return; }
       const a = list.find(x => +x.id === id);
       try { sessionStorage.setItem('kt_active_agency_id', String(id)); if (a) sessionStorage.setItem('kt_active_agency_name', a.name); } catch (e) {}
+      // The new agency's plan into kt_user first (agency-switcher.js), so the reload is the only boot.
+      try { if (KT.primeAgencyUser) await KT.primeAgencyUser(id); } catch (e) {}
       window.location.reload();
     });
   }
