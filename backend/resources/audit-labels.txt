@@ -226,6 +226,7 @@ post admin/timeoff-reminders | Changed time-off reminder settings
 post admin/timeoff-reminders/preview | Previewed the time-off reminder
 post admin/timeoff-reminders/test | Sent a test time-off reminder
 patch admin/tours/{id} | Updated a tour booking
+put admin/tours/settings | Changed the tour thank-you email setting
 post admin/users | Created a user
 delete admin/users/{user} | Deleted a user
 patch admin/users/{user} | Updated a user
@@ -296,6 +297,7 @@ post auth/set-password | Set their password from an invite
 post auth/social/app-exchange | Signed in with Google or Apple
 post billing/prorate-preview | Previewed a pro-rated fee
 post billing/schedule | Set a family's billing schedule
+post billing/schedule/preview | Checked a billing schedule's next invoice date
 delete billing/schedule/{familyId} | Turned off a family's billing schedule
 post billing/tuition-increases | Scheduled a fee increase
 post billing/tuition-increases/preview | Previewed who a tuition increase affects

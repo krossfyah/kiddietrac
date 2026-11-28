@@ -1436,7 +1436,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🧮 Billing schedule</h2>
-        <p>Pick weekly, biweekly, or monthly billing per family.</p>
+        <p>Bill a family weekly, every two weeks or monthly. Each date raises their invoice by itself, and autopay families are charged.</p>
       </div>
       <div class="kt-card">
         <label style="font-size:13px;font-weight:600;">Family</label>
@@ -1466,55 +1466,99 @@
       let r;
       try { r = await Api.get(`/billing/schedule/${fid}`); }
       catch (e) { detail.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + esc((e && e.message) || 'Could not load this family\u2019s schedule.') + '</div>'; return; }
-      /* A disabled schedule is no schedule (2026-11-27). The row stays (active = 0), and the form used to redraw it with
-         its old values and a Disable button, as if nothing had happened; a family with no row at all got
-         { frequency: 'monthly' }, so Disable showed for them too. */
+      /* THE SCHEDULE RUNS (2026-11-28, App\Support\BillingSchedules): on each date (agency time) the family's invoice is
+         raised and, with autopay, charged. Day pickers instead of typed numbers, the next invoice date worked out live,
+         and the log of what each date did. A schedule saved before this ran nothing; it starts when saved again. */
       const on = !!(r && r.data && +r.data.active);
-      const s = on ? r.data : { frequency: 'monthly' };
+      const running = !!(r && r.running);
+      const s = on ? r.data : { frequency: 'monthly', day_of_month: 1, day_of_week: 1 };
+      const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const fd = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      const sd = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      const PILL = { invoiced: ['Invoiced', '#DBEAFE', '#1E40AF'], charged: ['Charged', '#DCFCE7', '#166534'], charge_failed: ['Charge failed', '#FEE2E2', '#991B1B'],
+        failed: ['Failed', '#FEE2E2', '#991B1B'], skipped: ['Skipped', '#F1F5F9', '#475569'], running: ['Running', '#FEF3C7', '#92400E'] };
+      const pill = (st) => { const p = PILL[st] || [st, '#F1F5F9', '#475569']; return `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:${p[1]};color:${p[2]};">${esc(p[0])}</span>`; };
+      const state = running
+        ? '<span style="color:#166534;font-weight:600;">✅ Running.</span> Each date raises this family’s invoice and emails it; with autopay the card is charged.'
+        : on ? '<span style="color:#92400E;font-weight:600;">⏸ Not running yet.</span> This schedule was saved before schedules raised invoices. Press <strong>Save schedule</strong> to start it.'
+          : 'No billing schedule is set for this family. Save one to start it; until then the family is billed by the monthly invoice run.';
+      const runs = (r && r.runs) || [];
+      const sel = 'width:100%;padding:8px 9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;font-size:13.5px;';
       detail.innerHTML = `
-        <div style="font-size:13px;color:#475569;margin-bottom:12px;">${on ? 'This family has its own billing schedule.' : 'No billing schedule is set for this family. Save one to start it.'}</div>`;
-      detail.insertAdjacentHTML('beforeend', `
-        <label style="font-size:13px;font-weight:600;display:block;">Frequency</label>
-        <select id="bs-freq" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-          <option value="weekly" ${s.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
-          <option value="biweekly" ${s.frequency === 'biweekly' ? 'selected' : ''}>Biweekly</option>
-          <option value="monthly" ${s.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
-        </select>
-        <label style="font-size:13px;font-weight:600;display:block;margin-top:14px;">Day of week (0=Sun … 6=Sat)</label>
-        <input id="bs-dow" type="number" min="0" max="6" value="${s.day_of_week || 1}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-        <label style="font-size:13px;font-weight:600;display:block;margin-top:14px;">Day of month (1-31)</label>
-        <input id="bs-dom" type="number" min="1" max="31" value="${s.day_of_month || 1}" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-top:6px;">
-        ${s.next_charge_at ? `<div style="margin-top:14px;color:#475569;font-size:13px;">Next charge: <strong>${fmtDate(s.next_charge_at)}</strong></div>` : ''}
-        <button id="bs-save" class="kt-btn kt-btn-primary" style="margin-top:14px;"${on ? '' : ' data-kt-always-save'}>Save schedule</button>
-        ${on ? `<button id="bs-off" class="kt-btn kt-btn-danger" style="margin-top:14px;margin-left:8px;">Disable</button>` : ''}
+        <div style="font-size:13px;color:#475569;margin-bottom:12px;">${state}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:760px;">
+          <div><label for="bs-freq" style="font-size:13px;font-weight:600;display:block;">How often</label>
+            <select id="bs-freq" style="${sel}">
+              <option value="weekly" ${s.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+              <option value="biweekly" ${s.frequency === 'biweekly' ? 'selected' : ''}>Every two weeks</option>
+              <option value="monthly" ${s.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+            </select></div>
+          <div id="bs-dow-wrap"><label for="bs-dow" style="font-size:13px;font-weight:600;display:block;">Invoice on</label>
+            <select id="bs-dow" style="${sel}">${DAYS.map((d, i) => `<option value="${i}" ${+(s.day_of_week ?? 1) === i ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+          <div id="bs-dom-wrap"><label for="bs-dom" style="font-size:13px;font-weight:600;display:block;">Invoice on day</label>
+            <select id="bs-dom" style="${sel}">${Array.from({ length: 31 }, (_, i) => i + 1).map(n => `<option value="${n}" ${+(s.day_of_month || 1) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        </div>
+        <div id="bs-cover" style="font-size:12.5px;color:#64748B;margin-top:8px;max-width:760px;"></div>
+        <div id="bs-next" style="margin-top:12px;font-size:13.5px;color:#0F172A;min-height:20px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <button id="bs-save" class="kt-btn kt-btn-primary"${running ? '' : ' data-kt-always-save'}>Save schedule</button>
+          ${on ? `<button id="bs-off" class="kt-btn kt-btn-danger">Stop schedule</button>` : ''}
+        </div>
         <div id="bs-msg" role="status" style="font-size:13px;min-height:18px;margin-top:10px;"></div>
-      `);
-      // Say what went wrong (2026-11-27): a failed Save or Disable used to leave the screen exactly as it was.
+        <h3 style="font-size:14px;margin:18px 0 8px;">Recent runs</h3>
+        ${runs.length ? `<div style="overflow-x:auto;"><table class="kt-table" style="width:100%;font-size:13px;">
+          <thead><tr><th>Date</th><th>Covers</th><th>Result</th><th style="text-align:right;">Amount</th><th>Invoice</th><th>Note</th></tr></thead>
+          <tbody>${runs.map(x => `<tr><td>${esc(fd(x.run_on))}</td><td>${esc(sd(x.period_start))} – ${esc(sd(x.period_end))}</td><td>${pill(x.status)}</td>
+            <td style="text-align:right;">${x.amount != null ? '$' + Number(x.amount).toFixed(2) : '—'}</td><td>${esc(x.invoice_number || '—')}</td><td style="color:#475569;">${esc(x.message || '')}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<div style="font-size:13px;color:#64748B;">Nothing has run for this family yet.</div>'}`;
+      const $ = (id) => document.getElementById(id);
+      const body = () => {
+        const f = $('bs-freq').value;
+        return { family_id: fid, frequency: f, day_of_week: f === 'monthly' ? null : +$('bs-dow').value, day_of_month: f === 'monthly' ? +$('bs-dom').value : null };
+      };
+      let seq = 0;
+      const refresh = async () => {
+        const f = $('bs-freq').value;
+        // !important: the page polish sets grid children to display:block, which beat a plain inline display:none.
+        const show = (id, yes) => { const e = $(id); e.hidden = !yes; if (yes) e.style.removeProperty('display'); else e.style.setProperty('display', 'none', 'important'); };
+        show('bs-dow-wrap', f !== 'monthly');
+        show('bs-dom-wrap', f === 'monthly');
+        $('bs-cover').textContent = f === 'weekly' ? 'Each invoice covers the 7 days from its date: the monthly tuition × 12 ÷ 52. Due 7 days after.'
+          : f === 'biweekly' ? 'Each invoice covers the 14 days from its date: the monthly tuition × 24 ÷ 52. Due 7 days after.'
+            : 'An invoice on the 1st covers that month; on any later day it covers the next month (billed ahead). Due 15 days after. Days 29–31 use the last day of a shorter month.';
+        const my = ++seq;
+        $('bs-next').innerHTML = '<span style="color:#64748B;">Working out the next invoice…</span>';
+        try {
+          const p = await Api.post('/billing/schedule/preview', body());
+          if (my !== seq) return;
+          $('bs-next').innerHTML = `📅 Next invoice: <strong>${esc(fd(p.next_invoice))}</strong>, for ${esc(sd(p.next_period.start))} – ${esc(fd(p.next_period.end))}${running ? '' : ' <span style="color:#64748B;">(once saved)</span>'}`;
+        } catch (e) { if (my === seq) $('bs-next').innerHTML = `<span style="color:#B91C1C;">${esc((e && e.message) || 'Could not work out the next date.')}</span>`; }
+      };
+      ['bs-freq', 'bs-dow', 'bs-dom'].forEach(id => $(id).addEventListener('change', refresh));
+      refresh();
+      // Say what went wrong (2026-11-27): a failed Save or Stop used to leave the screen exactly as it was.
       const fail = (e, what) => {
-        const m = document.getElementById('bs-msg');
+        const m = $('bs-msg');
         if (m) { m.style.color = '#B91C1C'; m.textContent = (e && e.message) || what; }
       };
-      const _bsSave = main.querySelector('#bs-save');
+      const _bsSave = $('bs-save');
       if (_bsSave) _bsSave.onclick = async () => {
         _bsSave.disabled = true;
-        try {
-          await Api.post('/billing/schedule', {
-            family_id: fid,
-            frequency: document.getElementById('bs-freq').value,
-            day_of_week: +document.getElementById('bs-dow').value,
-            day_of_month: +document.getElementById('bs-dom').value,
-          });
-        } catch (e) { _bsSave.disabled = false; fail(e, 'Could not save the schedule. Please try again.'); return; }
-        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule saved', 'success');
-        document.getElementById('bs-load').click();
+        let res;
+        try { res = await Api.post('/billing/schedule', body()); }
+        catch (e) { _bsSave.disabled = false; fail(e, 'Could not save the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule saved. Next invoice ' + fd(res && res.next_invoice), 'success');
+        $('bs-load').click();
       };
-      const off = document.getElementById('bs-off');
+      const off = $('bs-off');
       if (off) off.onclick = async () => {
+        const ok = KT.confirm ? await KT.confirm({ title: 'Stop this billing schedule?', description: 'No more invoices will be raised on its dates. Invoices already raised stay as they are.', okLabel: 'Stop schedule' }) : true;
+        if (!ok) return;
         off.disabled = true;
         try { await Api.delete(`/billing/schedule/${fid}`); }
-        catch (e) { off.disabled = false; fail(e, 'Could not disable the schedule. Please try again.'); return; }
-        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule disabled', 'success');
-        document.getElementById('bs-load').click();
+        catch (e) { off.disabled = false; fail(e, 'Could not stop the schedule. Please try again.'); return; }
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Billing schedule stopped', 'success');
+        $('bs-load').click();
       };
     };
   }
