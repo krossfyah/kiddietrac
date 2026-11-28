@@ -24,7 +24,7 @@ The **Medications** screen (its heading says **Medications to administer**) list
 2. In **Dose given**, type exactly what you gave (for example "5 mL").
 3. Pick the **Outcome**: **Given as prescribed**, **Partial dose**, **Refused by child** or **Missed (not given)**.
 4. Add **Notes** if anything was unusual (spat some out, given with food).
-5. For a narcotic or where your policy asks for it, fill in the witness field.
+5. For a narcotic or where your policy asks for it, choose the colleague who watched in **Witness (optional, recommended for narcotics)**. The list holds the staff who work at the child's centre, not you; otherwise leave **No witness**.
 6. Tap **Record dose**. The card's dose count goes up and the time of the last dose changes.
 
 > 💡 Log the dose at once, not at the end of the day. It is what stops a second educator from giving the same dose again.
@@ -54,7 +54,8 @@ The **Medications** screen (its heading says **Medications to administer**) list
 
 ??? The medication a parent told me about is not here. | It has not been set up or authorized yet. Tell your director; do not give it until it shows on this screen.
 ??? The screen says "No active medications." | None of the children in your rooms has an active, authorized medication right now.
-??? It says "Medication is not active … Director must authorize before doses are recorded." | The order is waiting for the parent's authorization, has ended or was discontinued. Ask your director.
+??? It says "This medication is not active yet. A director must record the parent's authorization before doses are logged." | The order is waiting for the parent's authorization, has ended or was discontinued. Ask your director.
+??? It says "Choose a witness who works at this centre (not yourself)." | The witness must be someone else who works at the child's centre. Pick a colleague from the **Witness** list, or choose **No witness**.
 ??? I recorded the wrong dose or time. | Tell your director straight away so the record can be corrected properly. Do not log a second dose to "fix" it.
 ??? A dose went wrong or the child reacted. | Care for the child first, tell your director and the parent, and file an incident report with **Medication error** as the type (see [When something happens](when-something-happens)).
 ??? Is the family told when I log a dose? | Yes. The child's guardians get an in-app notice and a phone push, unless the agency or the parent switched these off.

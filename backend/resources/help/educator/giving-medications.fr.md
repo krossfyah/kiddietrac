@@ -21,7 +21,7 @@ L'écran **Médicaments** (son titre dit **Medications to administer**) liste le
 2. Dans **Dose given**, inscrivez exactement ce que vous avez donné (par exemple « 5 mL »).
 3. Choisissez le **Résultat** : **Given as prescribed**, **Partial dose**, **Refused by child** ou **Missed (not given)**.
 4. Ajoutez des **Notes** si quelque chose était inhabituel (l'enfant en a recraché, donné avec de la nourriture).
-5. Pour un narcotique, ou si votre politique le demande, remplissez le champ du témoin.
+5. Pour un narcotique, ou si votre politique le demande, choisissez la ou le collègue qui a observé dans **Witness (optional, recommended for narcotics)**. La liste contient le personnel qui travaille au centre de l'enfant, sans vous; sinon, laissez **No witness**.
 6. Touchez **Enregistrer la dose**. Le nombre de doses de la fiche augmente et l'heure de la dernière dose change.
 
 > 💡 Consignez la dose tout de suite, pas en fin de journée. C'est ce qui empêche une autre personne de redonner la même dose.
@@ -51,7 +51,8 @@ L'écran **Médicaments** (son titre dit **Medications to administer**) liste le
 
 ??? Le médicament dont un parent m'a parlé n'est pas ici. | Il n'a pas encore été créé ou autorisé. Prévenez votre direction; ne le donnez pas tant qu'il n'apparaît pas sur cet écran.
 ??? L'écran dit « No active medications. » | Aucun enfant de vos groupes n'a de médicament actif et autorisé en ce moment.
-??? Le message dit « Medication is not active … Director must authorize before doses are recorded. » | L'ordonnance attend l'autorisation du parent, est terminée ou a été cessée. Demandez à votre direction.
+??? Le message dit « This medication is not active yet. A director must record the parent's authorization before doses are logged. » | L'ordonnance attend l'autorisation du parent, est terminée ou a été cessée. Demandez à votre direction.
+??? Le message dit « Choose a witness who works at this centre (not yourself). » | Le témoin doit être une autre personne qui travaille au centre de l'enfant. Choisissez une ou un collègue dans la liste **Witness**, ou choisissez **No witness**.
 ??? J'ai consigné la mauvaise dose ou la mauvaise heure. | Prévenez votre direction tout de suite pour que le dossier soit corrigé correctement. Ne consignez pas une deuxième dose pour « corriger ».
 ??? Une dose a mal tourné ou l'enfant a réagi. | Occupez-vous d'abord de l'enfant, prévenez votre direction et le parent, et remplissez un rapport d'incident avec le type **Medication error** (voir [Quand quelque chose arrive](when-something-happens)).
 ??? La famille est-elle avisée quand je consigne une dose? | Oui. Les tuteurs de l'enfant reçoivent un avis dans l'application et une notification sur leur téléphone, sauf si l'agence ou le parent les a désactivés.

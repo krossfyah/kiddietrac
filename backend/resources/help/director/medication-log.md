@@ -30,7 +30,7 @@ A parent must give written consent before any dose is given.
 
 1. Find the medication with the **PENDING PARENT AUTH** badge.
 2. Press **Record parent authorization**.
-3. Fill in **Authorizing parent user ID** as the popup asks.
+3. In **Parent or guardian who authorized it**, choose the parent who signed. The list holds only this child's own parents and guardians; with more than one it starts on **Choose a parent…**. If the family has no parent account yet, the popup says so instead.
 4. Press **Mark authorized**. The badge turns green (**ACTIVE**) and the **+ Log dose** and **Discontinue** buttons appear.
 
 > ℹ️ When a parent asks for a medication from their portal (**💊 Ask the centre to administer a medication**), the request lands in this same list as **PENDING PARENT AUTH**. Check the details with the family, then authorize it.
@@ -40,7 +40,7 @@ A parent must give written consent before any dose is given.
 1. On an **ACTIVE** medication, press **+ Log dose**.
 2. Type the **Dose given** (for example "5 mL").
 3. Choose the **Outcome**: **Given as prescribed**, **Partial dose**, **Refused by child** or **Missed (not given)**.
-4. Add any **Notes**, and a witness if your centre uses one (recommended for narcotics).
+4. Add any **Notes**. If your centre uses a witness (recommended for narcotics), choose them in **Witness (optional, recommended for narcotics)**: the list holds the staff who work at this child's centre, not you. Leave **No witness** otherwise.
 5. Press **Record dose**. The card now shows one more dose logged and the time of the last dose.
 
 Educators log doses the same way from their own **Medications to administer** screen.
@@ -60,7 +60,7 @@ The badge then shows **DISCONTINUED**. An order past its end date shows **EXPIRE
 
 ## Who can do what
 
-- Agency admins and centre directors add medications, record authorization, log doses, view the history and discontinue.
+- Agency admins and centre directors add medications, record authorization, log doses, view the history and discontinue. A platform admin working in an agency gets the same view.
 - Educators see the active medications for their centre, log doses and view the history. They cannot add, authorize or discontinue.
 - Parents see their child's medications read-only and can send a request for the centre to give one.
 - The screen needs the Medications feature in your agency's plan.
@@ -68,9 +68,11 @@ The badge then shows **DISCONTINUED**. An order past its end date shows **EXPIRE
 ## FAQs and troubleshooting
 
 ??? Why is there no + Log dose button? | The medication is not active yet. Record the parent's authorization first. Discontinued and expired medications cannot take new doses.
-??? I pressed Mark authorized and saw "Enter a user ID". | The authorization field was empty. Fill it in and press **Mark authorized** again. If you are not sure what to enter, ask your agency admin or KiddieTrac support.
-??? A popup shows "Error:" and a message. | The save did not go through and the popup stays open. Read the message, fix the field it names, and try again.
-??? I see "No medications view for this role." | This screen opens for agency admins, centre directors, educators and parents. As a platform admin, use [View as](view-as) to open it as an agency admin.
+??? I pressed Mark authorized and saw "Choose the parent who authorized it." | No parent was picked. Choose one in **Parent or guardian who authorized it** and press **Mark authorized** again.
+??? The popup says "This child's family has no parent account yet. Add a parent to the family first." | Only a parent of the child's own family can authorize. Add the parent to the family, then come back and record the authorization.
+??? I see "Choose one of this child's parents or guardians." or "Choose a witness who works at this centre (not yourself)." | The server accepts only the child's own parents as the authorizer and only staff of the child's centre, other than the person giving the dose, as the witness. Pick from the list again.
+??? A popup shows a red message. | The save did not go through and the popup stays open. Read the message, fix the field it names, and try again.
+??? I see "Medications could not be loaded. Please refresh and try again." | The list did not load. Refresh the page; if it keeps happening, check your connection or raise a ticket.
 ??? The page says "No medications recorded yet." | Nobody has added a medication in your centres. Press **+ New medication** to add the first one.
 ??? Does the parent get told when a dose is logged? | Logging a dose records it on the medication's history. Parents can see the order and how many doses were logged on their own Medications screen.
 

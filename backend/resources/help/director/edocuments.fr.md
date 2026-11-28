@@ -14,17 +14,18 @@ l’ont pas encore fait.
 ## Téléverser un document à faire signer aux familles
 
 1. Ouvrez **Documents électroniques** et appuyez sur **+ Téléverser un modèle**.
-2. Sous **Nom du document**, tapez le nom que les parents verront, par exemple « Autorisation photo 2026 ».
-3. Ajoutez une **Description (optional)** : une ligne qui dit à quoi sert le formulaire.
-4. Laissez **Required (parents must sign before children attend)** coché pour un formulaire à signer avant que l’enfant commence. Décochez-le pour un document seulement informatif.
-5. Sous **PDF file (max 10 MB)**, choisissez le PDF.
-6. Appuyez sur **Téléverser**.
+2. Si vous travaillez dans plus d’un service de garde, choisissez-le sous **Centre** (la liste commence par **Choose a centre…**). Le document va aux familles de ce service de garde. Avec un seul service de garde, il n’y a pas de liste et il va à celui-là.
+3. Sous **Nom du document**, tapez le nom que les parents verront, par exemple « Autorisation photo 2026 ».
+4. Ajoutez une **Description (optional)** : une ligne qui dit à quoi sert le formulaire.
+5. Laissez **Required (parents must sign before children attend)** coché pour un formulaire à signer avant que l’enfant commence. Décochez-le pour un document seulement informatif.
+6. Sous **PDF file (max 10 MB)**, choisissez le PDF.
+7. Appuyez sur **Téléverser**.
 
 La nouvelle carte apparaît en haut de la liste, avec l’étiquette **REQUIRED** si la case
 est restée cochée. Les parents du service de garde la voient maintenant sous
 **Awaiting your signature** dans leurs documents.
 
-> ℹ️ Le document va à toutes les familles du service de garde. Cet écran ne permet pas de choisir les destinataires. Pour envoyer un formulaire à certaines personnes, ou au personnel, utilisez plutôt le **Gestionnaire de formulaires**.
+> ℹ️ Le document va à toutes les familles du service de garde choisi. Cet écran ne permet pas de choisir les destinataires. Pour envoyer un formulaire à certaines personnes, ou au personnel, utilisez plutôt le **Gestionnaire de formulaires**.
 
 > ⚠️ Seul un PDF de 10 Mo ou moins est accepté. La fenêtre affiche **Le fichier doit être un PDF** ou **Le PDF dépasse 10 Mo** quand le fichier ne convient pas.
 
@@ -72,7 +73,8 @@ alors dans sa liste **Signé** et votre compte augmente de un.
 | Rôle | Ce qu’il peut faire ici |
 |---|---|
 | Administrateur de l’agence | Téléverser, voir les signatures et archiver les documents des services de garde de l’agence où il travaille. |
-| Directeur ou directrice de service de garde | La même chose, pour ses propres services de garde seulement. Une personne qui dirige deux services de garde voit les deux. |
+| Directeur ou directrice de service de garde | La même chose, pour ses propres services de garde seulement. Une personne qui dirige deux services de garde voit les deux et choisit le service de garde au téléversement. |
+| Administrateur de la plateforme | Comme un administrateur de l’agence, dans l’agence où il travaille. |
 | Parent | Lit et signe les documents du service de garde de sa famille. |
 | Éducatrice, éducateur, visiteur à domicile | Aucun accès. Les documents du personnel passent par le **Gestionnaire de formulaires**. |
 
@@ -83,7 +85,8 @@ alors dans sa liste **Signé** et votre compte augmente de un.
 ??? Une famille dit ne pas trouver le formulaire. | Vérifiez que la famille est rattachée au service de garde du document. Un document archivé n’est plus montré aux parents.
 ??? Puis-je changer le PDF après l’avoir téléversé? | Non. Archivez l’ancien et téléversez la nouvelle version. Les signatures de l’ancien restent au dossier.
 ??? Le téléversement envoie-t-il un courriel aux parents? | Non. Les parents voient le formulaire la prochaine fois qu’ils ouvrent leurs documents. Pour les prévenir par courriel, publiez une annonce, ou utilisez le Gestionnaire de formulaires, qui peut envoyer un lien par courriel.
-??? L’écran affiche « Could not load ». | Actualisez la page. Si cela continue, votre compte n’a peut-être pas de rôle de direction ou d’administration dans ce service de garde; demandez à l’administrateur de votre agence.
+??? J’obtiens « Choose the centre this document is for ». | Vous travaillez dans plus d’un service de garde et vous avez laissé **Centre** sur **Choose a centre…**. Choisissez le service de garde et appuyez de nouveau sur **Téléverser**.
+??? L’écran affiche « Documents could not be loaded. Please refresh and try again. » | Actualisez la page. Si cela continue, votre compte n’a peut-être pas de rôle de direction ou d’administration dans ce service de garde; demandez à l’administrateur de votre agence.
 
 ## Écrans liés
 

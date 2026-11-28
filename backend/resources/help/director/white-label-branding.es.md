@@ -35,7 +35,7 @@ En la parte superior de Marca hay una fila de pestañas:
 | **🏷️ Marca blanca y logotipo** | El estado de su licencia, su logotipo, su color principal y una vista previa de dónde aparece su logotipo |
 | **🧾 Facturas** | El estilo de factura, la numeración, la dirección de la empresa, los datos bancarios y la vista previa en vivo de la factura |
 | **📇 Contacto y aviso legal** | El correo de soporte, el enlace a la política de privacidad y el de los términos y condiciones |
-| **✉️ Envío de correos** | Enviar los correos de su agencia desde su propia dirección de Microsoft 365 o Google Workspace |
+| **✉️ Envío de correos** | Enviar los correos de su agencia desde su propia dirección de Microsoft 365 |
 | **💵 Recibos de nómina** | El texto impreso en cada recibo de nómina del personal |
 | **🌎 Región e identificadores** | Su país y ajustes de cumplimiento, y el prefijo de sus identificadores de referencia |
 
@@ -131,6 +131,13 @@ Microsoft 365 o Google Workspace, puede enviar desde su propia dirección, para 
 reciban correos suyos. Cuando está configurado, la tarjeta muestra **Own email active** (correo
 propio activo).
 
+1. Abra la tarjeta **✉️ Envío de correos**.
+2. Elija **KiddieTrac default** u **Our Microsoft 365**.
+3. Para **Our Microsoft 365**, complete **Send from address**, **Send from name**, **Directory (tenant) ID**, **Application (client) ID** y **Client secret** con los datos del registro de su aplicación en Azure.
+4. Pulse **Save email settings**, luego escriba una dirección junto a **Send test** y púlselo para confirmar que llega el correo.
+
+> ⚠️ El envío por Google / Gmail ya no se ofrece. Enviaba por SMTP, que nuestros servidores no pueden usar, así que ese correo nunca salía. Una agencia que ya lo tenía guardado ve **Our Google / Gmail (not available)** con un aviso en rojo, y no se puede volver a guardar: cambie a **KiddieTrac default** o a **Our Microsoft 365** y pulse **Save email settings**.
+
 ## Recibos de nómina
 
 **Aspecto del recibo de nómina** define un mensaje opcional que aparece en cada recibo de nómina
@@ -175,6 +182,7 @@ dirección de su agencia si el envío de correos está configurado).
 ??? ¿Puedo cambiar yo mismo la licencia de marca blanca? | No. Forma parte de su plan, así que solo un administrador de la plataforma puede cambiarla.
 ??? ¿Puedo cambiar el color claro detrás de la barra lateral y las pestañas? | Sí, con la licencia de marca blanca. Use Soft tint (tono suave) en la pestaña Marca blanca y logotipo, o déjelo en automático para un tono suave del color de su marca.
 ??? ¿Qué botón guarda cada pestaña? | **Guardar cambios** guarda juntas las pestañas Marca blanca y logotipo, Facturas y Contacto y aviso legal; las demás pestañas tienen su propio botón. Guarde antes de salir de la pantalla.
+??? Nuestro envío de correos muestra «Our Google / Gmail (not available)». | Google por SMTP no puede enviar desde los servidores de KiddieTrac, así que el correo de su agencia no salía por esa vía. Elija **KiddieTrac default** u **Our Microsoft 365** en **✉️ Envío de correos** y pulse **Save email settings**. Guardar con Google elegido muestra «Google over SMTP cannot send from our servers. Choose KiddieTrac default or Our Microsoft 365.»
 
 ## Pantallas relacionadas
 

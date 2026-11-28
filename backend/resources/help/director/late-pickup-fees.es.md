@@ -14,8 +14,8 @@ si se cobra. Ábralo desde la barra lateral: **Finanzas** → **Recogidas tardí
 La tarifa sugerida es un monto por minuto después de la hora de cierre del centro, tras unos
 minutos de gracia gratuitos; por defecto, **$1.00 por minuto después de 5 minutos de gracia**.
 El formulario de registro muestra la tarifa que se usa, por ejemplo «($1.00/min after 5 min grace)».
-La hora de cierre de cada centro se completa por defecto al registrar. Para cambiar la tarifa
-o los minutos de gracia de su agencia, pida ayuda al soporte de KiddieTrac.
+La hora de cierre de cada centro se completa por defecto al registrar. Un administrador de agencia fija la tarifa
+y los minutos de gracia en **Ajustes → Facturación → ⚙️ Valores predeterminados y cargos**, en la tarjeta **Late pickup fee**. Una tarifa nueva se aplica a las recogidas registradas después de guardarla.
 
 ## Registrar una recogida tardía
 

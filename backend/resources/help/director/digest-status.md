@@ -13,10 +13,10 @@ Every evening KiddieTrac writes a short **daily digest** for each child from wha
 
 ## Checking today's digests
 
-1. Open **AI digest status**. The page opens on today's date.
+1. Open **AI digest status**. The page opens on today's date in your agency's time zone, wherever your device is.
 2. Read the four tiles at the top: **Children** (children in your centres), **Generated** (with the coverage percentage), **Pending** (records exist, digest not written yet) and **No events** (nothing recorded, so nothing to summarize).
 3. The line under the title says **AI enabled** or **AI disabled (templated fallback)**. When AI is disabled, families get a simpler digest built from a template.
-4. Look down the table. Each row shows the **Child**, the number of **Events** recorded, the **Status** badge (**GENERATED**, **PENDING** or **NO EVENTS**), when it was **Generated at**, and a **Preview** of the text.
+4. Look down the table. Each row shows the **Child**, the number of **Events** recorded, the **Status** badge (**GENERATED**, **PENDING** or **NO EVENTS**), when it was **Generated at** (in your agency's time), and a **Preview** of the text.
 
 > ℹ️ Digests are written once in the evening. During the day most children show **PENDING**: that is normal.
 
@@ -30,7 +30,7 @@ Every evening KiddieTrac writes a short **daily digest** for each child from wha
 
 1. Find the child in the table.
 2. Press **Generate** (no digest yet) or **Regenerate** (a digest already exists). The button shows **Working...** while the AI writes.
-3. A window opens titled **Digest for** the child, with the new text. Read it.
+3. A window opens titled **Digest for** the child, with the new text. Read it. Platform admins also see the AI model and token count above the text; agency staff see only the digest.
 4. Press **Close**. The table refreshes and the row shows **GENERATED**.
 
 > ⚠️ **Regenerate** replaces the digest the family sees. If a parent has already read the old one, they will see the new wording next time they open the app.
@@ -52,9 +52,10 @@ Closed centres and children who have left are not listed.
 
 ??? The Generate button is greyed out. | The child has no events recorded that day (**No events to summarize**). Add the day's records first, then press **Generate**.
 ??? A child shows PENDING late in the evening. | The evening run may not have reached them yet, or the AI did not answer. Press **Generate** for that child.
-??? An error appears after pressing Generate. | The AI service may be busy or not set up. Wait a few minutes and try again. If it keeps failing, raise a support ticket; families still receive the templated digest.
+??? I see "AI digests are not available right now. Families still get the standard daily summary." | The AI service is not set up or switched on for your agency right now. Nothing is lost: families still get the standard daily summary. Raise a support ticket if you expected AI digests.
+??? I see "The digest could not be written this time. If there were no updates logged for this child that day, there is nothing to summarise; otherwise please try again later." | If nothing was logged for the child that day, add the records first. Otherwise the AI service was busy: wait a few minutes and press **Generate** again. If it keeps failing, raise a support ticket; families still receive the templated digest.
 ??? "No children in scope". | No enrolled children were found for that date in your centres. Pick another date, or check enrolments.
-??? "Could not load digest status". | Reload the page. If it keeps happening, raise a support ticket.
+??? "Could not load digest status" with "Please refresh and try again." | Reload the page. If it keeps happening, raise a support ticket.
 ??? Does regenerating send the parent a new notification? | No. The digest is updated in place; the parent sees it the next time they open their home screen.
 
 ## Related screens

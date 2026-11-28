@@ -9,10 +9,10 @@ Cada tarde KiddieTrac escribe un breve **resumen diario** de cada niño con lo q
 
 ## Revisar los resúmenes de hoy
 
-1. Abra **Estado de resúmenes de IA**. La página se abre con la fecha de hoy.
+1. Abra **Estado de resúmenes de IA**. La página se abre con la fecha de hoy en la zona horaria de su agencia, esté donde esté su dispositivo.
 2. Lea los cuatro recuadros de arriba: **Niños** (los niños de sus centros), **Generado** (con el porcentaje de cobertura), **Pendiente** (hay registros, el resumen aún no está escrito) y **Sin eventos** (no hay nada registrado, nada que resumir).
 3. La línea bajo el título dice **IA activada** o **AI disabled (templated fallback)**. Con la IA desactivada, las familias reciben un resumen más sencillo basado en una plantilla.
-4. Recorra la tabla. Cada fila muestra el **Child**, el número de **Events** registrados, la etiqueta de **Status** (**GENERATED**, **PENDING** o **NO EVENTS**), la hora **Generated at** y una **Preview** del texto.
+4. Recorra la tabla. Cada fila muestra el **Child**, el número de **Events** registrados, la etiqueta de **Status** (**GENERATED**, **PENDING** o **NO EVENTS**), la hora **Generated at** (en la hora de su agencia) y una **Preview** del texto.
 
 > ℹ️ Los resúmenes se escriben una vez, por la tarde. Durante el día la mayoría de los niños muestran **PENDING**: es normal.
 
@@ -26,7 +26,7 @@ Cada tarde KiddieTrac escribe un breve **resumen diario** de cada niño con lo q
 
 1. Busque al niño en la tabla.
 2. Pulse **Generar** (aún no hay resumen) o **Regenerar** (ya existe uno). El botón muestra **Working...** mientras la IA escribe.
-3. Se abre una ventana titulada **Digest for** y el nombre del niño, con el texto nuevo. Léalo.
+3. Se abre una ventana titulada **Digest for** y el nombre del niño, con el texto nuevo. Léalo. Los administradores de la plataforma también ven el modelo de IA y la cantidad de tokens sobre el texto; el personal de la agencia solo ve el resumen.
 4. Pulse **Cerrar**. La tabla se actualiza y la fila muestra **GENERATED**.
 
 > ⚠️ **Regenerar** reemplaza el resumen que ve la familia. Si un padre ya leyó el anterior, verá el texto nuevo la próxima vez que abra la aplicación.
@@ -48,9 +48,10 @@ No aparecen los centros cerrados ni los niños que ya se fueron.
 
 ??? El botón Generar está gris. | El niño no tiene eventos registrados ese día (**No events to summarize**). Agregue primero los registros del día y luego pulse **Generar**.
 ??? Un niño muestra PENDING tarde por la noche. | Puede que el proceso de la tarde aún no llegara a él, o que la IA no respondiera. Pulse **Generar** para ese niño.
-??? Aparece un error al pulsar Generar. | El servicio de IA puede estar ocupado o sin configurar. Espere unos minutos e inténtelo de nuevo. Si sigue fallando, abra un ticket de soporte; las familias igual reciben el resumen de plantilla.
+??? Veo "AI digests are not available right now. Families still get the standard daily summary." | El servicio de IA no está configurado o activado para su agencia en este momento. No se pierde nada: las familias igual reciben el resumen diario estándar. Abra un ticket de soporte si esperaba resúmenes de IA.
+??? Veo "The digest could not be written this time. If there were no updates logged for this child that day, there is nothing to summarise; otherwise please try again later." | Si no se registró nada para el niño ese día, agregue primero los registros. Si no, el servicio de IA estaba ocupado: espere unos minutos y pulse **Generar** otra vez. Si sigue fallando, abra un ticket de soporte; las familias igual reciben el resumen de plantilla.
 ??? "No children in scope". | No se encontraron niños inscritos para esa fecha en sus centros. Elija otra fecha o revise las inscripciones.
-??? "Could not load digest status". | Recargue la página. Si sigue pasando, abra un ticket de soporte.
+??? "Could not load digest status" con "Please refresh and try again." | Recargue la página. Si sigue pasando, abra un ticket de soporte.
 ??? ¿Regenerar envía una nueva notificación al padre? | No. El resumen se actualiza en su lugar; el padre lo ve la próxima vez que abre su pantalla de inicio.
 
 ## Pantallas relacionadas

@@ -13,17 +13,18 @@ familias han firmado hasta ahora y cuáles faltan.
 ## Subir un documento para que lo firmen las familias
 
 1. Abra **Documentos electrónicos** y pulse **+ Subir plantilla**.
-2. En **Nombre del documento**, escriba el nombre que verán los padres, por ejemplo «Autorización de fotos 2026».
-3. Agregue una **Description (optional)**: una línea que diga de qué trata el formulario.
-4. Deje marcado **Required (parents must sign before children attend)** para un formulario que debe firmarse antes de que el niño empiece. Desmárquelo para un documento solo informativo.
-5. En **PDF file (max 10 MB)**, elija el PDF.
-6. Pulse **Subir**.
+2. Si trabaja en más de un centro, elija el centro en **Centre** (empieza en **Choose a centre…**). El documento va a las familias de ese centro. Con un solo centro no hay selector y va a ese centro.
+3. En **Nombre del documento**, escriba el nombre que verán los padres, por ejemplo «Autorización de fotos 2026».
+4. Agregue una **Description (optional)**: una línea que diga de qué trata el formulario.
+5. Deje marcado **Required (parents must sign before children attend)** para un formulario que debe firmarse antes de que el niño empiece. Desmárquelo para un documento solo informativo.
+6. En **PDF file (max 10 MB)**, elija el PDF.
+7. Pulse **Subir**.
 
 La nueva tarjeta aparece arriba en la lista, con la etiqueta **REQUIRED** si dejó la casilla
 marcada. Los padres del centro ya la ven en **Awaiting your signature** dentro de sus
 documentos.
 
-> ℹ️ El documento va a todas las familias del centro. En esta pantalla no se eligen destinatarios. Para enviar un formulario a personas concretas, o al personal, use el **Gestor de formularios**.
+> ℹ️ El documento va a todas las familias del centro que eligió. En esta pantalla no se eligen destinatarios. Para enviar un formulario a personas concretas, o al personal, use el **Gestor de formularios**.
 
 > ⚠️ Solo se acepta un PDF de hasta 10 MB. La ventana dice **El archivo debe ser un PDF** o **El PDF supera los 10 MB** cuando el archivo no sirve.
 
@@ -71,7 +72,8 @@ sube en uno.
 | Rol | Lo que puede hacer aquí |
 |---|---|
 | Administrador de la agencia | Subir, ver firmas y archivar documentos de los centros de la agencia en la que trabaja. |
-| Director de centro | Lo mismo, solo para los centros que dirige. Quien dirige dos centros ve ambos. |
+| Director de centro | Lo mismo, solo para los centros que dirige. Quien dirige dos centros ve ambos y elige el centro al subir. |
+| Administrador de la plataforma | Lo mismo que un administrador de la agencia, en la agencia en la que trabaja. |
 | Padre o madre | Lee y firma los documentos del centro de su familia. |
 | Educador, visitador domiciliario | Sin acceso. Los documentos del personal van por el **Gestor de formularios**. |
 
@@ -82,7 +84,8 @@ sube en uno.
 ??? Una familia dice que no encuentra el formulario. | Compruebe que la familia pertenece al centro del documento. Un documento archivado ya no se muestra a los padres.
 ??? ¿Puedo cambiar el PDF después de subirlo? | No. Archive el anterior y suba la nueva versión. Las firmas del anterior se conservan.
 ??? ¿Subirlo envía un correo a los padres? | No. Los padres verán el formulario la próxima vez que abran sus documentos. Para avisarles por correo, publique un anuncio o use el Gestor de formularios, que puede enviar un enlace por correo.
-??? La pantalla dice «Could not load». | Actualice la página. Si sigue pasando, puede que su cuenta no tenga un rol de director o administrador en este centro; consulte al administrador de su agencia.
+??? Aparece «Choose the centre this document is for». | Trabaja en más de un centro y dejó **Centre** en **Choose a centre…**. Elija el centro y pulse **Subir** otra vez.
+??? La pantalla dice «Documents could not be loaded. Please refresh and try again.» | Actualice la página. Si sigue pasando, puede que su cuenta no tenga un rol de director o administrador en este centro; consulte al administrador de su agencia.
 
 ## Pantallas relacionadas
 

@@ -21,7 +21,7 @@ La pantalla **Medicamentos** (su título dice **Medications to administer**) mue
 2. En **Dose given**, escriba exactamente lo que dio (por ejemplo "5 mL").
 3. Elija el **Resultado**: **Given as prescribed**, **Partial dose**, **Refused by child** o **Missed (not given)**.
 4. Agregue **Notes** si algo fue inusual (escupió una parte, se dio con comida).
-5. Para un narcótico, o si su política lo pide, complete el campo del testigo.
+5. Para un narcótico, o si su política lo pide, elija al compañero que observó en **Witness (optional, recommended for narcotics)**. La lista tiene al personal que trabaja en el centro del niño, sin incluirlo a usted; si no, deje **No witness**.
 6. Toque **Registrar dosis**. El número de dosis de la tarjeta aumenta y cambia la hora de la última dosis.
 
 > 💡 Registre la dosis enseguida, no al final del día. Eso evita que otro educador dé la misma dosis otra vez.
@@ -51,7 +51,8 @@ La pantalla **Medicamentos** (su título dice **Medications to administer**) mue
 
 ??? El medicamento del que me habló un padre no está aquí. | Todavía no se ha creado o autorizado. Avise a su director; no lo dé hasta que aparezca en esta pantalla.
 ??? La pantalla dice "No active medications." | Ningún niño de sus salones tiene ahora un medicamento activo y autorizado.
-??? Dice "Medication is not active … Director must authorize before doses are recorded." | La orden espera la autorización de la familia, terminó o fue suspendida. Pregunte a su director.
+??? Dice "This medication is not active yet. A director must record the parent's authorization before doses are logged." | La orden espera la autorización de la familia, terminó o fue suspendida. Pregunte a su director.
+??? Dice "Choose a witness who works at this centre (not yourself)." | El testigo debe ser otra persona que trabaja en el centro del niño. Elija a un compañero de la lista **Witness**, o elija **No witness**.
 ??? Registré la dosis o la hora equivocada. | Avise a su director de inmediato para que el registro se corrija como corresponde. No registre una segunda dosis para "arreglarlo".
 ??? Una dosis salió mal o el niño tuvo una reacción. | Atienda primero al niño, avise a su director y a la familia, y llene un informe de incidente con el tipo **Medication error** (vea [Cuando algo sucede](when-something-happens)).
 ??? ¿Se avisa a la familia cuando registro una dosis? | Sí. Los tutores del niño reciben un aviso en la app y una notificación en el teléfono, salvo que la agencia o la familia los hayan desactivado.

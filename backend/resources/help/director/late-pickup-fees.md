@@ -17,8 +17,8 @@ from the sidebar: **Finance** → **Late pickups**.
 The suggested fee is a rate per minute past the centre's close time, after a few free
 grace minutes — by default **$1.00 a minute after 5 minutes' grace**. The log form shows the
 rate in use, for example "($1.00/min after 5 min grace)". Each centre's close time is filled
-in as the default when you log. To change the rate or the grace minutes for your agency, ask
-KiddieTrac support.
+in as the default when you log. An agency admin sets the rate and the grace minutes in **Settings → Billing → ⚙️ Defaults & fees**,
+in the **Late pickup fee** card. A new rate applies to pickups logged after it is saved.
 
 ## Logging a late pickup
 

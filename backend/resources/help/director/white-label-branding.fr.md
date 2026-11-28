@@ -35,7 +35,7 @@ Une rangée d’onglets s’étend en haut de l’Image de marque :
 | **🏷️ Marque blanche et logo** | L’état de votre licence, votre logo, votre couleur principale et un aperçu des endroits où votre logo apparaît |
 | **🧾 Factures** | Le style des factures, leur numérotation, l’adresse de l’entreprise, les coordonnées bancaires et l’aperçu en direct de la facture |
 | **📇 Coordonnées et mentions légales** | Le courriel d’assistance, le lien vers la politique de confidentialité et celui vers les conditions générales |
-| **✉️ Envoi des courriels** | Envoyer les courriels de votre agence depuis votre propre adresse Microsoft 365 ou Google Workspace |
+| **✉️ Envoi des courriels** | Envoyer les courriels de votre agence depuis votre propre adresse Microsoft 365 |
 | **💵 Talons de paie** | Le texte imprimé sur chaque talon de paie du personnel |
 | **🌎 Région et identifiants** | Votre pays et vos réglages de conformité, et le préfixe de vos identifiants de référence |
 
@@ -138,6 +138,13 @@ Microsoft 365 ou Google Workspace, vous pouvez plutôt envoyer depuis votre prop
 que les familles reçoivent vos courriels de votre part. Une fois la configuration faite, la carte
 affiche **Own email active** (courriel propre actif).
 
+1. Ouvrez la carte **✉️ Envoi des courriels**.
+2. Choisissez **KiddieTrac default** ou **Our Microsoft 365**.
+3. Pour **Our Microsoft 365**, remplissez **Send from address**, **Send from name**, **Directory (tenant) ID**, **Application (client) ID** et **Client secret** à partir de l’inscription de votre application Azure.
+4. Appuyez sur **Save email settings**, puis inscrivez une adresse à côté de **Send test** et appuyez dessus pour confirmer que le courriel arrive.
+
+> ⚠️ L’envoi par Google / Gmail n’est plus offert. Il passait par SMTP, que nos serveurs n’ont pas le droit d’utiliser, donc ces courriels ne partaient jamais. Une agence qui l’avait déjà enregistré voit **Our Google / Gmail (not available)** avec un avertissement en rouge, et il ne peut plus être enregistré : passez à **KiddieTrac default** ou à **Our Microsoft 365** et appuyez sur **Save email settings**.
+
 ## Talons de paie
 
 **Apparence des talons de paie** définit un message facultatif qui figure sur chaque talon de paie
@@ -182,6 +189,7 @@ vraies factures, l’**aperçu** des formulaires, et les formulaires et annonces
 ??? Puis-je modifier moi-même la licence marque blanche? | Non. Elle fait partie de votre forfait; seul un administrateur de la plateforme peut la modifier.
 ??? Puis-je changer la couleur claire derrière la barre latérale et les onglets? | Oui, avec la licence marque blanche. Utilisez Soft tint (teinte douce) dans l’onglet Marque blanche et logo, ou laissez le mode automatique pour une nuance douce de votre couleur de marque.
 ??? Quel bouton enregistre quel onglet? | **Enregistrer les modifications** enregistre ensemble les onglets Marque blanche et logo, Factures et Coordonnées et mentions légales; les autres onglets ont leur propre bouton. Enregistrez avant de quitter l'écran.
+??? Notre envoi des courriels affiche « Our Google / Gmail (not available) ». | Google par SMTP ne peut pas envoyer à partir des serveurs de KiddieTrac, donc les courriels de votre agence ne partaient pas par ce chemin. Choisissez **KiddieTrac default** ou **Our Microsoft 365** dans **✉️ Envoi des courriels** et appuyez sur **Save email settings**. Enregistrer avec Google choisi affiche « Google over SMTP cannot send from our servers. Choose KiddieTrac default or Our Microsoft 365. »
 
 ## Écrans liés
 

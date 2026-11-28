@@ -26,7 +26,7 @@ Un parent doit donner son consentement écrit avant qu’une dose soit donnée.
 
 1. Trouvez le médicament qui porte l’insigne **PENDING PARENT AUTH**.
 2. Appuyez sur **Enregistrer l’autorisation parentale**.
-3. Remplissez **Authorizing parent user ID** comme la fenêtre le demande.
+3. Dans **Parent or guardian who authorized it**, choisissez le parent qui a signé. La liste ne contient que les parents et tuteurs de la famille de cet enfant; s'il y en a plus d'un, elle commence par **Choose a parent…**. Si la famille n'a pas encore de compte parent, la fenêtre le dit à la place.
 4. Appuyez sur **Marquer comme autorisé**. L’insigne devient vert (**ACTIVE**) et les boutons **Consigner une dose** et **Cesser** apparaissent.
 
 > ℹ️ Quand un parent demande un médicament depuis son portail (**💊 Ask the centre to administer a medication**), la demande arrive dans cette même liste avec **PENDING PARENT AUTH**. Vérifiez les détails avec la famille, puis autorisez-la.
@@ -36,7 +36,7 @@ Un parent doit donner son consentement écrit avant qu’une dose soit donnée.
 1. Sur un médicament **ACTIVE**, appuyez sur **Consigner une dose**.
 2. Tapez la **Dose donnée** (par exemple « 5 mL »).
 3. Choisissez le **Résultat** : **Donnée selon l’ordonnance**, **Dose partielle**, **Refusée par l’enfant** ou **Missed (not given)**.
-4. Ajoutez des **Notes**, et un témoin si votre centre en utilise un (recommandé pour les narcotiques).
+4. Ajoutez des **Notes**. Si votre centre utilise un témoin (recommandé pour les narcotiques), choisissez-le dans **Witness (optional, recommended for narcotics)** : la liste contient le personnel qui travaille au centre de l’enfant, sans vous. Sinon, laissez **No witness**.
 5. Appuyez sur **Enregistrer la dose**. La fiche affiche une dose de plus et l’heure de la dernière dose.
 
 Les éducatrices et éducateurs consignent les doses de la même façon depuis leur propre écran **Medications to administer**.
@@ -56,7 +56,7 @@ L’insigne affiche ensuite **DISCONTINUED**. Une ordonnance dont la date de fin
 
 ## Qui peut faire quoi
 
-- Les administrateurs d’agence et les directeurs de centre ajoutent des médicaments, enregistrent l’autorisation, consignent les doses, consultent l’historique et cessent un médicament.
+- Les administrateurs d’agence et les directeurs de centre ajoutent des médicaments, enregistrent l’autorisation, consignent les doses, consultent l’historique et cessent un médicament. Un administrateur de la plateforme qui travaille dans une agence a la même vue.
 - Les éducatrices et éducateurs voient les médicaments actifs de leur centre, consignent les doses et consultent l’historique. Ils ne peuvent pas ajouter, autoriser ni cesser un médicament.
 - Les parents voient les médicaments de leur enfant en lecture seule et peuvent demander au centre d’en donner un.
 - L’écran exige que la fonction Médicaments fasse partie du forfait de votre agence.
@@ -64,9 +64,11 @@ L’insigne affiche ensuite **DISCONTINUED**. Une ordonnance dont la date de fin
 ## Questions fréquentes et dépannage
 
 ??? Pourquoi n’y a-t-il pas de bouton Consigner une dose? | Le médicament n’est pas encore actif. Enregistrez d’abord l’autorisation du parent. Un médicament cessé ou expiré ne peut plus recevoir de doses.
-??? J’ai appuyé sur Marquer comme autorisé et j’ai vu « Enter a user ID ». | Le champ d’autorisation était vide. Remplissez-le et appuyez de nouveau sur **Marquer comme autorisé**. Si vous ne savez pas quoi inscrire, demandez à votre administrateur d’agence ou au soutien KiddieTrac.
-??? Une fenêtre affiche « Error: » suivi d’un message. | L’enregistrement n’a pas fonctionné et la fenêtre reste ouverte. Lisez le message, corrigez le champ indiqué et réessayez.
-??? Je vois « No medications view for this role. » | Cet écran s’ouvre pour les administrateurs d’agence, les directeurs de centre, le personnel éducateur et les parents. Comme administrateur de la plateforme, utilisez [Voir en tant que](view-as) pour l’ouvrir comme administrateur d’agence.
+??? J’ai appuyé sur Marquer comme autorisé et j’ai vu « Choose the parent who authorized it. » | Aucun parent n’a été choisi. Choisissez-en un dans **Parent or guardian who authorized it** et appuyez de nouveau sur **Marquer comme autorisé**.
+??? La fenêtre dit « This child's family has no parent account yet. Add a parent to the family first. » | Seul un parent de la famille de l’enfant peut autoriser. Ajoutez le parent à la famille, puis revenez enregistrer l’autorisation.
+??? Je vois « Choose one of this child's parents or guardians. » ou « Choose a witness who works at this centre (not yourself). » | Le serveur accepte seulement les parents de l’enfant comme personne qui autorise, et seulement le personnel du centre de l’enfant, autre que la personne qui donne la dose, comme témoin. Choisissez de nouveau dans la liste.
+??? Une fenêtre affiche un message en rouge. | L’enregistrement n’a pas fonctionné et la fenêtre reste ouverte. Lisez le message, corrigez le champ indiqué et réessayez.
+??? Je vois « Medications could not be loaded. Please refresh and try again. » | La liste ne s’est pas chargée. Actualisez la page; si cela se reproduit, vérifiez votre connexion ou ouvrez un billet.
 ??? La page affiche « No medications recorded yet. » | Personne n’a encore ajouté de médicament dans vos centres. Appuyez sur **+ Nouveau médicament** pour ajouter le premier.
 ??? Le parent est-il avisé quand une dose est consignée? | La dose est inscrite dans l’historique du médicament. Les parents voient l’ordonnance et le nombre de doses consignées dans leur propre écran Médicaments.
 

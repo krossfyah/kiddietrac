@@ -26,7 +26,7 @@ Un padre debe dar su consentimiento por escrito antes de que se administre cualq
 
 1. Busque el medicamento con la insignia **PENDING PARENT AUTH**.
 2. Presione **Registrar autorización de los padres**.
-3. Complete **Authorizing parent user ID** como lo pide la ventana.
+3. En **Parent or guardian who authorized it**, elija al padre o madre que firmó. La lista solo tiene a los padres y tutores de la familia de este niño; si hay más de uno, empieza en **Choose a parent…**. Si la familia aún no tiene una cuenta de padre, la ventana lo indica en su lugar.
 4. Presione **Marcar como autorizado**. La insignia cambia a verde (**ACTIVE**) y aparecen los botones **Registrar dosis** y **Suspender**.
 
 > ℹ️ Cuando un padre pide un medicamento desde su portal (**💊 Ask the centre to administer a medication**), la solicitud llega a esta misma lista como **PENDING PARENT AUTH**. Confirme los detalles con la familia y luego autorícela.
@@ -36,7 +36,7 @@ Un padre debe dar su consentimiento por escrito antes de que se administre cualq
 1. En un medicamento **ACTIVE**, presione **Registrar dosis**.
 2. Escriba la **Dosis administrada** (por ejemplo «5 mL»).
 3. Elija el **Resultado**: **Administrada según lo recetado**, **Dosis parcial**, **Rechazada por el niño** o **Missed (not given)**.
-4. Añada **Notas**, y un testigo si su centro lo usa (recomendado para narcóticos).
+4. Añada **Notas**. Si su centro usa un testigo (recomendado para narcóticos), elíjalo en **Witness (optional, recommended for narcotics)**: la lista tiene al personal que trabaja en el centro del niño, sin incluirlo a usted. Si no, deje **No witness**.
 5. Presione **Registrar dosis**. La tarjeta muestra una dosis más y la hora de la última dosis.
 
 Los educadores registran las dosis igual desde su propia pantalla **Medications to administer**.
@@ -56,7 +56,7 @@ La insignia muestra entonces **DISCONTINUED**. Una orden cuya fecha de fin ya pa
 
 ## Quién puede hacer qué
 
-- Los administradores de la agencia y los directores de centro añaden medicamentos, registran la autorización, registran dosis, ven el historial y suspenden medicamentos.
+- Los administradores de la agencia y los directores de centro añaden medicamentos, registran la autorización, registran dosis, ven el historial y suspenden medicamentos. Un administrador de la plataforma que trabaja en una agencia tiene la misma vista.
 - Los educadores ven los medicamentos activos de su centro, registran dosis y ven el historial. No pueden añadir, autorizar ni suspender.
 - Los padres ven los medicamentos de su hijo en modo de solo lectura y pueden pedir al centro que administre uno.
 - La pantalla requiere la función Medicamentos en el plan de su agencia.
@@ -64,9 +64,11 @@ La insignia muestra entonces **DISCONTINUED**. Una orden cuya fecha de fin ya pa
 ## Preguntas frecuentes y solución de problemas
 
 ??? ¿Por qué no aparece el botón Registrar dosis? | El medicamento todavía no está activo. Registre primero la autorización de los padres. Los medicamentos suspendidos o vencidos no admiten dosis nuevas.
-??? Presioné Marcar como autorizado y vi «Enter a user ID». | El campo de autorización estaba vacío. Complételo y presione **Marcar como autorizado** otra vez. Si no sabe qué escribir, pregunte a su administrador de la agencia o al soporte de KiddieTrac.
-??? Una ventana muestra «Error:» y un mensaje. | No se guardó y la ventana sigue abierta. Lea el mensaje, corrija el campo que indica e intente de nuevo.
-??? Veo «No medications view for this role.» | Esta pantalla se abre para administradores de la agencia, directores de centro, educadores y padres. Como administrador de la plataforma, use [Ver como](view-as) para abrirla como administrador de la agencia.
+??? Presioné Marcar como autorizado y vi «Choose the parent who authorized it.» | No se eligió a ningún padre. Elija uno en **Parent or guardian who authorized it** y presione **Marcar como autorizado** otra vez.
+??? La ventana dice «This child's family has no parent account yet. Add a parent to the family first.» | Solo un padre o madre de la familia del niño puede autorizar. Agregue al padre a la familia y vuelva a registrar la autorización.
+??? Veo «Choose one of this child's parents or guardians.» o «Choose a witness who works at this centre (not yourself).» | El servidor solo acepta a los padres del niño como quien autoriza, y solo al personal del centro del niño, distinto de quien da la dosis, como testigo. Elija otra vez de la lista.
+??? Una ventana muestra un mensaje en rojo. | No se guardó y la ventana sigue abierta. Lea el mensaje, corrija el campo que indica e intente de nuevo.
+??? Veo «Medications could not be loaded. Please refresh and try again.» | La lista no cargó. Actualice la página; si sigue pasando, revise su conexión o abra un ticket.
 ??? La página dice «No medications recorded yet.» | Nadie ha añadido un medicamento en sus centros. Presione **+ Nuevo medicamento** para añadir el primero.
 ??? ¿Se avisa a los padres cuando se registra una dosis? | La dosis queda en el historial del medicamento. Los padres ven la orden y cuántas dosis se registraron en su propia pantalla de Medicamentos.
 

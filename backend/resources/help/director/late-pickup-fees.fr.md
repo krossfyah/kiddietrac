@@ -15,7 +15,8 @@ Les frais suggérés sont un tarif par minute après l’heure de fermeture du c
 quelques minutes de grâce gratuites — par défaut **1,00 $ la minute après 5 minutes de grâce**.
 Le formulaire indique le tarif utilisé, par exemple « (1,00 $/min après 5 min de grâce) ».
 L’heure de fermeture de chaque centre est remplie par défaut quand vous consignez un retard.
-Pour changer le tarif ou les minutes de grâce de votre agence, communiquez avec le soutien KiddieTrac.
+Un administrateur d’agence règle le tarif et les minutes de grâce dans **Paramètres → Facturation → ⚙️ Valeurs par défaut et frais**,
+dans la carte **Late pickup fee**. Un nouveau tarif s’applique aux retards consignés après l’enregistrement.
 
 ## Consigner un retard de ramassage
 

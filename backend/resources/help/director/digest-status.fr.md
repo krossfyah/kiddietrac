@@ -9,10 +9,10 @@ Chaque soir, KiddieTrac rédige un court **résumé quotidien** pour chaque enfa
 
 ## Vérifier les résumés du jour
 
-1. Ouvrez **État des résumés IA**. La page s'ouvre sur la date du jour.
+1. Ouvrez **État des résumés IA**. La page s'ouvre sur la date du jour dans le fuseau horaire de votre agence, peu importe où se trouve votre appareil.
 2. Lisez les quatre tuiles du haut : **Enfants** (les enfants de vos centres), **Généré** (avec le pourcentage de couverture), **En attente** (il y a des notes, le résumé n'est pas encore rédigé) et **Aucun événement** (rien de noté, donc rien à résumer).
 3. La ligne sous le titre indique **IA activée** ou **AI disabled (templated fallback)**. Quand l'IA est désactivée, les familles reçoivent un résumé plus simple, bâti à partir d'un modèle.
-4. Parcourez le tableau. Chaque ligne montre l'enfant (**Child**), le nombre d'**Events** notés, l'étiquette de **Status** (**GENERATED**, **PENDING** ou **NO EVENTS**), l'heure **Generated at** et un **Preview** du texte.
+4. Parcourez le tableau. Chaque ligne montre l'enfant (**Child**), le nombre d'**Events** notés, l'étiquette de **Status** (**GENERATED**, **PENDING** ou **NO EVENTS**), l'heure **Generated at** (à l'heure de votre agence) et un **Preview** du texte.
 
 > ℹ️ Les résumés sont rédigés une fois, en soirée. Pendant la journée, la plupart des enfants affichent **PENDING** : c'est normal.
 
@@ -26,7 +26,7 @@ Chaque soir, KiddieTrac rédige un court **résumé quotidien** pour chaque enfa
 
 1. Trouvez l'enfant dans le tableau.
 2. Appuyez sur **Générer** (pas encore de résumé) ou **Régénérer** (un résumé existe déjà). Le bouton affiche **Working...** pendant que l'IA rédige.
-3. Une fenêtre s'ouvre, intitulée **Digest for** suivi du nom de l'enfant, avec le nouveau texte. Lisez-le.
+3. Une fenêtre s'ouvre, intitulée **Digest for** suivi du nom de l'enfant, avec le nouveau texte. Lisez-le. Les administrateurs de la plateforme voient aussi le modèle d'IA et le nombre de jetons au-dessus du texte; le personnel de l'agence voit seulement le résumé.
 4. Appuyez sur **Fermer**. Le tableau se met à jour et la ligne affiche **GENERATED**.
 
 > ⚠️ **Régénérer** remplace le résumé que voit la famille. Si un parent a déjà lu l'ancien, il verra le nouveau texte la prochaine fois qu'il ouvrira l'application.
@@ -48,9 +48,10 @@ Les centres fermés et les enfants qui sont partis ne sont pas listés.
 
 ??? Le bouton Générer est grisé. | Aucun événement n'a été noté pour l'enfant ce jour-là (**No events to summarize**). Ajoutez d'abord les notes de la journée, puis appuyez sur **Générer**.
 ??? Un enfant affiche PENDING tard en soirée. | Le traitement du soir ne l'a peut-être pas encore atteint, ou l'IA n'a pas répondu. Appuyez sur **Générer** pour cet enfant.
-??? Une erreur s'affiche après avoir appuyé sur Générer. | Le service d'IA est peut-être occupé ou non configuré. Attendez quelques minutes et réessayez. Si l'erreur persiste, ouvrez un billet de soutien; les familles reçoivent quand même le résumé bâti à partir du modèle.
+??? Je vois « AI digests are not available right now. Families still get the standard daily summary. » | Le service d'IA n'est pas configuré ou activé pour votre agence en ce moment. Rien n'est perdu : les familles reçoivent quand même le résumé quotidien standard. Ouvrez un billet de soutien si vous attendiez des résumés IA.
+??? Je vois « The digest could not be written this time. If there were no updates logged for this child that day, there is nothing to summarise; otherwise please try again later. » | Si rien n'a été noté pour l'enfant ce jour-là, ajoutez d'abord les notes. Sinon, le service d'IA était occupé : attendez quelques minutes et appuyez de nouveau sur **Générer**. Si l'erreur persiste, ouvrez un billet de soutien; les familles reçoivent quand même le résumé bâti à partir du modèle.
 ??? « No children in scope ». | Aucun enfant inscrit n'a été trouvé pour cette date dans vos centres. Choisissez une autre date ou vérifiez les inscriptions.
-??? « Could not load digest status ». | Rechargez la page. Si le problème revient, ouvrez un billet de soutien.
+??? « Could not load digest status » avec « Please refresh and try again. » | Rechargez la page. Si le problème revient, ouvrez un billet de soutien.
 ??? Régénérer envoie-t-il une nouvelle notification au parent? | Non. Le résumé est mis à jour sur place; le parent le voit la prochaine fois qu'il ouvre son écran d'accueil.
 
 ## Écrans connexes

@@ -30,7 +30,7 @@ A row of tabs runs across the top of Branding:
 | **🏷️ White-label & logo** | Your licence status, your logo, your primary colour, and a preview of where your logo appears |
 | **🧾 Invoices** | Invoice style, invoice numbering, business address, bank details, and the live invoice preview |
 | **📇 Contact & legal** | Support email, privacy policy link, terms and conditions link |
-| **✉️ Email delivery** | Send your agency's email from your own Microsoft 365 or Google Workspace address |
+| **✉️ Email delivery** | Send your agency's email from your own Microsoft 365 address |
 | **💵 Payslips** | The wording printed on every staff payslip |
 | **🌎 Region & IDs** | Your country and compliance settings, and your reference ID prefix |
 
@@ -107,6 +107,13 @@ Press **↻ Refresh preview** to update the **Live invoice preview**. Choosing a
 
 By default, KiddieTrac sends your email for you. If your agency has its own Microsoft 365 or Google Workspace, you can send from your own address instead, so families see mail from you. When it is set up, the card shows **Own email active**.
 
+1. Open the **✉️ Email delivery** card.
+2. Choose **KiddieTrac default** or **Our Microsoft 365**.
+3. For **Our Microsoft 365**, fill in **Send from address**, **Send from name**, **Directory (tenant) ID**, **Application (client) ID** and **Client secret** from your Azure app registration.
+4. Press **Save email settings**, then type an address beside **Send test** and press it to confirm mail arrives.
+
+> ⚠️ Sending through Google / Gmail is no longer offered. It sent over SMTP, which our servers are not allowed to use, so that mail never left. An agency that already had it saved sees **Our Google / Gmail (not available)** with a red warning, and it cannot be saved again: switch to **KiddieTrac default** or **Our Microsoft 365** and press **Save email settings**.
+
 ## Payslips
 
 **Payslip appearance** sets an optional message that appears on every staff payslip. Your logo, name and address are added automatically.
@@ -142,6 +149,7 @@ The invoice *From* block pulls your **agency name, address, phone, and support e
 ??? Can I change the white-label licence myself? | No. It is part of your plan, so only a platform admin can switch it.
 ??? Can I change the light colour behind the sidebar and tabs? | Yes, with the white-label licence. Use Soft tint on the White-label & logo tab, or leave it on automatic for a soft shade of your brand colour.
 ??? Which button saves which tab? | **Save changes** saves the White-label & logo, Invoices and Contact & legal tabs together; the other tabs have their own save buttons. Save before you leave the screen.
+??? Our email delivery shows "Our Google / Gmail (not available)". | Google over SMTP cannot send from KiddieTrac's servers, so your agency's mail was not going out that way. Choose **KiddieTrac default** or **Our Microsoft 365** in **✉️ Email delivery** and press **Save email settings**. Saving with Google selected shows "Google over SMTP cannot send from our servers. Choose KiddieTrac default or Our Microsoft 365."
 
 ## Related screens
 

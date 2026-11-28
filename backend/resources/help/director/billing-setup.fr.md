@@ -15,7 +15,7 @@ roles: agency_admin, platform_admin
 - **🧾 Taxe** : votre taux de taxe et son nom sur la facture.
 - **💵 Forfaits de frais** : des grilles de frais réutilisables. Voir [Forfaits de frais](tuition-plans).
 - **👨‍👩‍👧 Rabais fratrie** : voir [Rabais fratrie](sibling-discounts).
-- **⚙️ Valeurs par défaut et frais** : valeurs par défaut des factures, plans de paiement, frais de retard, modes de paiement, prélèvement automatique et frais supplémentaires.
+- **⚙️ Valeurs par défaut et frais** : valeurs par défaut des factures, plans de paiement, frais de retard, frais de retard au départ, modes de paiement, prélèvement automatique et frais supplémentaires.
 - **🛠 Communications de facturation** : les interrupteurs courriel et texto de l'agence et la langue par défaut.
 - **🔔 Rappels** : rappels automatiques des factures à venir et en retard. Voir [Rappels de facturation automatiques](automated-billing-reminders).
 
@@ -43,15 +43,17 @@ La taxe s'applique au sous-total : le montant de base plus les lignes ajoutées.
 3. Sous **Plans de paiement**, réglez **Émettre les factures ce nombre de jours avant leur échéance** (5 par défaut, jusqu'à 60 ; 0 émet à la date d'échéance même).
 4. Dans la même carte, réglez **Afficher les factures impayées aux familles ce nombre de jours avant leur échéance** (14 par défaut). L'écran Facturation d'une famille et son total « à payer maintenant » n'incluent que les factures dues dans cette fenêtre ; les factures en retard s'affichent toujours.
 5. Sous **Frais de retard**, entrez les **Frais de retard (%)** sur le solde en retard, le **Cap** (plafond) par frais et le **Délai de grâce (jours)** après l'échéance.
-6. Sous **Modes de paiement acceptés**, cochez chaque façon dont les familles peuvent payer : carte, virement bancaire (ACH), virement Interac, comptant, chèque ou autre.
-7. Sous **Prélèvement automatique**, cochez **Inscrire les nouvelles familles au prélèvement automatique par défaut** et, au besoin, **Exiger le prélèvement automatique (les familles doivent garder une carte au dossier)**.
-8. Sous **Frais supplémentaires de paiement**, entrez un taux **Credit / debit card (%)** et un taux **EFT / Interac e-Transfer (%)** (chacun jusqu'à 10 %, 0 par défaut). L'exemple dessous montre ce que chacun ajoute à un paiement de 500,00 $.
-9. Appuyez sur **Enregistrer la configuration de facturation**. « ✓ Saved. » apparaît et le message **Configuration de la facturation enregistrée** le confirme.
+6. Sous **Late pickup fee**, entrez le **Fee per minute** (dans votre devise, de 0 à 50) et le **Grace (minutes before the fee starts)** (0 à 120). Si vous ne les avez jamais modifiés, ils indiquent 1,00 et 5.
+7. Sous **Modes de paiement acceptés**, cochez chaque façon dont les familles peuvent payer : carte, virement bancaire (ACH), virement Interac, comptant, chèque ou autre.
+8. Sous **Prélèvement automatique**, cochez **Inscrire les nouvelles familles au prélèvement automatique par défaut** et, au besoin, **Exiger le prélèvement automatique (les familles doivent garder une carte au dossier)**.
+9. Sous **Frais supplémentaires de paiement**, entrez un taux **Credit / debit card (%)** et un taux **EFT / Interac e-Transfer (%)** (chacun jusqu'à 10 %, 0 par défaut). L'exemple dessous montre ce que chacun ajoute à un paiement de 500,00 $.
+10. Appuyez sur **Enregistrer la configuration de facturation**. « ✓ Saved. » apparaît et le message **Configuration de la facturation enregistrée** le confirme.
 
 ### Ce que font ces paramètres
 
 - **Préavis des plans de paiement** : chaque versement reste un brouillon en attente jusqu'à ce nombre de jours avant son échéance, puis il est émis tout seul et la famille le doit. Les dates d'échéance ne changent jamais ; seul le préavis change. Voir [Plans de paiement](payment-plans).
 - **Frais de retard** : si vous ne les avez jamais modifiés, ils indiquent 1,5 %, 25 $ et 0 jour. Voir [Configuration des frais de retard](late-fee-config).
+- **Late pickup fee** : quand le personnel consigne un retard de départ dans **Retards de départ**, les frais suggérés sont le tarif par minute pour chaque minute après l'heure de fermeture du centre, une fois les minutes de grâce passées. Avec 1,00 et 5, un enfant ramassé 12 minutes en retard donne des frais suggérés de 7,00 $. Rien n'est facturé avant qu'une direction ou un administrateur l'approuve; cette personne peut aussi changer le montant, y renoncer ou le refuser. Voir [Retards de départ et frais](late-pickup-fees).
 - **Virement Interac** : la ligne sous les modes de paiement indique où arrivent les virements, ou dit « Interac e-Transfer is not set up yet. » avec un lien **Set up in Payment providers →**.
 - **Credit/debit card (shown on invoices)** : ajoute « Payer par carte de crédit ou de débit dans l'application » à la section Comment payer des factures et des courriels de facture, une fois vos paiements par carte actifs.
 - **Annoncer les nouvelles factures aux familles** : chaque nouvelle facture apparaît aussi dans les Nouvelles du parent payeur, pour lui seul, avec son montant et les boutons Voir la facture / Payer.
@@ -81,6 +83,7 @@ La taxe s'applique au sous-total : le montant de base plus les lignes ajoutées.
 ??? L'onglet Taxe indique « This section is available to agency administrators ». | Votre rôle ne peut pas modifier les paramètres de facturation de l'agence. Demandez à votre administration d'agence.
 ??? Un onglet indique « Could not load this section. » | Rechargez la page. Si le problème persiste, communiquez avec le soutien KiddieTrac.
 ??? J'ai enregistré des frais de retard, mais personne n'a été facturé. | Le calcul automatique des frais de retard est désactivé pour toute la plateforme. Rien n'est facturé tant qu'il n'est pas activé.
+??? J'ai changé les frais de retard au ramassage. Les retards déjà consignés changent-ils? | Non. Un retard garde les frais suggérés calculés au moment où il a été consigné. Le nouveau tarif et la nouvelle grâce s'appliquent aux retards consignés après l'enregistrement.
 ??? Changer le taux de taxe modifie-t-il les anciennes factures? | Non. Le taux s'applique aux nouvelles factures. Les factures déjà émises gardent leur propre taxe.
 ??? Changer les jours de préavis déplace-t-il les plans de paiement existants? | Non. Un plan garde le préavis choisi à sa création ; la nouvelle valeur sert de point de départ aux nouveaux plans.
 ??? L'enregistrement a échoué. | Le message après « Save failed: » en donne la raison, par exemple une valeur hors limites. Corrigez le champ et enregistrez de nouveau.

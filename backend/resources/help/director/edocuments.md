@@ -17,17 +17,18 @@ who has not.
 ## Uploading a document for families to sign
 
 1. Open **eDocuments** and press **+ Upload template**.
-2. Under **Document name**, type the name parents will see, for example "Photo release form 2026".
-3. Add a **Description (optional)**: one line saying what the form is about.
-4. Leave **Required (parents must sign before children attend)** ticked for a form that must be signed before the child starts. Untick it for a form that is only for information.
-5. Under **PDF file (max 10 MB)**, choose the PDF.
-6. Press **Upload**.
+2. If you work at more than one centre, choose the centre under **Centre** (it starts on **Choose a centre…**). The document goes to that centre's families. With one centre, there is no picker and it goes to that centre.
+3. Under **Document name**, type the name parents will see, for example "Photo release form 2026".
+4. Add a **Description (optional)**: one line saying what the form is about.
+5. Leave **Required (parents must sign before children attend)** ticked for a form that must be signed before the child starts. Untick it for a form that is only for information.
+6. Under **PDF file (max 10 MB)**, choose the PDF.
+7. Press **Upload**.
 
 The new card appears at the top of the list with a **REQUIRED** label if you left the box
 ticked. Parents at the centre now see it under **Awaiting your signature** in their
 documents.
 
-> ℹ️ The upload goes to every family at the centre. There is no audience picker on this screen. To send a form to particular people, or to staff, use **Forms Manager** instead.
+> ℹ️ The upload goes to every family at the centre you chose. There is no audience picker on this screen. To send a form to particular people, or to staff, use **Forms Manager** instead.
 
 > ⚠️ Only a PDF is accepted, up to 10 MB. The upload box says **File must be a PDF** or **PDF is larger than 10 MB** when the file will not do.
 
@@ -76,7 +77,8 @@ and your count goes up by one.
 | Role | What they can do here |
 |---|---|
 | Agency admin | Upload, view signatures and archive documents for the centres of the agency they are working in. |
-| Centre director | The same, for the centres they direct only. A director of two centres sees both. |
+| Centre director | The same, for the centres they direct only. A director of two centres sees both and picks the centre when uploading. |
+| Platform admin | The same as an agency admin, in the agency they are working in. |
 | Parent | Reads and signs the documents for their own family's centre. |
 | Educator, home visitor | No access. Staff paperwork goes through **Forms Manager**. |
 
@@ -87,7 +89,8 @@ and your count goes up by one.
 ??? A family says they cannot find the form. | Check the family is attached to the centre the document belongs to. An archived document is no longer shown to parents.
 ??? Can I change the PDF after uploading? | No. Archive the old one and upload the new version. Signatures on the old one stay on record.
 ??? Does uploading email the parents? | No. Parents see the form the next time they open their documents. To email families about it, send an announcement, or use Forms Manager, which can email people a link.
-??? The screen says "Could not load". | Refresh the page. If it keeps happening, your account may not have a director or admin role at this centre; ask your agency admin.
+??? I get "Choose the centre this document is for". | You work at more than one centre and left **Centre** on **Choose a centre…**. Pick the centre and press **Upload** again.
+??? The screen says "Documents could not be loaded. Please refresh and try again." | Refresh the page. If it keeps happening, your account may not have a director or admin role at this centre; ask your agency admin.
 
 ## Related screens
 

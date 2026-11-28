@@ -14,7 +14,7 @@ title: Suivi des repas CACFP
 1. Ouvrez **Repas CACFP**.
 2. Si votre agence a plus d’un centre, choisissez-en un dans **Centre** (la liste commence à **Select a centre…**). Avec un seul centre, cette étape est sautée.
 3. La carte **Today’s roster** énumère les enfants inscrits à ce centre et prévus aujourd’hui, avec une colonne **Palier** et cinq colonnes de repas : **Déjeuner**, **Collation du matin**, **Dîner**, **Collation de l’après-midi** et **Souper**.
-4. Cochez la case sous chaque repas servi à un enfant. Chaque coche s’enregistre seule; il n’y a pas de bouton Enregistrer.
+4. Cochez la case sous chaque repas servi à un enfant. Chaque coche s’enregistre seule; il n’y a pas de bouton Enregistrer. Si l’enregistrement est refusé, la coche s’enlève et un message en rouge explique pourquoi : une case cochée est donc toujours un repas inscrit.
 5. Décochez une case pour corriger une erreur. Le changement s’enregistre aussitôt.
 6. Pour passer à un autre centre, utilisez la barre des centres en haut de l’écran. La liste se recharge pour ce centre.
 
@@ -27,7 +27,7 @@ Les quatre tuiles au-dessus de la liste comptent tous les repas cochés ce mois-
 - **Gratuit**, **Réduit** et **Payé** : repas servis aux enfants dont la famille est à ce palier.
 - **Total des repas ce mois-ci** : tous les repas cochés, y compris ceux des enfants dont le palier n’est pas réglé.
 
-> ℹ️ Les tuiles additionnent tous les centres de votre agence, pas seulement le centre affiché. Changer de centre change la liste, pas les totaux.
+> ℹ️ Les tuiles suivent le centre affiché. Changer de centre change à la fois la liste et les totaux du mois; pour une réclamation de toute l’agence, additionnez les tuiles de chaque centre.
 
 ## Paliers des familles
 
@@ -41,7 +41,7 @@ La colonne **Palier** montre le palier d’admissibilité de chaque famille : **
 |---|---|
 | Administrateur d’agence | Ouvrir l’écran depuis le menu, choisir n’importe quel centre, cocher les repas, voir les totaux du mois. |
 | Administrateur de plateforme | La même chose, dans l’agence où il est passé. |
-| Directeur de centre et éducatrice | Pas dans leur menu. Les repas ne peuvent être inscrits qu’à un centre où la personne travaille. |
+| Directeur de centre et éducatrice | Pas dans leur menu. Les repas ne peuvent être inscrits qu’à un centre où la personne travaille, et un directeur ne voit jamais que les totaux de ses propres centres. |
 | Parent | Ne voit ni les décomptes CACFP ni les paliers. |
 
 ## Questions fréquentes et dépannage
@@ -49,7 +49,7 @@ La colonne **Palier** montre le palier d’admissibilité de chaque famille : **
 ??? La liste indique « No children enrolled. » | Aucun enfant n’est inscrit à ce centre et prévu pour le jour de la semaine d’aujourd’hui. Vérifiez les salles des enfants et leurs jours de présence.
 ??? Un enfant présent aujourd’hui n’est pas dans la liste. | La liste suit l’inscription de chaque enfant et ses jours prévus. Ajoutez le jour d’aujourd’hui à son horaire dans Jours de présence, ou vérifiez qu’il a une inscription ouverte dans une salle de ce centre.
 ??? Puis-je inscrire les repas d’hier? | Non. La liste est toujours celle d’aujourd’hui. Inscrivez les repas le jour où ils sont servis.
-??? Une coche a disparu après le rechargement, ou je vois « You can only record meals at a centre you work at. » | Vous n’êtes pas lié à ce centre. Demandez à un administrateur d’agence de vous y ajouter.
+??? Une coche s’est enlevée, ou je vois « You can only record meals at a centre you work at. » | Vous n’êtes pas lié à ce centre. Demandez à un administrateur d’agence de vous y ajouter.
 ??? Je vois « That child is not enrolled at this centre. » | L’inscription de l’enfant est à un autre centre. Passez à ce centre et cochez le repas là.
 ??? Puis-je exporter les totaux? | Cet écran n’a pas de bouton d’exportation. Recopiez les quatre tuiles sur votre formulaire de demande à la fin du mois.
 ??? L’écran indique « No centres. » | Votre agence n’a aucun centre ouvert que vous pouvez voir. Demandez à un administrateur d’agence de vérifier votre accès aux centres.
