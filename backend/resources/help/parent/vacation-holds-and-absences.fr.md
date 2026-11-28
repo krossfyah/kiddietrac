@@ -22,7 +22,7 @@ L’écran s’ouvre en lecture seule : rien ne change par accident.
 1. Appuyez sur **✏️ Modifier les jours**.
 2. Choisissez la nouvelle partie de journée pour chaque jour qui change, ou **—** pour un jour où votre enfant ne vient plus. La rangée est marquée **• unsaved**.
 3. Réglez **Les changements s’appliquent à partir du** sur le premier jour de la nouvelle semaine. La date d’aujourd’hui est proposée.
-4. Appuyez sur **Enregistrer les modifications** (le bouton indique le nombre de changements, par exemple **Save 1 change**). Un message vert **✓ Saved** apparaît et l’écran revient en lecture seule.
+4. Appuyez sur **Enregistrer les modifications** (le bouton indique le nombre de changements, par exemple **Save 1 change**). Un message vert **✓ Saved** apparaît et l’écran revient en lecture seule. Si un jour a vraiment changé, le centre et votre famille reçoivent un courriel à ce sujet : inutile de les prévenir séparément.
 
 **✓ Terminé** arrête la modification sans enregistrer. Les changements non enregistrés sont perdus quand vous quittez l’écran.
 

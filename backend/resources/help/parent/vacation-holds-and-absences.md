@@ -25,7 +25,7 @@ The screen opens read-only, so nothing changes by accident.
 1. Press **✏️ Edit days**.
 2. Choose the new part of the day for each day that changes, or **—** for a day your child no longer comes. The row is marked **• unsaved**.
 3. Set **Changes apply from** to the first day the new week starts. It starts on today.
-4. Press **Save changes** (it shows how many changes, for example **Save 1 change**). A green **✓ Saved** message appears and the screen goes back to read-only.
+4. Press **Save changes** (it shows how many changes, for example **Save 1 change**). A green **✓ Saved** message appears and the screen goes back to read-only. If a day really changed, the centre and your family are emailed about the change, so you do not need to tell them separately.
 
 **✓ Done** stops editing without saving. Changes you have not saved are lost when you leave the screen.
 

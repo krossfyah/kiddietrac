@@ -184,19 +184,6 @@
       + chartCard('Most-read pages', 'All time', hbars((a.top_paths || []).slice(0, 8).map(function (p) { return [p.path, p.views]; })));
   }
 
-  function leadRowHtml(l) {
-    var d = (l.at || '').replace('T', ' ').slice(0, 16);
-    return '<tr class="leadRow" data-q="' + esc(((l.email || '') + ' ' + (l.agency || '') + ' ' + (l.source || '') + ' ' + (l.name || '')).toLowerCase()) + '" data-email="' + esc(l.email) + '" data-at="' + esc(l.at) + '" data-name="' + esc(l.name || '') + '" data-agency="' + esc(l.agency || '') + '">'
-      + '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#6b7280;white-space:nowrap">' + esc(d) + '</td>'
-      + '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;font-weight:700;color:#0a1e2c">' + esc(l.email) + '</td>'
-      + '<td class="cellName" style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#374151">' + esc(l.name || '—') + '</td>'
-      + '<td class="cellAgency" style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:13px;color:#374151">' + esc(l.agency || '—') + '</td>'
-      + '<td style="padding:9px 10px;border-top:1px solid #F1F5F9;font-size:12px"><span style="background:#EFF6FF;color:' + TEAL + ';padding:2px 8px;border-radius:100px;font-weight:700">' + esc(l.source || '—') + '</span></td>'
-      + '<td class="cellAct" style="padding:9px 10px;border-top:1px solid #F1F5F9;text-align:right;white-space:nowrap">'
-        + '<button class="leadEdit" title="Edit subscriber" style="background:none;border:none;color:' + TEAL + ';cursor:pointer;font-size:14px;margin-right:6px">✏️</button>'
-        + '<button class="leadDel" title="Delete subscriber" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:15px">🗑</button></td></tr>';
-  }
-
   function twoCol(a, b) { return '<div style="display:flex;gap:14px;flex-wrap:wrap"><div style="flex:1;min-width:180px">' + a + '</div><div style="flex:1;min-width:180px">' + b + '</div></div>'; }
   function tabContent(c) {
     return card('Contact details', ''
@@ -666,80 +653,8 @@
     }
     ['seoSave:seoMsg', 'annSave:annMsg', 'gaSave:gaMsg', 'contactSave:contactMsg', 'socialSave:socialMsg', 'heroSave:heroMsg', 'rcSave:rcMsg'].forEach(function (p) { var x = p.split(':'); bindSave(x[0], x[1]); });
 
-    // subscriber search
-    var search = container.querySelector('#leadSearch');
-    if (search) search.addEventListener('input', function () {
-      var q = search.value.trim().toLowerCase(), shown = 0;
-      container.querySelectorAll('.leadRow').forEach(function (r) {
-        var match = !q || (r.getAttribute('data-q') || '').indexOf(q) !== -1; r.style.display = match ? '' : 'none'; if (match) shown++;
-      });
-      var cnt = container.querySelector('#leadCount'); if (cnt) cnt.textContent = shown;
-    });
-    function setCount(n) { var c = container.querySelector('#leadCount'); if (c) c.textContent = n; }
-    // add subscriber
-    var addBtn = container.querySelector('#addLeadBtn');
-    if (addBtn) addBtn.addEventListener('click', function () {
-      var email = val('addEmail'), name = val('addName'), agency = val('addAgency');
-      var msg = container.querySelector('#addLeadMsg');
-      if (!email) { if (msg) { msg.textContent = 'Email required'; msg.style.color = '#DC2626'; } return; }
-      addBtn.disabled = true; if (msg) { msg.textContent = 'Adding…'; msg.style.color = '#6b7280'; }
-      Api.post('/platform/marketing-site/leads', { email: email, name: name, agency: agency }).then(function (r) {
-        var lead = r && r.lead ? r.lead : { email: email, name: name, agency: agency, source: 'manual', at: '' };
-        leads.unshift(lead);
-        var body = container.querySelector('#leadBody'); var empty = container.querySelector('#leadEmpty'); if (empty) empty.remove();
-        body.insertAdjacentHTML('afterbegin', leadRowHtml(lead)); bindRow(body.querySelector('.leadRow'));
-        setCount(leads.length);
-        container.querySelector('#addEmail').value = ''; container.querySelector('#addName').value = ''; container.querySelector('#addAgency').value = '';
-        if (msg) { msg.textContent = '✓ Added'; msg.style.color = '#16a34a'; } addBtn.disabled = false;
-      }).catch(function (e) { if (msg) { msg.textContent = '✕ ' + (e && e.message ? e.message : 'Failed'); msg.style.color = '#DC2626'; } addBtn.disabled = false; });
-    });
-    // edit + delete subscriber
-    function bindRow(row) {
-      if (!row) return;
-      var del = row.querySelector('.leadDel'), edt = row.querySelector('.leadEdit');
-      var email = row.getAttribute('data-email'), at = row.getAttribute('data-at');
-      if (del) del.addEventListener('click', async function () {
-        if (!await KT.confirm('Delete subscriber ' + email + '?')) return; del.disabled = true;
-        Api.post('/platform/marketing-site/leads/delete', { email: email, at: at }).then(function () {
-          row.remove(); for (var i = 0; i < leads.length; i++) { if (leads[i].email === email && leads[i].at === at) { leads.splice(i, 1); break; } }
-          setCount(leads.length);
-        }).catch(function () { del.disabled = false; window.alert('Delete failed'); });
-      });
-      if (edt) edt.addEventListener('click', async function () {
-        // One dialog for what used to be two prompts in a row.
-        var v = await KT.prompt({
-          title: 'Edit subscriber', description: email,
-          fields: [
-            { key: 'name', label: 'Subscriber name', value: row.getAttribute('data-name') || '' },
-            { key: 'agency', label: 'Agency / centre', value: row.getAttribute('data-agency') || '' },
-          ],
-          okLabel: 'Save',
-        });
-        if (v === null) return;
-        var nn = String(v.name || ''), aa = String(v.agency || '');
-        nn = nn.trim(); aa = aa.trim(); edt.disabled = true;
-        Api.post('/platform/marketing-site/leads/update', { email: email, at: at, name: nn, agency: aa }).then(function () {
-          row.querySelector('.cellName').textContent = nn || '—'; row.querySelector('.cellAgency').textContent = aa || '—';
-          row.setAttribute('data-name', nn); row.setAttribute('data-agency', aa);
-          for (var i = 0; i < leads.length; i++) { if (leads[i].email === email && leads[i].at === at) { leads[i].name = nn; leads[i].agency = aa; break; } }
-          edt.disabled = false;
-        }).catch(function () { edt.disabled = false; window.alert('Update failed'); });
-      });
-    }
-    container.querySelectorAll('.leadRow').forEach(bindRow);
-    // CSV export
-    var csv = container.querySelector('#leadCsv');
-    if (csv) csv.addEventListener('click', function () {
-      var head = ['date', 'email', 'name', 'agency', 'source'];
-      var lines = [head.join(',')].concat((leads || []).map(function (l) {
-        return [l.at || '', l.email || '', l.name || '', l.agency || '', l.source || ''].map(function (v) {
-          v = String(v).replace(/"/g, '""'); return /[",\n]/.test(v) ? '"' + v + '"' : v;
-        }).join(',');
-      }));
-      var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kiddietrac-subscribers.csv';
-      document.body.appendChild(a); a.click(); setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 500);
-    });
+    /* The old leads table's search, add, edit, delete and CSV wiring lived here. Nothing has drawn those
+       elements since the Subscribers tab moved to site_subscribers (subsTable / subStats); removed 2026-11-28. */
   }
 
   /* Translations. The site ships a checked French/Spanish dictionary; text added after that

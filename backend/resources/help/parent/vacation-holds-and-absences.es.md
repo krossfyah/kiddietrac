@@ -22,7 +22,7 @@ La pantalla se abre en modo de solo lectura, así que nada cambia por accidente.
 1. Pulse **✏️ Editar días**.
 2. Elija la nueva parte del día para cada día que cambia, o **—** para un día en que su hijo ya no viene. La fila se marca **• unsaved**.
 3. Ponga en **Los cambios se aplican desde** el primer día de la nueva semana. Empieza en la fecha de hoy.
-4. Pulse **Guardar cambios** (indica cuántos cambios hay, por ejemplo **Save 1 change**). Aparece un mensaje verde **✓ Saved** y la pantalla vuelve a solo lectura.
+4. Pulse **Guardar cambios** (indica cuántos cambios hay, por ejemplo **Save 1 change**). Aparece un mensaje verde **✓ Saved** y la pantalla vuelve a solo lectura. Si un día cambió de verdad, el centro y su familia reciben un correo sobre el cambio, así que no hace falta avisarles por separado.
 
 **✓ Hecho** deja de editar sin guardar. Los cambios que no guardó se pierden al salir de la pantalla.
 

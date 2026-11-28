@@ -678,7 +678,7 @@
       if (!ids.length) return;
       const from = document.getElementById('ap-from').value || ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
       saveBtn.disabled = true; saveBtn.style.opacity = '.45';
-      let done = 0, failed = 0;
+      let done = 0, failed = 0, told = 0, notTold = 0;
       for (const id of ids) {
         const c = rows.filter((r) => String(r.id) === String(id))[0];
         if (!c) continue;
@@ -693,10 +693,25 @@
           c.has_pattern = DAYS.some((d) => draft[id][d]);
           delete dirty[id];
           done++;
+          /* A PARENT'S CHANGE REACHES THE OFFICE (2026-11-28). The pattern save remembers the week as it
+             stood (ScheduleChangeNotice::remember), but only the child record's editor then posted the
+             notice, so a parent changing days here told nobody. Same call as screen-child-detail.js: the
+             server compares before/after, writes only if a day really changed, and mails through
+             AgencyMailer (agency switches, test agencies and suppression apply). A failure never reads
+             as the schedule not saving. Staff bulk edits are left as they were: one "Fill grid" must
+             not email every family on the list. */
+          if (_isGuardianOnly) {
+            try {
+              const nr = await Api.post('/admin/children/' + id + '/schedule-change', { change_type: 'permanent', notify: true });
+              if (nr && nr.changed) told++;
+            } catch (e4) { notTold++; }
+          }
         } catch (e) { failed++; }
       }
-      msg.style.color = failed ? '#B91C1C' : '#16A34A';
-      msg.textContent = failed ? (done + ' saved, ' + failed + ' failed') : ('✓ Saved ' + done);
+      msg.style.color = failed ? '#B91C1C' : (notTold ? '#B45309' : '#16A34A');
+      msg.textContent = (failed ? (done + ' saved, ' + failed + ' failed') : ('✓ Saved ' + done))
+        + (told ? '. The centre has been told about the change.' : '')
+        + (notTold ? '. Saved, but the centre could not be told. Please let them know.' : '');
       /* Back to read-only for a parent once it is all saved — the save is the completion.
          A partial save stays open so they can see and retry what did not go through. */
       if (_isGuardianOnly && !failed) { _apEditing = false; }
