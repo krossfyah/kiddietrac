@@ -280,6 +280,10 @@ Schedule::command('billing:schedules')->hourlyAt(23)->withoutOverlapping(30)->on
    the effective date. Hourly because each agency's day starts in its own timezone; every step is recorded, so a
    run with nothing due does nothing. */
 Schedule::command('billing:tuition-increases')->hourlyAt(17)->withoutOverlapping(30)->onOneServer();
+/* Re-enrolment reminders (2026-11-28, App\Support\ReenrolReplies): families who have not answered are reminded once,
+   the agency's reminder days before the deadline, from 9 am agency time. Hourly for each agency's own morning; the
+   campaign's reminder_sent_at is claimed first, so a run with nothing due does nothing. */
+Schedule::command('engagement:reenrol-reminders')->hourlyAt(41)->withoutOverlapping(30)->onOneServer();
 
 /* Payment-schedule invoices become live on the first of their own month.
 

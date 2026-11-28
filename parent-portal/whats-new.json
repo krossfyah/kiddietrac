@@ -4,6 +4,28 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🔁",
+            "title": "Families answer re-enrolment",
+            "body": "Launching a re-enrolment campaign now sends every family a notice and an email with an Answer now button, and they say for each child whether they are coming back, with a note if they like. Responded, Renewed and Not returning fill in as they answer, View answers shows every reply, and families who haven't answered get one reminder before the deadline (set the days with ⚙ Reminder rule). Directors can run campaigns for their own centres.",
+            "roles": [
+                "agency_admin",
+                "centre_director",
+                "platform_admin"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-28",
+            "icon": "🔁",
+            "title": "Tell us if you're coming back",
+            "body": "When your centre asks about next term, you can answer for each child right in the app under Re-enrolment, or straight from the email's Answer now button, and change your answer until the deadline.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🔒",
             "title": "Background checks and business cards kept private",
             "body": "Scanned police checks and business cards are now stored privately. They open in the document viewer when you click them, and the link only works for you for a few minutes.",

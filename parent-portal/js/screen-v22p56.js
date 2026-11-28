@@ -1105,59 +1105,172 @@
   }
 
   // ============================ Re-enrollment campaigns =================================
+  /* Families answer now (2026-11-28, App\Support\ReenrolReplies): in the portal (#reenrollment as a parent) or from the
+     email's signed link. Counts come from the answers; View lists each family's answer per child; families who have
+     not answered are reminded once, the agency's reminder days before the deadline. */
+  const RE_ANS = { yes: ['Coming back', 'kt-pill-success'], no: ['Not returning', 'kt-pill-danger'], unsure: ['Unsure', 'kt-pill-warning'], pending: ['No answer yet', ''] };
   async function renderReenrollment(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const r = await Api.get('/engagement/reenrollment').catch(() => ({ data: [] }));
+    const rows = r.data || [];
+    const remind = r.reminder_days > 0 ? `Families who have not answered are reminded ${r.reminder_days} ${r.reminder_days === 1 ? 'day' : 'days'} before the deadline.` : 'Automatic reminders are off.';
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🔁 Re-enrollment campaigns</h2>
-        <p>Confirm next term's enrolment with a notification + portal action for every guardian.</p>
-        <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="re-new">+ Launch campaign</button></div>
+        <p>Ask every enrolled family whether their child is coming back. Parents answer in the app or from the email's button. ${esc(remind)}</p>
+        <div class="kt-hero-actions">
+          ${isAgencyAdminUi() ? '<button class="kt-btn kt-btn-ghost" id="re-rule" type="button">⚙ Reminder rule</button>' : ''}
+          <button class="kt-btn kt-btn-ghost" id="re-new" type="button">+ Launch campaign</button>
+        </div>
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Campaign</th><th>Centre</th><th>Term</th><th>Deadline</th><th>Status</th><th>Invited</th><th>Responded</th><th>Renewed</th></tr></thead>
-          <tbody>${(r.data || []).map(c => `<tr>
+          <thead><tr><th>Campaign</th><th>Centre</th><th>Term</th><th>Deadline</th><th>Status</th><th>Invited</th><th>Responded</th><th>Renewed</th><th>Not returning</th><th></th></tr></thead>
+          <tbody>${rows.map(c => `<tr>
             <td><strong>${esc(c.campaign_name)}</strong></td>
             <td>${esc(c.centre_name || 'All centres')}</td>
             <td>${esc(c.target_term)}</td>
-            <td>${fmtDate(c.deadline)}</td>
-            <td><span class="kt-pill kt-pill-info">${esc(c.status)}</span></td>
+            <td>${fmtDate(c.deadline)}${c.reminder_sent_at ? `<div style="font-size:11.5px;color:#64748B;">Reminded ${fmtDate(String(c.reminder_sent_at))}</div>` : (c.open && c.reminder_on ? `<div style="font-size:11.5px;color:#64748B;">Reminder ${fmtDate(c.reminder_on)}</div>` : '')}</td>
+            <td><span class="kt-pill ${c.open ? 'kt-pill-info' : ''}">${c.open ? 'Open' : 'Closed'}</span></td>
             <td>${c.total_invited}</td>
             <td>${c.total_responded}</td>
             <td><strong style="color:#15803D;">${c.total_renewed}</strong></td>
-          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;padding:40px;color:#64748B;">No campaigns yet.</td></tr>'}</tbody>
+            <td>${c.total_declined ? `<strong style="color:#B45309;">${c.total_declined}</strong>` : '0'}</td>
+            <td style="text-align:center;"><button type="button" data-re-view="${c.id}" title="View answers">View answers</button></td>
+          </tr>`).join('') || '<tr><td colspan="10" style="text-align:center;padding:40px;color:#64748B;">No campaigns yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('re-new').onclick = async () => {
+    const again = () => renderReenrollment(main.isConnected ? main : (document.getElementById('appMain') || main));
+    main.querySelectorAll('[data-re-view]').forEach(b => b.onclick = () => openReenrolView(b.dataset.reView));
+    const rr = main.querySelector('#re-rule');
+    if (rr) rr.onclick = () => openReenrolRule(r.reminder_days, again);
+    main.querySelector('#re-new').onclick = async () => {
       /* Which centre (2026-11-27): the server requires one for a director ("Choose one of your centres") but this
          dialog never asked, so a director could not launch a campaign at all. Same list as Tuition increases. */
       const _cr = await Api.get('/admin/centres').catch(() => ({}));
       const centres = (_cr.centres || _cr.data || []).filter(c => !c.deleted_at);
-      const isDirector = /\brole-centre-director\b/.test(document.body.className || '');
-      const centreOpts = (isDirector ? [] : [{ value: '', label: 'All centres' }])
+      const centreOpts = (isDirectorUi() ? [] : [{ value: '', label: 'All centres' }])
         .concat(centres.map(c => ({ value: String(c.id), label: c.name })));
-      // One dialog for what used to be three prompts in a row.
       const v = await KT.prompt({
         title: 'Launch a re-enrolment campaign',
-        description: 'Every guardian is notified and asked to confirm next term in the portal.',
+        description: 'Every enrolled child\'s guardians get a notification and an email with a button to answer, straight away.',
         fields: [
           { key: 'centre', label: 'Centre', type: 'select', options: centreOpts, value: centreOpts.length ? centreOpts[0].value : '' },
-          { key: 'name', label: 'Campaign name', value: 'Fall 2026 re-enrolment' },
-          { key: 'term', label: 'Target term', value: 'Fall 2026' },
+          { key: 'name', label: 'Campaign name', value: 'Fall 2027 re-enrolment' },
+          { key: 'term', label: 'Target term', value: 'Fall 2027' },
           { key: 'deadline', label: 'Deadline', type: 'date' },
         ],
         okLabel: 'Launch campaign',
       });
       if (!v) return;
-      const name = v.name, term = v.term, deadline = v.deadline;
-      if (!name || !term || !deadline) return;
-      Api.post('/engagement/reenrollment', { centre_id: v.centre ? parseInt(v.centre, 10) : null, campaign_name: name, target_term: term, deadline })
-        .then(r => { KT.Dom.toast(`Invited ${r.invited} children`, 'success'); renderReenrollment(main); })
+      if (!v.name || !v.term || !v.deadline) { KT.Dom.toast('Fill in the name, term and deadline.', 'error'); return; }
+      Api.post('/engagement/reenrollment', { centre_id: v.centre ? parseInt(v.centre, 10) : null, campaign_name: v.name, target_term: v.term, deadline: v.deadline })
+        .then(x => { KT.Dom.toast(`Invited ${x.invited} children (${x.families} families told)`, 'success'); again(); })
         .catch(e => KT.Dom.toast((e && e.message) || 'Could not launch the campaign.', 'error'));
     };
+  }
+
+  async function openReenrolView(id) {
+    const Shell = window.KT && KT.Shell;
+    let r;
+    try { r = await Api.get('/engagement/reenrollment/' + id); }
+    catch (e) { KT.Dom.toast((e && e.message) || 'Could not open the campaign.', 'error'); return; }
+    const c = r.data, n = r.counts || {}, fams = r.families || [];
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(900px,100%);';
+    const via = (k) => k.via === 'email' ? ' · by email link' : k.via === 'portal' ? ' · in the app' : '';
+    const rowsHtml = (filter) => fams.map(f => {
+      const kids = f.children.filter(k => !filter || k.response === filter);
+      return kids.map((k, i) => {
+        const a = RE_ANS[k.response] || RE_ANS.pending;
+        return `<tr><td>${i === 0 ? '<strong>' + esc(f.family_name) + '</strong>' + (f.centre_name ? `<div style="font-size:11.5px;color:#64748B;">${esc(f.centre_name)}</div>` : '') : ''}</td>
+          <td>${esc(k.name)}</td><td><span class="kt-pill ${a[1]}">${a[0]}</span>${k.responded_at ? `<div style="font-size:11.5px;color:#64748B;">${fmtDate(String(k.responded_at))}${via(k)}</div>` : (k.reminded_at ? `<div style="font-size:11.5px;color:#64748B;">Reminded ${fmtDate(String(k.reminded_at))}</div>` : '')}</td>
+          <td>${k.notes ? esc(k.notes) : '<span style="color:#94A3B8;">—</span>'}</td></tr>`;
+      }).join('');
+    }).join('') || '<tr><td colspan="4" style="text-align:center;padding:24px;color:#64748B;">Nobody here.</td></tr>';
+    wrap.innerHTML = `<div style="font-size:13px;color:#334155;margin-bottom:10px;"><strong>${esc(c.target_term)}</strong> · deadline ${fmtDate(c.deadline)} · ${n.invited || 0} invited, ${n.responded || 0} answered, <strong style="color:#15803D;">${n.renewed || 0} coming back</strong>, <strong style="color:#B45309;">${n.declined || 0} not returning</strong></div>
+      <div role="tablist" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        ${[['', 'All'], ['pending', 'No answer yet'], ['yes', 'Coming back'], ['no', 'Not returning']].map((t, i) => `<button type="button" class="kt-btn ${i === 0 ? 'kt-btn-primary' : 'kt-btn-ghost'}" data-re-f="${t[0]}">${t[1]}</button>`).join('')}
+      </div>
+      <table style="width:100%;font-size:13px;"><thead><tr><th>Family</th><th>Child</th><th>Answer</th><th>Note</th></tr></thead><tbody id="re-rows">${rowsHtml('')}</tbody></table>`;
+    wrap.querySelectorAll('[data-re-f]').forEach(b => b.onclick = () => {
+      wrap.querySelectorAll('[data-re-f]').forEach(x => { x.classList.toggle('kt-btn-primary', x === b); x.classList.toggle('kt-btn-ghost', x !== b); });
+      wrap.querySelector('#re-rows').innerHTML = rowsHtml(b.dataset.reF);
+    });
+    Shell.Modal.open({ title: '🔁 ' + c.campaign_name, body: wrap, large: true, actions: [{ label: 'Close' }] });
+  }
+
+  function openReenrolRule(days, after) {
+    const Shell = window.KT && KT.Shell;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(460px,90vw);';
+    wrap.innerHTML = `<label style="${labelCss}" for="re-rule-days">Remind families who have not answered this many days before the deadline</label>
+      <input id="re-rule-days" type="number" min="0" max="90" step="1" value="${esc(days)}" style="${fieldCss}">
+      <div style="font-size:12px;color:#64748B;margin-top:6px;">One reminder per campaign (a notification and an email), from 9 am. 0 turns reminders off.</div>
+      <div id="re-rule-err" role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:8px;"></div>`;
+    Shell.Modal.open({ title: '⚙ Re-enrolment reminder', body: wrap, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async () => {
+      const v = parseInt(wrap.querySelector('#re-rule-days').value, 10);
+      if (isNaN(v) || v < 0 || v > 90) { wrap.querySelector('#re-rule-err').textContent = 'Enter between 0 and 90 days.'; return false; }
+      try { await Api.patch('/admin/billing-setup', { reenrol_reminder_days: v }); }
+      catch (e) { wrap.querySelector('#re-rule-err').textContent = (e && e.message) || 'Could not save the rule.'; return false; }
+      KT.Dom.toast('Reminder rule saved', 'success'); after(); return true;
+    } }] });
+  }
+
+  /* The parent's re-enrolment screen (2026-11-28): each open campaign for their family, Yes / No per child with an
+     optional note; answers can be changed until the deadline. The bell and the email link here. */
+  async function renderMyReenrolment(main) {
+    main.setAttribute('data-kt-pretty', '1');
+    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
+    let r;
+    try { r = await Api.get('/engagement/reenrollment/mine'); }
+    catch (e) { main.innerHTML = `<div class="kt-card" style="margin:24px;color:#B91C1C;">${esc((e && e.message) || 'Could not load re-enrolment. Please try again.')}</div>`; return; }
+    if (!main.isConnected) return;
+    const list = r.data || [];
+    const card = (c) => `<div class="kt-card" data-re-c="${c.id}" style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline;">
+          <h3 style="margin:0;font-size:17px;">Coming back for ${esc(c.term)}?</h3>
+          <span class="kt-pill ${c.open ? 'kt-pill-info' : ''}">${c.open ? 'Answer by ' + fmtDate(c.deadline) : 'Closed ' + fmtDate(c.deadline)}</span>
+        </div>
+        <div style="font-size:13px;color:#64748B;margin:4px 0 12px;">${c.open ? 'Choose for each child. You can change your answer until the deadline.' : 'The deadline has passed. Contact the centre if your plans have changed.'}</div>
+        ${c.children.map(k => `<div data-re-k="${k.child_id}" style="border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;">
+            <strong>${esc(k.name)}</strong>
+            <div role="radiogroup" aria-label="${esc(k.first_name)}" style="display:flex;gap:6px;">
+              <button type="button" class="kt-btn ${k.response === 'yes' ? 'kt-btn-primary' : 'kt-btn-ghost'}" data-v="yes" aria-pressed="${k.response === 'yes'}"${c.open ? '' : ' disabled'}>Yes, coming back</button>
+              <button type="button" class="kt-btn ${k.response === 'no' ? 'kt-btn-primary' : 'kt-btn-ghost'}" data-v="no" aria-pressed="${k.response === 'no'}"${c.open ? '' : ' disabled'}>No</button>
+            </div>
+          </div>
+          <textarea maxlength="500" placeholder="Add a note (optional)" aria-label="Note for ${esc(k.first_name)}" style="width:100%;min-height:56px;margin-top:8px;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:8px;padding:7px 9px;font:inherit;font-size:13.5px;"${c.open ? '' : ' disabled'}>${esc(k.notes || '')}</textarea>
+        </div>`).join('')}
+        ${c.open ? '<div data-re-err role="alert" style="color:#B91C1C;font-size:13px;min-height:16px;"></div><button type="button" class="kt-btn kt-btn-primary" data-re-save>Save my answers</button>' : ''}
+      </div>`;
+    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+      <div class="kt-page-hero"><h2>🔁 Re-enrolment</h2><p>Tell the centre whether your child is coming back next term.</p></div>
+      ${list.map(card).join('') || '<div class="kt-card" style="text-align:center;padding:40px;color:#64748B;">Nothing to answer right now. When your centre asks about next term, it shows here.</div>'}
+    </div>`;
+    main.querySelectorAll('[data-re-c]').forEach(box => {
+      const c = list.find(x => String(x.id) === box.dataset.reC);
+      const picks = {};
+      c.children.forEach(k => { picks[k.child_id] = (k.response === 'yes' || k.response === 'no') ? k.response : ''; });
+      box.querySelectorAll('[data-re-k] [data-v]').forEach(b => b.onclick = () => {
+        const kb = b.closest('[data-re-k]'); picks[kb.dataset.reK] = b.dataset.v;
+        kb.querySelectorAll('[data-v]').forEach(o => { const on = o === b; o.classList.toggle('kt-btn-primary', on); o.classList.toggle('kt-btn-ghost', !on); o.setAttribute('aria-pressed', String(on)); });
+      });
+      const sb = box.querySelector('[data-re-save]');
+      if (sb) sb.onclick = async () => {
+        const answers = [...box.querySelectorAll('[data-re-k]')].filter(kb => picks[kb.dataset.reK]).map(kb => ({ child_id: parseInt(kb.dataset.reK, 10), response: picks[kb.dataset.reK], note: kb.querySelector('textarea').value.trim() || null }));
+        const err = box.querySelector('[data-re-err]');
+        if (!answers.length) { err.textContent = 'Choose Yes or No for at least one child.'; return; }
+        err.textContent = ''; sb.disabled = true;
+        const done = (KT.busy ? KT.busy(sb) : function () {});
+        try { const x = await Api.post('/engagement/reenrollment/' + c.id + '/respond', { answers }); KT.Dom.toast(x.message || 'Answers saved', 'success'); renderMyReenrolment(main); }
+        catch (e) { err.textContent = (e && e.message) || 'Could not save your answers.'; sb.disabled = false; }
+        finally { done(); }
+      };
+    });
   }
 
   // ============================ Engagement scores =================================
@@ -1790,7 +1903,7 @@
   window.KT.V22p56 = {
     renderClosures, renderLatePickup, renderRoomRatios,
     renderVacationHolds, renderTuitionIncreases,
-    renderReenrollment, renderEngagement, renderNps,
+    renderReenrollment, renderMyReenrolment, renderEngagement, renderNps,
     renderSignedDocs, renderBusRoutes, renderRoomRotations,
   };
 })(window);

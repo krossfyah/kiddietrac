@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Re-enrolment</title>
+  <meta name="robots" content="noindex">
+  <!-- No icon until the brand is known: a white-label agency must not show KiddieTrac's. -->
+  <link rel="icon" id="fav" href="data:,">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
+  <meta name="theme-color" content="#0A1C3A">
+  <!-- Re-enrolment answer from the email's button (2026-11-28). ?t=<token>. Backend: ReenrolReplyController +
+       App\Support\ReenrolReplies. Opening the page changes nothing; only Save does. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --ink2: #334155; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; --card: #FFFFFF; --soft: #F8FAFC;
+            --ok: #047857; --no: #B45309; --field: #FFFFFF; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #F1F5F9; --ink2: #CBD5E1; --muted: #94A3B8; --line: #334155; --bg: #0B1220; --card: #111A2E; --soft: #1E293B; --ok: #34D399; --no: #F59E0B; --field: #0F172A; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 560px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px 48px; }
+    .head { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 18px; min-height: 40px; }
+    .head img { max-height: 40px; max-width: 200px; }
+    .head b { font-size: 17px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    .eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    h1 { font-size: 22px; line-height: 1.25; margin: 6px 0 6px; }
+    .sub { font-size: 14.5px; color: var(--ink2); line-height: 1.55; margin: 0 0 14px; }
+    .kid { border: 1px solid var(--line); background: var(--soft); border-radius: 14px; padding: 12px 14px; margin: 0 0 10px; }
+    .kid-n { font-weight: 800; font-size: 16px; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+    .kid-n small { font-weight: 700; font-size: 12px; color: var(--muted); }
+    .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .opt { border: 1.5px solid var(--line); background: var(--field); color: var(--ink); border-radius: 11px; padding: 11px 8px; font-size: 14.5px; font-weight: 800; cursor: pointer; font-family: inherit; }
+    .opt[aria-pressed="true"].yes { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--field)); color: var(--ok); }
+    .opt[aria-pressed="true"].no { border-color: var(--no); background: color-mix(in srgb, var(--no) 14%, var(--field)); color: var(--no); }
+    textarea { width: 100%; margin-top: 8px; min-height: 60px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 14px; background: var(--field); color: var(--ink); resize: vertical; }
+    .btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px 10px; font-size: 15.5px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; margin-top: 14px; }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .err { color: #DC2626; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .done { text-align: center; padding: 6px 0 2px; }
+    .done .big { font-size: 48px; line-height: 1; margin-bottom: 8px; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 16px; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head" id="head"></div>
+    <div class="card" id="card"><div class="sub" data-t="loading">Loading…</div></div>
+    <div class="foot" id="foot"></div>
+  </div>
+  <script>
+  (function () {
+    'use strict';
+    var T = {
+      en: { loading: 'Loading…', eyebrow: 'RE-ENROLMENT', title: 'Coming back for {term}?', hi: 'Hi {name},', intro: 'Please tell us for each child whether they will be coming back. You can change your answer until {date}.',
+        yes: 'Yes, coming back', no: 'No', note: 'Add a note (optional)', save: 'Save my answers', saving: 'Saving…', pick: 'Choose Yes or No for at least one child.',
+        saved: 'Thank you!', savedSub: 'Your answers are saved. You can open this link again to change them until {date}.', answered: 'Answered', change: 'Change my answers',
+        fail: 'Could not save. Please check your connection and try again.', foot: 'Sent by {brand}. You can also answer in the app under Re-enrolment.' },
+      fr: { loading: 'Chargement…', eyebrow: 'RÉINSCRIPTION', title: 'De retour pour {term} ?', hi: 'Bonjour {name},', intro: 'Dites-nous pour chaque enfant s’il reviendra. Vous pouvez changer votre réponse jusqu’au {date}.',
+        yes: 'Oui, il revient', no: 'Non', note: 'Ajouter une note (facultatif)', save: 'Enregistrer mes réponses', saving: 'Enregistrement…', pick: 'Choisissez Oui ou Non pour au moins un enfant.',
+        saved: 'Merci !', savedSub: 'Vos réponses sont enregistrées. Vous pouvez rouvrir ce lien pour les changer jusqu’au {date}.', answered: 'Répondu', change: 'Changer mes réponses',
+        fail: 'Enregistrement impossible. Vérifiez votre connexion et réessayez.', foot: 'Envoyé par {brand}. Vous pouvez aussi répondre dans l’appli, sous Réinscription.' },
+      es: { loading: 'Cargando…', eyebrow: 'REINSCRIPCIÓN', title: '¿Regresa para {term}?', hi: 'Hola {name}:', intro: 'Díganos por cada niño si regresará. Puede cambiar su respuesta hasta el {date}.',
+        yes: 'Sí, regresa', no: 'No', note: 'Agregar una nota (opcional)', save: 'Guardar mis respuestas', saving: 'Guardando…', pick: 'Elija Sí o No para al menos un niño.',
+        saved: '¡Gracias!', savedSub: 'Sus respuestas están guardadas. Puede abrir este enlace otra vez para cambiarlas hasta el {date}.', answered: 'Respondido', change: 'Cambiar mis respuestas',
+        fail: 'No se pudo guardar. Revise su conexión e inténtelo de nuevo.', foot: 'Enviado por {brand}. También puede responder en la aplicación, en Reinscripción.' },
+      hi: { loading: 'लोड हो रहा है…', eyebrow: 'दोबारा नामांकन', title: '{term} के लिए वापस आ रहे हैं?', hi: 'नमस्ते {name},', intro: 'हर बच्चे के लिए बताएँ कि वह वापस आएगा या नहीं। आप {date} तक अपना जवाब बदल सकते हैं।',
+        yes: 'हाँ, वापस आ रहा है', no: 'नहीं', note: 'नोट जोड़ें (वैकल्पिक)', save: 'मेरे जवाब सहेजें', saving: 'सहेजा जा रहा है…', pick: 'कम से कम एक बच्चे के लिए हाँ या नहीं चुनें।',
+        saved: 'धन्यवाद!', savedSub: 'आपके जवाब सहेज लिए गए। आप {date} तक यह लिंक दोबारा खोलकर उन्हें बदल सकते हैं।', answered: 'जवाब दिया', change: 'मेरे जवाब बदलें',
+        fail: 'सहेजा नहीं जा सका। अपना कनेक्शन जाँचें और दोबारा कोशिश करें।', foot: '{brand} द्वारा भेजा गया। आप ऐप में दोबारा नामांकन के तहत भी जवाब दे सकते हैं।' }
+    };
+    var L = 'en';
+    function t(k, v) { var s = (T[L] && T[L][k]) || T.en[k] || k; Object.keys(v || {}).forEach(function (x) { s = s.split('{' + x + '}').join(v[x]); }); return s; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    var token = (new URLSearchParams(location.search).get('t') || '').replace(/[^A-Za-z0-9]/g, '');
+    var API = 'https://api.kiddietrac.com/api/v1/public/reenrolment-reply/' + token;
+    var card = document.getElementById('card');
+    var data = null, picks = {};
+
+    function brand(b) {
+      if (!b) return;
+      if (b.primary) document.documentElement.style.setProperty('--brand', b.primary);
+      var h = document.getElementById('head');
+      h.innerHTML = b.logo ? '<img alt="' + esc(b.name) + '" src="' + esc(b.logo) + '">' : '<b>' + esc(b.name || '') + '</b>';
+      if (b.favicon) document.getElementById('fav').href = b.favicon;
+      else if (!b.white_label) document.getElementById('fav').href = '/favicon.svg?v=20260901b';
+      document.getElementById('foot').textContent = t('foot', { brand: b.name || '' });
+    }
+    function setLocale(l) { if (T[l]) { L = l; document.documentElement.lang = l; } }
+
+    function draw(doneMsg) {
+      var c = data.campaign, kids = data.children || [];
+      if (doneMsg) {
+        card.innerHTML = '<div class="done"><div class="big">✅</div><h1>' + esc(t('saved')) + '</h1><p class="sub">' + esc(t('savedSub', { date: c.deadline_label })) + '</p>'
+          + kids.map(function (k) { return '<div class="kid"><div class="kid-n">' + esc(k.first_name) + '<small>' + esc(k.response === 'yes' ? t('yes') : k.response === 'no' ? t('no') : '—') + '</small></div></div>'; }).join('')
+          + '<button class="btn" type="button" id="again">' + esc(t('change')) + '</button></div>';
+        document.getElementById('again').onclick = function () { draw(); };
+        return;
+      }
+      kids.forEach(function (k) { if (!(k.child_id in picks)) picks[k.child_id] = (k.response === 'yes' || k.response === 'no') ? k.response : ''; });
+      card.innerHTML = '<div class="eyebrow">🔁 ' + esc(t('eyebrow')) + '</div><h1>' + esc(t('title', { term: c.term })) + '</h1>'
+        + '<p class="sub">' + esc(t('hi', { name: data.guardian_first || '' })).replace(/ ,/, ',') + '<br>' + esc(t('intro', { date: c.deadline_label })) + '</p>'
+        + kids.map(function (k) {
+          var p = picks[k.child_id];
+          return '<div class="kid" data-kid="' + k.child_id + '"><div class="kid-n">' + esc(k.first_name) + (k.response !== 'pending' ? '<small>' + esc(t('answered')) + '</small>' : '') + '</div>'
+            + '<div class="pick"><button type="button" class="opt yes" data-v="yes" aria-pressed="' + (p === 'yes') + '">' + esc(t('yes')) + '</button>'
+            + '<button type="button" class="opt no" data-v="no" aria-pressed="' + (p === 'no') + '">' + esc(t('no')) + '</button></div>'
+            + '<textarea maxlength="500" placeholder="' + esc(t('note')) + '" aria-label="' + esc(t('note')) + '" style="min-height:60px">' + esc(k.note || '') + '</textarea></div>';
+        }).join('')
+        + '<div class="hp" aria-hidden="true"><input tabindex="-1" autocomplete="off" id="website" name="website"></div>'
+        + '<div class="err" id="err" role="alert"></div><button class="btn" type="button" id="save">' + esc(t('save')) + '</button>';
+      card.querySelectorAll('.opt').forEach(function (b) {
+        b.onclick = function () {
+          var box = b.closest('[data-kid]'); picks[box.getAttribute('data-kid')] = b.getAttribute('data-v');
+          box.querySelectorAll('.opt').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+        };
+      });
+      document.getElementById('save').onclick = save;
+    }
+
+    function save() {
+      var btn = document.getElementById('save'), err = document.getElementById('err');
+      var answers = [];
+      card.querySelectorAll('[data-kid]').forEach(function (box) {
+        var id = box.getAttribute('data-kid');
+        if (picks[id]) answers.push({ child_id: parseInt(id, 10), response: picks[id], note: box.querySelector('textarea').value.trim() || null });
+      });
+      if (!answers.length) { err.textContent = t('pick'); return; }
+      err.textContent = ''; btn.disabled = true; btn.textContent = t('saving');
+      fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ answers: answers, website: document.getElementById('website').value }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          if (x.j && x.j.children) data.children = x.j.children;
+          if (!x.ok) { btn.disabled = false; btn.textContent = t('save'); err.textContent = (x.j && x.j.message) || t('fail'); return; }
+          draw(true);
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = t('save'); err.textContent = t('fail'); });
+    }
+
+    if (!token) { card.innerHTML = '<p class="sub">This link is not valid any more. Please sign in to the app to answer.</p>'; return; }
+    fetch(API, { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        setLocale(j.locale || 'en'); brand(j.brand);
+        if (j.state !== 'ok') { card.innerHTML = '<div class="done"><div class="big">🔁</div><p class="sub">' + esc(j.message || '') + '</p></div>'; return; }
+        data = j; draw();
+      })
+      .catch(function () { card.innerHTML = '<p class="sub">' + esc(t('fail')) + '</p>'; });
+  })();
+  </script>
+</body>
+</html>

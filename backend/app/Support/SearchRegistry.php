@@ -243,6 +243,7 @@ final class SearchRegistry
         'billing_schedules' => 'a schedule; the invoices it raises are searchable',
         'billing_schedule_runs' => 'the log of each scheduled billing date; shown on the family\'s Billing schedule, and the invoices it raises are searchable',
         'vacation_hold_credit_lines' => 'which invoice line each vacation hold credit went on; shown on Vacation holds, and the invoices themselves are searchable',
+        'reenrolment_reply_links' => 'signed links in re-enrolment emails (hashed tokens only); the answers show on Re-enrollment',
         'tuition_increase_items' => 'what a tuition increase told each family and changed (old and new amount); shown in the increase\'s View popup, never searched',
         'tax_receipts' => 'annual receipts generated per family and year from the payments (which are searchable); opened from the family\'s billing',
         'etransfer_requests' => 'a request against an invoice; the invoice is searchable and shows it',

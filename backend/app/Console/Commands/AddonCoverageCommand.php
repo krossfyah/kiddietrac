@@ -53,6 +53,7 @@ final class AddonCoverageCommand extends Command
         'invoices:autopay-charge' => ['autopay', 'app/Console/Commands/AutopayChargeCommand.php'],
         'billing:schedules' => ['billing', 'app/Console/Commands/BillingSchedulesCommand.php'],
         'billing:tuition-increases' => ['billing', 'app/Console/Commands/TuitionIncreasesCommand.php'],
+        'engagement:reenrol-reminders' => ['sales_crm', 'app/Console/Commands/ReenrolRemindersCommand.php'],
         'qbo:sync' => ['accounting_sync', 'app/Console/Commands/QboSyncCommand.php'],
         'sage:sync' => ['accounting_sync', 'app/Console/Commands/SageSyncCommand.php'],
         'xero:sync' => ['accounting_sync', 'app/Console/Commands/XeroSyncCommand.php'],

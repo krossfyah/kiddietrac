@@ -35,7 +35,69 @@ final class EngagementController extends Controller
             ->where('rc.agency_id', $agencyId)
             ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('rc.centre_id')->orWhereIn('rc.centre_id', $scope ?: [0])))
             ->orderByDesc('rc.created_at')->select('rc.*', 'c.name as centre_name')->get();
-        return response()->json(['data' => $rows]);
+        /* Counts from the answers themselves (2026-11-28, ReenrolReplies): Responded / Renewed never moved because no
+           family could answer. A director's counts on an agency-wide campaign are their own centres' families only. */
+        $counts = \App\Support\ReenrolReplies::counts($rows->pluck('id')->all(), $scope);
+        $today = \App\Support\AgencyTime::today((int) $agencyId);
+        $remDays = \App\Support\BillingRules::reenrolReminderDays((int) $agencyId);
+        $rows = $rows->map(function ($r) use ($counts, $today, $remDays) {
+            $n = $counts[(int) $r->id] ?? ['invited' => 0, 'responded' => 0, 'renewed' => 0, 'declined' => 0, 'unsure' => 0];
+            $r->total_invited = $n['invited'];
+            $r->total_responded = $n['responded'];
+            $r->total_renewed = $n['renewed'];
+            $r->total_declined = $n['declined'];
+            $r->open = $r->status === 'sent' && $today <= substr((string) $r->deadline, 0, 10);
+            $r->reminder_on = $remDays > 0 ? Carbon::parse(substr((string) $r->deadline, 0, 10))->subDays($remDays)->toDateString() : null;
+
+            return $r;
+        });
+
+        return response()->json(['data' => $rows, 'reminder_days' => $remDays]);
+    }
+
+    /** GET /engagement/reenrollment/{id} - each family's answers, child by child (a director: their own centres). */
+    public function showCampaign(Request $request, int $id): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $c = DB::table('reenrollment_campaigns')->where('id', $id)->where('agency_id', $agencyId)->first();
+        abort_unless($c && ($scope === null || $c->centre_id === null || in_array((int) $c->centre_id, $scope, true)), 404);
+        $q = DB::table('reenrollment_responses as r')->join('children as ch', 'ch.id', '=', 'r.child_id')
+            ->join('families as f', 'f.id', '=', 'r.family_id')->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('r.campaign_id', $id)->where('ce.agency_id', $agencyId)
+            ->when($scope !== null, fn ($w) => $w->whereIn('f.centre_id', $scope ?: [0]))
+            ->orderBy('f.family_name')->orderBy('ch.first_name');
+        $rows = $q->get(['r.family_id', 'f.family_name', 'ce.name as centre_name', 'r.child_id', 'ch.first_name', 'ch.last_name', 'r.response', 'r.notes', 'r.responded_at', 'r.responded_via', 'r.reminded_at']);
+        $families = $rows->groupBy('family_id')->map(fn ($g) => [
+            'family_id' => (int) $g[0]->family_id, 'family_name' => $g[0]->family_name, 'centre_name' => $g[0]->centre_name,
+            'children' => $g->map(fn ($r) => ['name' => trim($r->first_name . ' ' . $r->last_name), 'response' => $r->response, 'notes' => $r->notes,
+                'responded_at' => $r->responded_at, 'via' => $r->responded_via, 'reminded_at' => $r->reminded_at])->values(),
+        ])->values();
+        $n = \App\Support\ReenrolReplies::counts([$id], $scope)[$id] ?? null;
+
+        return response()->json(['data' => $c, 'counts' => $n, 'families' => $families]);
+    }
+
+    /** GET /engagement/reenrollment/mine - the signed-in parent's open (and recently closed) re-enrolments. */
+    public function myCampaigns(Request $request): JsonResponse
+    {
+        $familyIds = DB::table('guardians')->where('user_id', $request->user()->id)->pluck('family_id')->map(fn ($v) => (int) $v)->all();
+        $out = [];
+        if ($familyIds) {
+            $camps = DB::table('reenrollment_responses as r')->join('reenrollment_campaigns as c', 'c.id', '=', 'r.campaign_id')
+                ->whereIn('r.family_id', $familyIds)->where('c.status', 'sent')
+                ->whereDate('c.deadline', '>=', now()->subDays(60)->toDateString())
+                ->select('c.*', 'r.family_id')->distinct()->orderByDesc('c.deadline')->get();
+            foreach ($camps as $c) {
+                $out[] = [
+                    'id' => (int) $c->id, 'family_id' => (int) $c->family_id, 'name' => $c->campaign_name, 'term' => $c->target_term,
+                    'deadline' => substr((string) $c->deadline, 0, 10), 'open' => \App\Support\ReenrolReplies::isOpen($c),
+                    'children' => \App\Support\ReenrolReplies::children((int) $c->id, (int) $c->family_id),
+                ];
+            }
+        }
+
+        return response()->json(['data' => $out]);
     }
 
     public function createCampaign(Request $request): JsonResponse
@@ -58,6 +120,10 @@ final class EngagementController extends Controller
             }
         } elseif ($scope !== null) {
             return response()->json(['message' => 'Choose one of your centres for this campaign.'], 422);
+        }
+        // The deadline is a day in the agency's own calendar (the "after:today" above is the server's).
+        if (substr((string) $data['deadline'], 0, 10) <= \App\Support\AgencyTime::today((int) $agencyId)) {
+            return response()->json(['message' => 'The deadline must be after today.'], 422);
         }
         // Find all currently-enrolled children at this centre/agency
         $q = DB::table('children as ch')
@@ -82,11 +148,12 @@ final class EngagementController extends Controller
             'status' => 'sent',
             'sent_at' => now(),
             'total_invited' => $kids->count(),
+            'created_by_id' => $request->user()->id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
         foreach ($kids as $k) {
-            DB::table('reenrollment_responses')->insert([
+            DB::table('reenrollment_responses')->insertOrIgnore([
                 'campaign_id' => $campaignId,
                 'family_id' => $k->family_id,
                 'child_id' => $k->child_id,
@@ -94,48 +161,43 @@ final class EngagementController extends Controller
                 'created_at' => now(),
             ]);
         }
-        // Notify guardians of each child
-        $familyIds = $kids->pluck('family_id')->unique();
-        $gids = DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique();
-        foreach ($gids as $gid) {
-            \App\Support\Notify::write([
-                'user_id' => $gid, 'type' => 'reenrollment',
-                'title' => "Re-enrol for {$data['target_term']}",
-                'body' => "Confirm by " . Carbon::parse($data['deadline'])->format('M j'),
-                'data' => json_encode(['link' => '#reenrollment', 'campaign_id' => $campaignId]),
-                'created_at' => now(),
-            ]);
-        }
-        return response()->json(['id' => $campaignId, 'invited' => $kids->count()], 201);
+        /* Each guardian: a bell AND a house-frame email whose button opens the family's signed reply page
+           (2026-11-28, ReenrolReplies). Before, a bell linked to a #reenrollment screen parents did not have. */
+        $campaign = \App\Support\ReenrolReplies::campaign((int) $campaignId);
+        $told = \App\Support\ReenrolReplies::notifyFamilies($campaign, $kids->pluck('family_id')->unique()->all(), 'invite');
+        \App\Support\Audit::write(['user_id' => $request->user()->id, 'agency_id' => (int) $agencyId, 'action' => 'reenrolment.launched',
+            'entity_type' => 'reenrollment_campaign', 'entity_id' => (int) $campaignId,
+            'payload' => json_encode(['summary' => 'Re-enrolment for ' . $data['target_term'] . ' launched: ' . $kids->count() . ' children, ' . $told . ' families told'], JSON_UNESCAPED_UNICODE),
+            'created_at' => now()]);
+        return response()->json(['id' => $campaignId, 'invited' => $kids->count(), 'families' => $told], 201);
     }
 
+    /* POST /engagement/reenrollment/{id}/respond - the parent's answers in the portal: {answers:[{child_id, response,
+       note}]} or the old single {child_id, response, notes}. Only the parent's own family's invited children, only
+       until the deadline (ReenrolReplies::answer). */
     public function respondCampaign(Request $request, int $campaignId): JsonResponse
     {
         $data = $request->validate([
-            'child_id' => 'required|integer',
-            'response' => 'required|in:yes,no,unsure',
+            'answers' => 'nullable|array|max:20',
+            'answers.*.child_id' => 'required_with:answers|integer',
+            'answers.*.response' => 'required_with:answers|in:yes,no,unsure',
+            'answers.*.note' => 'nullable|string|max:500',
+            'child_id' => 'required_without:answers|integer',
+            'response' => 'required_without:answers|in:yes,no,unsure',
             'notes' => 'nullable|string|max:500',
         ]);
+        $answers = $data['answers'] ?? [['child_id' => $data['child_id'], 'response' => $data['response'], 'note' => $data['notes'] ?? null]];
         $u = $request->user();
-        // SECURITY (v22p94): only respond for a child you actually have access to
-        // (own family / centre) — was updating by child_id from the body with no
-        // ownership check, letting a guardian alter any family's re-enrollment.
-        abort_unless($this->canAccessChildId($u, (int) $data['child_id']), 403);
-        $familyId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
-        DB::table('reenrollment_responses')
-            ->where('campaign_id', $campaignId)
-            ->where('child_id', $data['child_id'])
-            ->update([
-                'response' => $data['response'],
-                'responded_at' => now(),
-                'notes' => $data['notes'] ?? null,
-            ]);
-        DB::table('reenrollment_campaigns')->where('id', $campaignId)->update([
-            'total_responded' => DB::raw('(SELECT COUNT(*) FROM reenrollment_responses WHERE campaign_id = ' . $campaignId . ' AND response <> "pending")'),
-            'total_renewed' => DB::raw('(SELECT COUNT(*) FROM reenrollment_responses WHERE campaign_id = ' . $campaignId . ' AND response = "yes")'),
-            'updated_at' => now(),
-        ]);
-        return response()->json(['status' => $data['response']]);
+        $c = \App\Support\ReenrolReplies::campaign($campaignId);
+        abort_unless($c, 404);
+        // The family: the one this parent is a guardian of AND the children belong to (never the first guardian row).
+        $childFamily = DB::table('children')->whereIn('id', array_map(fn ($a) => (int) $a['child_id'], $answers))->distinct()->pluck('family_id')->map(fn ($v) => (int) $v)->all();
+        $familyId = count($childFamily) === 1 ? $childFamily[0] : 0;
+        abort_unless($familyId && DB::table('guardians')->where('user_id', $u->id)->where('family_id', $familyId)->exists(), 403);
+        [$ok, $msg] = \App\Support\ReenrolReplies::answer($c, $familyId, $answers, (int) $u->id, 'portal');
+        if (! $ok) return response()->json(['message' => $msg], 422);
+
+        return response()->json(['ok' => true, 'message' => $msg, 'children' => \App\Support\ReenrolReplies::children($campaignId, $familyId)]);
     }
 
     // =====================

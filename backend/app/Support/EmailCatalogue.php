@@ -382,6 +382,15 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
+                'key' => 'reenrolment-request', 'audience' => 'parents',
+                'name' => 'Re-enrolment request and reminder',
+                'fires' => 'When a re-enrolment campaign is launched, and once more on the agency\'s reminder day (default 7 days before the deadline) to families who have not answered.',
+                'to' => 'Each guardian of an invited family (by first name), with an Answer now button to their own signed reply page',
+                'subject' => 'Re-enrolment for {term} — please answer by {date} (Reminder: …)',
+                'source' => 'Support/BillingNoticeMail.php',
+                'preview' => 'none',
+            ],
+            [
                 'key' => 'drip', 'audience' => 'parents',
                 'name' => 'A note from us',
                 'fires' => 'Scheduled drip sequence, where one is configured.',

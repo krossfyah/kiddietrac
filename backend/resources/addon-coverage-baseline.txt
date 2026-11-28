@@ -452,6 +452,7 @@ route provider/team-contacts
 route provider/team-threads
 route provider/temp-pickups
 route public/attendance-reply
+route public/reenrolment-reply
 route public/give
 route public/nda
 route public/nps

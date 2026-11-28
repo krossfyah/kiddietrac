@@ -79,6 +79,7 @@ final class KtLeakProbe extends Command
         'forms' => 'custom_form', 'custom-forms' => 'custom_form', 'documents' => 'document',
         'files' => 'family_file', 'family-files' => 'family_file', 'events' => 'daily_event', 'daily-events' => 'daily_event',
         'notifications' => 'notification:admin', 'employee-files' => 'hr_employee_file', 'agencies' => 'agency',
+        'reenrollment' => 'reenrollment_campaign',
     ];
 
     /** *_id keys whose value, if it is one of B's canary ids of that kind, is a leak. */

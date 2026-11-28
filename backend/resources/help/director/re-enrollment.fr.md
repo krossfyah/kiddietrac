@@ -1,68 +1,69 @@
 ---
-roles: agency_admin, platform_admin
+roles: agency_admin, centre_director, platform_admin
 title: Campagnes de réinscription
 category: Enrolment
 order: 60
 ---
 # Campagnes de réinscription
 
-**Campagnes de réinscription** demande à chaque famille inscrite si son enfant revient au prochain trimestre. Vous lancez une campagne avec un nom, le trimestre et une date limite; KiddieTrac invite chaque enfant actuellement inscrit dans l’agence et avise ses parents, puis compte qui a répondu et qui s’est réinscrit. Les administrateurs d’agence l’utilisent quelques mois avant un nouveau trimestre ou une nouvelle année scolaire.
+**Re-enrollment campaigns** demande à chaque famille inscrite si son enfant revient au prochain trimestre. Vous lancez une campagne avec un nom, le trimestre et une date limite ; chaque tuteur reçoit un avis et un courriel avec un bouton **Answer now**, la famille répond **Oui, il revient** ou **Non** pour chaque enfant (avec une note si elle veut), et l’écran compte qui a répondu et qui se réinscrit.
 
 [[open: #reenrollment | Ouvrir Réinscription]]
 
 ## Lancer une campagne
 
-1. Ouvrez **Engagement › Réinscription**.
-2. Appuyez sur **+ Lancer la campagne** dans la bannière.
-3. Dans **Lancer une campagne de réinscription**, vérifiez le **Nom de la campagne** (il commence par « Fall 2026 re-enrolment ») et changez-le au besoin.
-4. Indiquez le **Trimestre visé**, par exemple « Automne 2026 » ou « Septembre 2027 ».
-5. Choisissez la **Date limite** — la date où les réponses sont attendues. Elle doit être après aujourd’hui.
-6. Appuyez sur **Lancer la campagne**.
+1. Ouvrez **Engagement › Re-enrollment**.
+2. Appuyez sur **+ Launch campaign** dans la bannière.
+3. Choisissez le **Centre** (les administrateurs d’agence peuvent aussi choisir **All centres** ; les directeurs choisissent un de leurs centres).
+4. Vérifiez le **Campaign name** et indiquez le **Target term**, par exemple « Fall 2027 ».
+5. Choisissez la **Deadline**, le dernier jour pour répondre. Elle doit être après aujourd’hui.
+6. Appuyez sur **Launch campaign**.
 
-Un message indique combien d’enfants ont été invités (par exemple « Invited 84 children »), et la campagne paraît en haut de la liste avec le statut **sent**.
+Un message indique combien d’enfants ont été invités et combien de familles ont été averties ; la campagne apparaît en haut de la liste comme **Open**.
 
-> ⚠️ Une campagne part vers **chaque enfant inscrit** du centre choisi sous **Centre** (ou de toute l’agence avec **Tous les centres**) dès que vous la lancez, et leurs parents sont avisés tout de suite. Il n’y a pas de brouillon ni d’annulation — vérifiez le centre, le nom, le trimestre et la date limite avant.
+> ⚠️ Les familles sont averties dès le lancement. Il n’y a ni brouillon ni annulation : vérifiez le centre, le nom, le trimestre et la date limite avant.
 
 ## Ce que reçoivent les familles
 
-Chaque tuteur d’un enfant invité reçoit une notification — dans la cloche du portail et sur son téléphone — intitulée **Re-enrol for** suivi du trimestre, avec **Confirm by** et la date limite. Pour chaque enfant, la réponse d’une famille est **oui**, **non** ou **incertain**, avec une note facultative.
+- Un avis dans l’appli : **Re-enrol for** le trimestre, avec la date limite.
+- Un courriel aux couleurs de votre agence, avec leur prénom, la liste de leurs enfants et un bouton **Answer now**. Le bouton ouvre une page où elles répondent pour chaque enfant, sans se connecter. Le lien ne vaut que pour leur famille et jusqu’à la date limite.
+- Dans l’appli, l’avis ouvre leur écran **Re-enrolment** avec les mêmes choix.
 
-Les enfants retirés, en liste d’attente ou archivés au moment du lancement ne sont pas invités. Un enfant inscrit après le lancement n’est pas ajouté — il fera partie de la prochaine campagne.
+Les familles peuvent changer leur réponse jusqu’à la date limite. Les tuteurs qui n’ont pas encore accepté leur invitation ne reçoivent pas de courriel ; ils voient l’avis en se connectant.
+
+## Rappel automatique
+
+Les familles qui n’ont pas répondu reçoivent **un** rappel (avis et courriel), le nombre de jours de rappel de l’agence avant la date limite (7 par défaut), à partir de 9 h. Le rappel ne nomme que les enfants encore sans réponse. Les administrateurs d’agence changent ce nombre avec **⚙ Reminder rule** (0 = aucun rappel). La colonne **Deadline** indique quand le rappel part ou est parti.
 
 ## Suivre les résultats
 
-1. Ouvrez **Engagement › Réinscription**.
-2. Lisez la ligne de la campagne : **Campagne**, **Terme**, **Date limite**, **Statut**, **Invité** (enfants sollicités), **Répondu** (enfants avec une réponse) et **Renouvelé** (enfants dont la famille a dit oui, en vert).
-3. L’écart entre **Invité** et **Répondu**, ce sont les familles dont vous attendez encore la réponse. Relancez-les par message ou par téléphone avant la date limite.
-4. Après la date limite, planifiez les locaux du prochain trimestre à partir du compte **Renouvelé**, et offrez les places non renouvelées à votre **Liste d’attente**.
-
-## Quand lancer
-
-- De 60 à 90 jours avant le début du trimestre, pour que les familles aient le temps de décider et vous, le temps de combler les places.
-- Après avoir planifié une hausse de frais, pour que les parents voient le nouveau tarif avant de s’engager — voir [[tuition-increases]].
-- Après le renouvellement des documents de subvention, pour que les familles sachent ce qu’elles paieront.
+1. Lisez la ligne : **Invited**, **Responded**, **Renewed** (en vert) et **Not returning**.
+2. Dans le menu **⋮**, choisissez **View answers** pour voir la réponse de chaque famille par enfant, sa note, quand et comment elle a répondu (appli ou lien du courriel) et qui a reçu le rappel. Filtrez avec **All / No answer yet / Coming back / Not returning**.
+3. Relancez par message ou téléphone les familles qui n’ont pas répondu.
+4. Après la date limite, planifiez les groupes d’après **Renewed** et offrez les places libres à votre **liste d’attente**.
 
 ## Qui peut faire quoi
 
 | Rôle | Peut |
 |---|---|
-| Administrateur d’agence | Lancer des campagnes pour l’agence et suivre chaque campagne |
-| Administrateur de plateforme | La même chose, dans l’agence consultée |
-| Directeur de centre | N’a pas cet écran; demandez à un administrateur d’agence de lancer une campagne |
-| Parent | Reçoit la notification et répond pour ses propres enfants |
+| Administrateur d’agence | Lancer pour un centre ou toute l’agence, voir toutes les réponses, régler le rappel |
+| Directeur de centre | Lancer pour ses propres centres ; ne voit que les familles et chiffres de ses centres |
+| Administrateur de la plateforme | Comme un administrateur d’agence, dans l’agence consultée |
+| Parent | Répond pour ses enfants dans l’appli ou par le courriel, jusqu’à la date limite |
 
-## Questions fréquentes et problèmes
+## FAQ et problèmes
 
-??? Lancer la campagne ne fait rien quand j’appuie. | Les trois champs sont obligatoires. Remplissez **Nom de la campagne**, **Trimestre visé** et **Date limite**, et assurez-vous que la date limite est après aujourd’hui.
-??? Le message indique « Invited 0 children ». | Aucun enfant de l’agence n’avait le statut Inscrit à ce moment. Vérifiez **Administration › Enfants** avec le filtre de statut sur **Inscrit**.
-??? Puis-je l’envoyer à un seul centre? | Oui. Choisissez le centre sous **Centre** avant de lancer. La liste affiche le **Centre** de chaque campagne.
-??? Répondu reste à 0. | Les familles n’ont peut-être pas encore répondu. Rappelez-le-leur avant la date limite par message ou par annonce, et notez dans le dossier de l’enfant les réponses reçues par téléphone.
-??? Puis-je fermer ou supprimer une campagne? | Non. Une campagne reste dans la liste avec ses comptes comme historique; lancez-en une nouvelle pour le prochain trimestre.
-??? Comment les familles sont-elles avisées? | Chaque tuteur d’un enfant invité reçoit une notification dans la cloche du portail et sur son téléphone.
+??? Launch campaign ne fait rien. | Tous les champs sont obligatoires, et la date limite doit être après aujourd’hui.
+??? « Choose one of your centres for this campaign. » | Les directeurs lancent pour un de leurs centres. Choisissez-le sous **Centre**.
+??? « Invited 0 children ». | Aucun enfant de ce centre n’avait le statut Inscrit. Vérifiez **Administration › Children**.
+??? Le lien du courriel ne fonctionne pas pour une famille. | Le lien expire après la date limite ou si la famille est partie. Elle peut répondre dans l’appli jusqu’à la date limite ; ensuite, notez sa réponse vous-même.
+??? Une famille n’a pas reçu le courriel. | Vérifiez son adresse et qu’elle a accepté son invitation. Elle peut toujours répondre dans l’appli depuis l’avis.
+??? Peut-on fermer ou supprimer une campagne ? | Non. Elle se ferme d’elle-même après la date limite et reste dans la liste.
+??? Les anciennes campagnes affichent 0 réponse. | Les chiffres viennent des réponses des familles. Les campagnes lancées avant que les familles puissent répondre n’en ont aucune.
 
 ## Écrans liés
 
-[[open: #tuition-increases | Hausses de frais]]
+[[open: #tuition-increases | Augmentations des frais]]
 [[open: #synced-waitlist | Liste d’attente]]
 [[open: #admin-children | Enfants]]
 

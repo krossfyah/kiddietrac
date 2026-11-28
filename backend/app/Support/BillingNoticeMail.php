@@ -8,6 +8,7 @@ use App\Services\EmailTemplate;
  * FAMILY EMAILS FROM THE AUTOMATED BILLING FEATURES (2026-11-28), in the house frame.
  *
  *  - tuitionIncrease: the notice before a tuition increase takes effect (TuitionIncreases::notify)
+ *  - reenrolment: the re-enrolment request and its reminder, with the signed reply button (ReenrolReplies)
  *
  * Pure builders: no mail, no writes. Plain text comes from AddPlainTextPart. Greeting by the guardian's first name,
  * signed by the agency the way families know it (FamilyFacingName).
@@ -86,6 +87,39 @@ final class BillingNoticeMail
                 'eyebrow' => '📈 TUITION CHANGE', 'title' => 'Tuition change from ' . $when,
                 'subtitle' => 'From ' . $team,
                 'preheader' => 'Your tuition changes from ' . $when . '. Here are the new amounts for your family.',
+            ]),
+        ];
+    }
+
+    /**
+     * Re-enrolment request (ReenrolReplies::notifyFamilies). $kind invite | reminder; $children = first names still to
+     * answer; $url = the family's signed reply link (reenrol-reply.html).
+     *
+     * @return array{subject:string, html:string}
+     */
+    public static function reenrolment(int $agencyId, string $first, string $kind, string $term, string $deadline, array $children, string $url): array
+    {
+        $team = self::team($agencyId);
+        $who = ReenrolReplies::list($children);
+        $reminder = $kind === 'reminder';
+        $rows = array_map(fn ($n) => ['<strong>' . self::e($n) . '</strong>', '<span style="color:#B45309;">Waiting for your answer</span>'], $children);
+        $body = self::p('Hi ' . self::e($first ?: 'there') . ',')
+            . self::p($reminder
+                ? 'A quick reminder: we have not heard yet whether <strong>' . self::e($who) . '</strong> will be coming back for <strong>' . self::e($term) . '</strong>. Answers close on <strong>' . self::e($deadline) . '</strong>.'
+                : 'We are planning for <strong>' . self::e($term) . '</strong> and would love to know whether <strong>' . self::e($who) . '</strong> will be coming back. Please let us know by <strong>' . self::e($deadline) . '</strong>.')
+            . self::card($rows, ['Child', 'Coming back?'])
+            . self::p('It takes a few seconds: choose <strong>Yes, coming back</strong> or <strong>No</strong> for each child, and add a note if you like. You can change your answer until the deadline.')
+            . self::button($agencyId, 'Answer now', $url)
+            . self::p('You can also answer in the app under Re-enrolment. If you have any questions, just reply to this email or message us in the app.', 'font-size:13px;color:#64748B;')
+            . self::signoff($team);
+        $subject = ($reminder ? 'Reminder: re-enrolment for ' : 'Re-enrolment for ') . $term . ' — please answer by ' . $deadline;
+
+        return [
+            'subject' => $subject,
+            'html' => EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => $reminder ? '🔁 REMINDER' : '🔁 RE-ENROLMENT', 'title' => 'Coming back for ' . $term . '?',
+                'subtitle' => 'From ' . $team,
+                'preheader' => (count($children) > 1 ? 'Are ' : 'Is ') . $who . ' coming back for ' . $term . '? Please answer by ' . $deadline . '.',
             ]),
         ];
     }

@@ -116,6 +116,7 @@ final class EmailOverrides
         'TourMail@thanks' => 'tour-thank-you',
         'SubstituteMail@request' => 'substitute-cover-needed',
         'BillingNoticeMail@tuitionIncrease' => 'tuition-increase-notice',
+        'BillingNoticeMail@reenrolment' => 'reenrolment-request',
         'AccountLedgerController@emailStatement' => 'account-statement',
         'CentreOffboardController@notifyClosure' => 'provider-closed',
         'ManagedFormController@emailFormPackage' => 'forms-to-sign',

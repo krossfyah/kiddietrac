@@ -223,6 +223,8 @@
        the forms she had signed, while #my-documents had them all. #my-documents now also
        shows anything awaiting her e-signature, so an old #signed-docs link goes there. */
     Shell.registerScreen(r + ':signed-docs',    bridge('KT', 'renderMyDocuments'));
+    /* The parent's re-enrolment answers (2026-11-28): the bell and the email open #reenrollment. */
+    Shell.registerScreen(r + ':reenrollment',   bridge('KT.V22p56', 'renderMyReenrolment'));
   });
   // Educators can log/see late pickups too (they're on the floor when a parent is late).
   /* late-pickups: now screen-late-events.js (one late-pickup section, 2026-10-06). */
