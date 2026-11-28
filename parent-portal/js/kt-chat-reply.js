@@ -88,37 +88,68 @@
       + '" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + ICON_REACT + '</button>';
   }
 
-  /* THE REACTION PICKER, ONE FOR EVERY THREAD (2026-11-27, Anthony: every message screen should match the new
-     React / Reply pair). The team chat, the family Message Centre and the parent's own thread each drew their own
-     white pill of emoji at their own z-index and size. Now all three open this: the one quick popover
-     (KT.quickPop, kt-quickpop.js) as a single row of round glass buttons, the same six reactions everywhere, each
-     with a spoken/tooltip name. onPick(emoji) does the renderer's own API call. A page without kt-quickpop.js
-     (never expected) gets a plain row so reacting still works. */
-  var REACTIONS = [['\u{1F44D}', 'Like'], ['\u2764\uFE0F', 'Love'], ['\u{1F602}', 'Funny'], ['\u{1F62E}', 'Wow'], ['\u{1F622}', 'Sad'], ['\u{1F64F}', 'Thanks']];
+  /* THE REACTION PICKER, ONE FOR EVERY THREAD. Anthony (2026-11-27): "the react in the chat messenger shows a
+     different style pop up - put it how it was previously". So it is the white emoji pill the team chat and the
+     family Message Centre always drew (white, 1px #E5E7EB, 20px radius, soft shadow, six emoji, just above the +),
+     now drawn here once so the team chat, the family Message Centre and the parent's own thread are identical.
+     onPick(emoji) does the renderer's own API call. Closes on a tap outside, Esc, or Android back (KT.pushOverlay). */
+  var REACTIONS = [['\u{1F44D}', 'Like'], ['❤️', 'Love'], ['\u{1F602}', 'Funny'], ['\u{1F62E}', 'Wow'], ['\u{1F622}', 'Sad'], ['\u{1F64F}', 'Thanks']];
+  var pickerOpen = null;
   function reactPicker(anchor, onPick) {
-    var run = function (em) { return function () { try { onPick(em); } catch (e) { if (w.console) console.error(e); } }; };
-    if (KT.quickPop) {
-      return KT.quickPop({ anchor: anchor, row: true, label: tipOf('React'), id: 'kt-react-picker',
-        items: REACTIONS.map(function (r) { return { icon: r[0], label: '', aria: tipOf(r[1]), run: run(r[0]) }; }) });
-    }
-    var old = d.getElementById('kt-react-picker'); if (old) old.remove();
+    var again = pickerOpen && pickerOpen.anchor === anchor;
+    if (pickerOpen) pickerOpen.close();
+    if (again) return null;   // the same + again: a toggle
     var pop = d.createElement('div');
+    pop.className = 'kt-react-pill';
     pop.id = 'kt-react-picker';
     pop.setAttribute('role', 'menu');
-    pop.style.cssText = 'position:fixed;z-index:2147483001;display:flex;gap:4px;padding:4px;border-radius:24px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);';
+    pop.setAttribute('aria-label', tipOf('React'));
+    pop.setAttribute('data-no-modal-guard', '1');
+    pop.setAttribute('data-kt-nobreathe', '1');
+    pop.style.cssText = 'position:fixed;background:#fff;border:1px solid #E5E7EB;border-radius:20px;'
+      + 'box-shadow:0 6px 20px rgba(0,0,0,.16);padding:4px 6px;display:flex;gap:2px;z-index:100000;';
     REACTIONS.forEach(function (r) {
       var b = d.createElement('button');
-      b.type = 'button'; b.textContent = r[0]; b.setAttribute('aria-label', tipOf(r[1]));
-      b.style.cssText = 'background:none;border:0;font-size:22px;width:40px;height:40px;cursor:pointer;border-radius:50%;';
-      b.addEventListener('click', function (e) { e.stopPropagation(); pop.remove(); run(r[0])(); });
+      b.type = 'button';
+      b.className = 'kt-react-pick';
+      b.setAttribute('data-emoji', r[0]);
+      b.setAttribute('data-kt-iconized', '1');
+      b.setAttribute('role', 'menuitem');
+      b.setAttribute('aria-label', tipOf(r[1]));
+      b.setAttribute('data-kttip', tipOf(r[1]));
+      b.style.cssText = 'background:none;border:none;font-size:20px;cursor:pointer;padding:2px 5px;border-radius:8px;line-height:1;';
+      b.textContent = r[0];
+      b.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        close();
+        try { onPick(r[0]); } catch (err) { if (w.console) console.error(err); }
+      });
       pop.appendChild(b);
     });
+    // Where it always sat: 40px left of the +, 46px above it. Kept inside the window by its real width (the old
+    // fixed 230 let the 249px pill hang 19px off the right edge).
+    pop.style.visibility = 'hidden';
     d.body.appendChild(pop);
-    var rc = anchor.getBoundingClientRect();
-    pop.style.left = Math.max(8, Math.min(rc.left - 60, w.innerWidth - pop.offsetWidth - 8)) + 'px';
-    pop.style.top = (rc.top > 60 ? rc.top - 52 : rc.bottom + 6) + 'px';
-    setTimeout(function () { d.addEventListener('click', function off(e) { if (!pop.contains(e.target)) { pop.remove(); d.removeEventListener('click', off, true); } }, true); }, 0);
-    return { close: function () { pop.remove(); } };
+    var rect = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(6, Math.min(rect.left - 40, w.innerWidth - (pop.offsetWidth || 249) - 6)) + 'px';
+    pop.style.top = Math.max(6, rect.top - 46) + 'px';
+    pop.style.visibility = '';
+
+    var closed = false;
+    function onDown(e) { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } }
+    function close() {
+      if (closed) return; closed = true;
+      d.removeEventListener('pointerdown', onDown, true);
+      d.removeEventListener('keydown', onKey, true);
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      if (pickerOpen && pickerOpen.pop === pop) pickerOpen = null;
+    }
+    setTimeout(function () { if (!closed) d.addEventListener('pointerdown', onDown, true); }, 0);
+    d.addEventListener('keydown', onKey, true);
+    if (KT.pushOverlay) { try { KT.pushOverlay(pop, close); } catch (e) {} }   // Android back
+    pickerOpen = { anchor: anchor, pop: pop, close: close };
+    return { close: close };
   }
 
   /* The quote above a reply. m.reply_to = { id, author_first_name, snippet, deleted } from the server. */
