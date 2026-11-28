@@ -3,7 +3,7 @@ title: Data retention & compliance
 category: Compliance
 order: 30
 roles: agency_admin, platform_admin
-screens: data-retention, ~compliance-evidence
+screens: data-retention
 ---
 # Data retention & compliance
 
