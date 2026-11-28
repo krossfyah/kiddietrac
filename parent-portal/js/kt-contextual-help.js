@@ -85,7 +85,9 @@
     s.textContent = ''
       + R + ',#kt-help-drawer{' + L + '}'
       + 'html.kt-dark ' + R + ',html[data-theme="dark"] ' + R + ',html.kt-dark #kt-help-drawer,html[data-theme="dark"] #kt-help-drawer{' + D + '}'
-      + '@media (prefers-color-scheme: dark){html:not([data-theme="light"]) #kt-help-drawer,html:not([data-theme="light"]) #kt-help-drawer ' + R + '{' + D + '}}'
+      /* No @media (prefers-color-scheme: dark) here (2026-11-27, Anthony: "the ? pops open as a black/dark mode -
+         force this to light mode"). The portal has no dark theme, so the reader is light on every device; the dark
+         palette above only applies if the portal itself turns html.kt-dark / data-theme=dark on. */
       + M + '{font-size:15.5px;line-height:1.65;color:var(--hr-ink);max-width:68ch;overflow-wrap:anywhere;}'
       + M + ' > :first-child{margin-top:0;}'
       + M + ' p{margin:0 0 14px;}'

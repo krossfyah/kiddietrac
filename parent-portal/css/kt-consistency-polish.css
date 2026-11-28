@@ -326,9 +326,7 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
   content: ""; flex: 1; height: 1px;
   background: linear-gradient(90deg, rgba(100,116,139,.28), rgba(100,116,139,0));
 }
-@media (prefers-color-scheme: dark) {
-  .kt-tile-sectionhead { color: #94A3B8; }
-}
+/* No prefers-color-scheme: dark rule (2026-11-27): the portal is light on every device. */
 
 /* ── Canonical row-action icon button (2026-07-28) ───────────────────────
    ONE size/shape for icon-only table & list actions portal-wide (view / edit /

@@ -10,7 +10,8 @@
    KT.quickPop({ anchor, items: [{ icon, label, sub, run, aria, danger, disabled }], label, empty, width })
      -> { close }
    • Look: the page stays visible under a light frosted dim; each choice is a big rounded glass button (icon + label
-     + optional sub line). Dark-mode aware (prefers-color-scheme and the portal's html.kt-dark / data-theme=dark).
+     + optional sub line). Always light on a phone or computer set to dark mode (2026-11-27: the portal has no dark theme); its dark
+     look applies only under the portal's own html.kt-dark / data-theme=dark.
    • Anchoring: above the anchor when it sits in the lower half of the screen (a bottom-bar button), dropping down
      from it otherwise (a top-bar icon, a + in a header). No anchor: centred above the bottom bar.
    • ~120ms scale + fade. Tap outside, Esc, or Android back (KT.pushOverlay) closes; a choice closes and runs at once.
@@ -38,7 +39,6 @@
       ['.kt-qp-item.danger', 'color:#FCA5A5;'],
       ['.kt-qp-none', 'color:#E2E8F0;background:rgba(13,27,51,.6);'],
       ['.kt-qp-card', 'color:#F1F5F9;background:rgba(13,27,51,.72);border-color:rgba(255,255,255,.16);']];
-    var dark = D.map(function (d) { return d[0] + '{' + d[1] + '}'; }).join('');
     var themed = D.map(function (d) { return 'html.kt-dark ' + d[0] + ',html[data-theme="dark"] ' + d[0] + '{' + d[1] + '}'; }).join('');
     st.textContent = ''
       + '.kt-qp-dim{position:fixed;inset:0;z-index:2147483000;background:rgba(8,28,65,.16);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);opacity:0;transition:opacity .12s ease;}'
@@ -56,7 +56,6 @@
       + '.kt-qp-t{font-weight:800;font-size:15px;line-height:1.2;min-width:0;}.kt-qp-s{display:block;font-weight:600;font-size:12px;opacity:.72;margin-top:2px;}'
       + '.kt-qp-card{padding:12px 14px;border-radius:18px;color:#0B1B33;background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.85);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);box-shadow:0 10px 30px -12px rgba(8,28,65,.45);}'
       + '.kt-qp-none{padding:12px 16px;border-radius:16px;font-size:13.5px;font-weight:600;color:#334155;background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);}'
-      + '@media (prefers-color-scheme: dark){' + dark + '}'
       + themed
       + '@media (prefers-reduced-motion: reduce){.kt-qp,.kt-qp-dim{transition:none;}}';
     document.head.appendChild(st);
