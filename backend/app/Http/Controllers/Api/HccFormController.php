@@ -156,10 +156,11 @@ class HccFormController extends Controller
             ->get([
                 'f.id', 'f.form_type', 'f.provider_name', 'f.visit_date', 'f.visit_time_in', 'f.visit_time_out',
                 'f.quarter', 'f.status', 'f.history', 'f.created_at', 'f.updated_at', 'c.name as centre_name',
+                'f.agency_id', 'f.centre_id', 'f.home_visitor_id',
                 DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as home_visitor_name"),
             ]);
 
-        return response()->json(['enabled' => true, 'forms' => $rows->map(function ($r) {
+        return response()->json(['enabled' => true, 'forms' => $rows->map(function ($r) use ($request) {
             $hist = json_decode($r->history ?? '[]', true);
             return [
                 'id'             => (int) $r->id,
@@ -175,6 +176,8 @@ class HccFormController extends Controller
                 'status'         => $r->status,
                 'edited'         => is_array($hist) && count($hist) > 0,
                 'edit_count'     => is_array($hist) ? count($hist) : 0,
+                // Same rule as show() and update()'s fetch(): the list's Edit / correct follows it (2026-11-27).
+                'editable'       => $this->reviews($request, (int) $r->agency_id, $r->centre_id) || (int) $r->home_visitor_id === (int) $request->user()->id,
                 'created_at'     => $r->created_at,
                 'updated_at'     => $r->updated_at,
             ];

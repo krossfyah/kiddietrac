@@ -66,6 +66,13 @@
     const slots = r.data || [];
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
     const isStaff = (window.ktRoles ? window.ktRoles(u) : (u.roles || [])).some(r => ['educator', 'centre_director', 'agency_admin', 'platform_admin'].includes(r));
+    /* Slot times are stored in UTC and shown in the agency's timezone (2026-11-27). Status words, not stored values. */
+    const cfDay = (s) => (window.KT && KT.fmtDate) ? KT.fmtDate(s) : fmtDate(s);
+    const cfTime = (s) => (window.KT && KT.fmtTime) ? KT.fmtTime(s) : fmtTime(s);
+    const CF_STATUS = { open: 'Open', booked: 'Booked', cancelled: 'Cancelled' };
+    const say = (msg, kind) => { if (window.KT && KT.toast) KT.toast(msg, kind || 'info', 7000); };
+    const teachers = r.teachers || [];
+    const kids = r.children || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🗣 Parent-teacher conferences</h2>
@@ -76,35 +83,55 @@
         <table>
           <thead><tr><th>When</th><th>Teacher</th><th>Status</th>${isStaff ? '<th>Booked by</th>' : ''}<th></th></tr></thead>
           <tbody>${slots.map(s => `<tr>
-            <td><strong>${fmtDate(s.slot_at)}</strong><div style="color:#64748B;font-size:12px;">${fmtTime(s.slot_at)} · ${s.duration_minutes} min</div></td>
+            <td><strong>${cfDay(s.slot_at)}</strong><div style="color:#64748B;font-size:12px;">${cfTime(s.slot_at)} · ${s.duration_minutes} min</div></td>
             <td>${esc(s.teacher_name || 'Any teacher')}</td>
-            <td><span class="kt-pill ${s.status === 'open' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(s.status)}</span></td>
+            <td><span class="kt-pill ${s.status === 'open' ? 'kt-pill-success' : 'kt-pill-warning'}">${esc(CF_STATUS[s.status] || 'Open')}</span>${!isStaff && s.mine && s.booked_child_name ? `<div style="font-size:12px;color:#475569;margin-top:3px;">For ${esc(s.booked_child_name)}</div>` : ''}</td>
             ${isStaff ? `<td>${esc(s.booked_by_name || '')} ${s.booked_child_name ? '(' + esc(s.booked_child_name) + ')' : ''}</td>` : ''}
-            <td>${s.status === 'open' && !isStaff ? `<button class="kt-btn kt-btn-primary" data-book="${s.id}">Book</button>` : s.status === 'booked' ? `<button class="kt-btn kt-btn-danger" data-cancel="${s.id}" style="font-size:12px;">Cancel</button>` : ''}</td>
+            <td style="white-space:nowrap;">${s.status === 'open' && !isStaff ? `<button class="kt-btn kt-btn-primary" data-book="${s.id}">Book</button>` : ''}${s.status === 'booked' && (isStaff || s.mine) ? `<button class="kt-btn kt-btn-danger" data-cancel="${s.id}" style="font-size:12px;">Cancel booking</button>` : ''}${isStaff ? ` <button class="kt-btn kt-btn-ghost" data-del="${s.id}" data-booked="${s.status === 'booked' ? 1 : 0}" style="font-size:12px;">Delete slot</button>` : ''}</td>
           </tr>`).join('') || '<tr><td colspan="' + (isStaff ? 5 : 4) + '" style="text-align:center;padding:40px;color:#64748B;">No slots scheduled.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
-    if (isStaff) document.getElementById('cf-new').onclick = () => openCreateSlotsModal();
+    if (isStaff) document.getElementById('cf-new').onclick = () => openCreateSlotsModal(teachers);
     main.querySelectorAll('button[data-book]').forEach(b => b.onclick = async () => {
-      const _kc = await Api.get('/parent/children'); const kids = _kc.children || _kc.data || [];
-      const cid = kids.length === 1 ? kids[0].id : +(await window.KT.prompt({
-        title: 'Which child is this booking for?',
-        description: 'Enter the number beside their name: ' + kids.map(c => c.id + ': ' + c.first_name).join(', '),
-        fields: [{ key: 'cid', label: 'Child number', type: 'number' }],
-        okLabel: 'Book',
-      }));
+      // Which child: a picker of the family's own children (2026-11-27), not "type the number beside their name".
+      let cid = kids.length === 1 ? kids[0].id : 0;
+      if (!kids.length) { say('There are no children on your family to book for.'); return; }
+      if (!cid) {
+        const res = await window.KT.prompt({
+          title: 'Which child is this booking for?',
+          fields: [{ key: 'cid', label: 'Child', type: 'select', options: kids.map(c => ({ value: String(c.id), label: c.first_name })) }],
+          okLabel: 'Book',
+        });
+        cid = +((res && typeof res === 'object') ? res.cid : res) || 0;
+      }
       if (!cid) return;
-      await Api.post(`/conferences/slots/${b.dataset.book}/book`, { child_id: cid });
+      try {
+        await Api.post(`/conferences/slots/${b.dataset.book}/book`, { child_id: cid });
+        say('Booked. You can cancel it here if plans change.', 'success');
+      } catch (e) { say((e && e.message) || 'That time could not be booked. Please pick another.', 'error'); }
       renderConferences(main);
     });
     main.querySelectorAll('button[data-cancel]').forEach(b => b.onclick = async () => {
-      if (!await KT.confirm('Cancel this conference?')) return;
-      await Api.post(`/conferences/slots/${b.dataset.cancel}/cancel`, {});
+      if (!await KT.confirm('Cancel this booking? The time opens up for other families.')) return;
+      try {
+        await Api.post(`/conferences/slots/${b.dataset.cancel}/cancel`, {});
+        say('Booking cancelled.', 'success');
+      } catch (e) { say((e && e.message) || 'The booking could not be cancelled. Please try again.', 'error'); }
+      renderConferences(main);
+    });
+    main.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
+      const booked = b.dataset.booked === '1';
+      if (!await KT.confirm(booked ? 'Delete this slot? It is booked: the family will be told the centre cancelled it.' : 'Delete this slot?')) return;
+      try {
+        await Api.delete(`/conferences/slots/${b.dataset.del}`);
+        say('Slot deleted.', 'success');
+      } catch (e) { say((e && e.message) || 'The slot could not be deleted. Please try again.', 'error'); }
       renderConferences(main);
     });
   }
-  async function openCreateSlotsModal() {
+  async function openCreateSlotsModal(teachers) {
+    teachers = teachers || [];
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
@@ -112,6 +139,9 @@
       <h3 style="margin:0 0 16px;">Create conference slots</h3>
       <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Centre</label>
       <select id="cf-centre" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">${centres.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Teacher</label>
+      <select id="cf-teacher" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;"></select>
+      <div style="font-size:11.5px;color:#64748B;margin-top:4px;">They are told when a family books. With "Any teacher", the centre's director is told.</div>
       <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Date</label>
       <input id="cf-date" type="date" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
       <div style="display:flex;gap:8px;margin-top:14px;">
@@ -127,17 +157,34 @@
         <button id="cf-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Generate slots</button>
       </div></div>`;
     document.body.appendChild(m);
+    const tSel = m.querySelector('#cf-teacher');
+    const fillTeachers = () => {
+      const cId = +m.querySelector('#cf-centre').value;
+      tSel.innerHTML = '<option value="">Any teacher</option>' + teachers.filter(t => (t.centre_ids || []).indexOf(cId) !== -1)
+        .map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    };
+    m.querySelector('#cf-centre').addEventListener('change', fillTeachers);
+    fillTeachers();
     m.querySelector('#cf-cancel').onclick = () => m.remove();
     m.querySelector('#cf-save').onclick = async () => {
-      await Api.post('/conferences/slots', {
+      const say = (msg, kind) => { if (window.KT && KT.toast) KT.toast(msg, kind || 'info', 7000); };
+      const body = {
         centre_id: +m.querySelector('#cf-centre').value,
+        teacher_user_id: +tSel.value || null,
         date: m.querySelector('#cf-date').value,
         start_time: m.querySelector('#cf-start').value,
         end_time: m.querySelector('#cf-end').value,
         duration_minutes: +m.querySelector('#cf-dur').value,
-      });
-      m.remove();
-      renderConferences(document.querySelector('main'));
+      };
+      if (!body.centre_id) { say('Choose a centre.'); return; }
+      if (!body.date) { say('Choose the date.'); return; }
+      if (!body.start_time || !body.end_time || body.end_time <= body.start_time) { say('The end time has to be after the start time.'); return; }
+      try {
+        const res = await Api.post('/conferences/slots', body);
+        m.remove();
+        say(((res && res.created) || 0) + ' slot(s) created.', 'success');
+        renderConferences(document.querySelector('main'));
+      } catch (e) { say((e && e.message) || 'The slots could not be created. Please try again.', 'error'); }
     };
   }
 

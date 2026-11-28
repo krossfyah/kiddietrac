@@ -19,17 +19,28 @@ final class ConferenceController extends Controller
     {
         $u = $request->user();
         $familyId = DB::table('guardians')->where('user_id', $u->id)->value('family_id');
-        if ($familyId) {
+        if ($familyId && ! $this->isStaffUser($request)) {
             $family = DB::table('families')->where('id', $familyId)->first();
+            /* A parent sees the open slots at their centre AND their own family's bookings (2026-11-27): a booked
+               slot used to vanish from the parent's list, so they could neither see nor cancel it. Another
+               family's booking is never shown. */
+            $kids = DB::table('children')->where('family_id', $familyId)->pluck('id')->all();
             $rows = DB::table('conference_slots as cs')
                 ->leftJoin('users as u', 'u.id', '=', 'cs.teacher_user_id')
+                ->leftJoin('children as c', 'c.id', '=', 'cs.booked_child_id')
                 ->where('cs.centre_id', $family->centre_id)
-                ->where('cs.status', 'open')
                 ->where('cs.slot_at', '>=', now())
+                ->where(fn ($q) => $q->where('cs.status', 'open')
+                    ->orWhere(fn ($w) => $w->where('cs.status', 'booked')->whereIn('cs.booked_child_id', $kids ?: [0])))
                 ->orderBy('cs.slot_at')
-                ->select('cs.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as teacher_name"))
+                ->select('cs.id', 'cs.centre_id', 'cs.slot_at', 'cs.duration_minutes', 'cs.location', 'cs.status',
+                    DB::raw("CONCAT(u.first_name,' ',u.last_name) as teacher_name"),
+                    DB::raw("IF(cs.status = 'booked', c.first_name, NULL) as booked_child_name"),
+                    DB::raw("IF(cs.status = 'booked', 1, 0) as mine"))
                 ->get();
-            return response()->json(['data' => $rows]);
+            $children = DB::table('children')->where('family_id', $familyId)->whereNull('deleted_at')
+                ->orderBy('first_name')->get(['id', 'first_name']);
+            return response()->json(['data' => $rows, 'children' => $children]);
         }
         // Staff view: all upcoming slots in agency
         $agencyId = $this->resolveAgencyId($request);
@@ -46,7 +57,59 @@ final class ConferenceController extends Controller
                 DB::raw("CONCAT(b.first_name,' ',b.last_name) as booked_by_name"),
                 DB::raw("CONCAT(c.first_name,' ',c.last_name) as booked_child_name"))
             ->get();
-        return response()->json(['data' => $rows]);
+        // The people a slot can be with (2026-11-27): educators and directors placed at the caller's centres.
+        $centres = $this->staffCentres($request, $agencyId);
+        $teachers = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->whereNull('u.deleted_at')->where('ra.active', 1)
+            ->whereIn('ra.role', ['educator', 'centre_director'])->whereIn('ra.centre_id', $centres ?: [0])
+            ->select('u.id', DB::raw("TRIM(CONCAT(u.first_name,' ',u.last_name)) as name"), 'ra.centre_id')
+            ->orderBy('u.first_name')->get()
+            ->groupBy('id')->map(fn ($g) => ['id' => (int) $g[0]->id, 'name' => $g[0]->name,
+                'centre_ids' => $g->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all()])
+            ->values();
+        return response()->json(['data' => $rows, 'teachers' => $teachers]);
+    }
+
+    private function isStaffUser(Request $request): bool
+    {
+        return (bool) array_intersect(\App\Support\AgencyRole::names($request), ['educator', 'centre_director', 'agency_admin', 'platform_admin']);
+    }
+
+    /** A teacher for a slot: an educator or director placed at that centre. */
+    private function teacherFits(int $userId, int $centreId): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+            ->whereIn('role', ['educator', 'centre_director'])->where('centre_id', $centreId)->exists();
+    }
+
+    /** Who hears about a booking: the slot's teacher, or with none named the centre's director(s) and agency admins. */
+    private function slotPeople(object $slot): array
+    {
+        if ($slot->teacher_user_id) return [(int) $slot->teacher_user_id];
+        return \App\Support\CentreScope::managers((int) $slot->agency_id, [(int) $slot->centre_id])
+            ->pluck('u.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
+
+    /** DELETE /conferences/slots/{id} - staff of the slot's centre remove a slot; a booked family is told. */
+    public function destroy(Request $request, int $slotId): JsonResponse
+    {
+        $this->assertStaff($request);
+        $slot = DB::table('conference_slots')->where('id', $slotId)->first();
+        abort_unless($slot, 404);
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless((int) $slot->agency_id === $agencyId
+            && in_array((int) $slot->centre_id, $this->staffCentres($request, $agencyId), true), 404);
+        DB::table('conference_slots')->where('id', $slotId)->delete();
+        if ($slot->status === 'booked' && $slot->booked_by_user_id) {
+            \App\Support\Notify::write([
+                'user_id' => (int) $slot->booked_by_user_id, 'type' => 'conference',
+                'title' => 'Conference cancelled by the centre',
+                'body' => \App\Support\AgencyTime::fmt($slot->slot_at, \App\Support\AgencyTime::tz($agencyId), 'D M j \a\t g:i A') . '. Please book another time.',
+                'data' => json_encode(['link' => '#conferences']),
+                'created_at' => now(),
+            ]);
+        }
+        return response()->json(['status' => 'deleted']);
     }
 
     public function createSlots(Request $request): JsonResponse
@@ -67,11 +130,15 @@ final class ConferenceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         abort_unless(in_array((int) $data['centre_id'], $this->staffCentres($request, $agencyId), true), 403, 'That centre is not one of yours.');
         if (! empty($data['teacher_user_id'])) {
-            abort_unless(DB::table('role_assignments')->where('user_id', $data['teacher_user_id'])->where('active', 1)
-                ->where('agency_id', $agencyId)->exists(), 422, 'That teacher is not in this agency.');
+            // An educator or director of THIS centre (2026-11-27): any active role in the agency passed, a parent too.
+            abort_unless($this->teacherFits((int) $data['teacher_user_id'], (int) $data['centre_id']), 422, 'Choose a teacher who works at this centre.');
         }
-        $start = Carbon::parse($data['date'] . ' ' . $data['start_time']);
-        $end = Carbon::parse($data['date'] . ' ' . $data['end_time']);
+        /* The times typed are the CENTRE's wall clock (2026-11-27): parsed in the agency timezone and stored as UTC
+           like every other instant, so "15:00" is 3 PM where the centre is and every screen shows it that way. */
+        $tz = \App\Support\AgencyTime::tz($agencyId);
+        $start = Carbon::parse($data['date'] . ' ' . $data['start_time'], $tz)->utc();
+        $end = Carbon::parse($data['date'] . ' ' . $data['end_time'], $tz)->utc();
+        abort_unless($end->gt($start), 422, 'The end time has to be after the start time.');
         $created = 0;
         for ($t = $start->copy(); $t->lt($end); $t->addMinutes($data['duration_minutes'])) {
             DB::table('conference_slots')->insert([
@@ -109,12 +176,14 @@ final class ConferenceController extends Controller
             'booked_at' => now(),
             'updated_at' => now(),
         ]);
-        // Notify teacher
-        if ($slot->teacher_user_id) {
+        /* Tell the teacher, or with none named the centre's director(s) and admins (2026-11-27): slots had no teacher
+           field, so the booking notice never fired. Time in the agency's zone, not UTC. */
+        $when = \App\Support\AgencyTime::fmt($slot->slot_at, \App\Support\AgencyTime::tz((int) $slot->agency_id), 'D M j \a\t g:i A');
+        foreach ($this->slotPeople($slot) as $pid) {
             \App\Support\Notify::write([
-                'user_id' => $slot->teacher_user_id, 'type' => 'conference',
+                'user_id' => $pid, 'type' => 'conference',
                 'title' => 'Conference booked: ' . $child->first_name,
-                'body' => Carbon::parse($slot->slot_at)->format('M j \a\t g:i A'),
+                'body' => $when,
                 'data' => json_encode(['link' => '#conferences', 'slot_id' => $slotId]),
                 'created_at' => now(),
             ]);
@@ -127,10 +196,24 @@ final class ConferenceController extends Controller
         $u = $request->user();
         $slot = DB::table('conference_slots')->where('id', $slotId)->first();
         abort_unless($slot, 404);
-        // Either the booker, or staff of the slot's own centre, can cancel.
-        if ((int) $slot->booked_by_user_id !== (int) $u->id) {
+        // The booker, another parent of the booked child's family, or staff of the slot's own centre, can cancel.
+        $byFamily = $slot->booked_child_id && DB::table('children as c')->join('guardians as g', 'g.family_id', '=', 'c.family_id')
+            ->where('c.id', (int) $slot->booked_child_id)->where('g.user_id', $u->id)->exists();
+        if ((int) $slot->booked_by_user_id !== (int) $u->id && ! $byFamily) {
             $this->assertStaff($request);
             abort_unless(in_array((int) $slot->centre_id, $this->staffCentres($request, $this->resolveAgencyId($request)), true), 404);
+        } elseif ($slot->status === 'booked') {
+            // A family cancelling: the teacher (or the centre's managers) hear about it.
+            $when = \App\Support\AgencyTime::fmt($slot->slot_at, \App\Support\AgencyTime::tz((int) $slot->agency_id), 'D M j \a\t g:i A');
+            foreach ($this->slotPeople($slot) as $pid) {
+                \App\Support\Notify::write([
+                    'user_id' => $pid, 'type' => 'conference',
+                    'title' => 'Conference cancelled by the family',
+                    'body' => $when . '. The time is open again.',
+                    'data' => json_encode(['link' => '#conferences', 'slot_id' => $slotId]),
+                    'created_at' => now(),
+                ]);
+            }
         }
         DB::table('conference_slots')->where('id', $slotId)->update([
             'status' => 'open',

@@ -722,7 +722,8 @@
         act.appendChild(el('a', { href: '#inspection-form?id=' + r.id, class: 'kt-act-icon kt-act-teal kt-icon-tip', title: 'Continue draft', 'data-kttip': 'Continue draft', 'aria-label': 'Continue draft' }, ['✏️']));
       } else {
         act.appendChild(el('a', { href: '#hcc-form-view?id=' + r.id, class: 'kt-act-icon kt-act-info kt-icon-tip', title: 'View', 'data-kttip': 'View', 'aria-label': 'View' }, ['ℹ️']));
-        act.appendChild(el('a', { href: '#inspection-form?id=' + r.id, class: 'kt-act-icon kt-act-edit kt-icon-tip', title: 'Edit / correct', 'data-kttip': 'Edit / correct', 'aria-label': 'Edit / correct' }, ['✏️']));
+        // Only where the server says this person may change it (2026-11-27), the same flag the form view honours.
+        if (r.editable) act.appendChild(el('a', { href: '#inspection-form?id=' + r.id, class: 'kt-act-icon kt-act-edit kt-icon-tip', title: 'Edit / correct', 'data-kttip': 'Edit / correct', 'aria-label': 'Edit / correct' }, ['✏️']));
         act.appendChild(el('button', { 'data-id': String(r.id), 'data-type': r.form_type, 'data-date': r.visit_date, class: 'kt-hcc-pdf kt-act-icon kt-act-teal kt-icon-tip', title: 'Download PDF', 'data-kttip': 'Download PDF', 'aria-label': 'Download PDF' }, ['📄']));
       }
       tr.appendChild(act);

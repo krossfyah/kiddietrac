@@ -340,11 +340,12 @@
            the hash change, or the guard keeps deferring refreshes for a screen that has
            already been navigated away from. */
         if (KT.clearUnsaved) KT.clearUnsaved();
-        window.location.hash = '#home-visits';
+        // #home-visits is the home visitor's own list; admins and directors file from, and return to, Reports (2026-11-27).
+        window.location.hash = isReviewerUser() ? '#home-visit-reports' : '#home-visits';
       };
       var fail = function (e) {
         btns.forEach(function (b) { b.disabled = false; }); btn.textContent = oldTxt;
-        msg.textContent = 'Could not save: ' + (e.message || 'error'); msg.style.color = '#DC2626';
+        msg.textContent = (e && e.message) || 'The report could not be saved. Please try again.'; msg.style.color = '#DC2626';
       };
       if (ex) {
         payload.note = g('hv-note') || null;

@@ -3972,6 +3972,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/conferences/slots',             [\App\Http\Controllers\Api\ConferenceController::class, 'createSlots']);
     Route::post('/conferences/slots/{id}/book',   [\App\Http\Controllers\Api\ConferenceController::class, 'book']);
     Route::post('/conferences/slots/{id}/cancel', [\App\Http\Controllers\Api\ConferenceController::class, 'cancel']);
+    Route::delete('/conferences/slots/{id}',      [\App\Http\Controllers\Api\ConferenceController::class, 'destroy'])->whereNumber('id');   // staff remove a slot (2026-11-27)
     // Field-trip GPS
     Route::post('/field-trips/{id}/ping',         [\App\Http\Controllers\Api\FieldTripGpsController::class, 'ping']);
     Route::get ('/field-trips/{id}/location',     [\App\Http\Controllers\Api\FieldTripGpsController::class, 'location']);

@@ -889,7 +889,7 @@
             ${(c.tags || []).map(t => {
               const colors = { allergy: { bg: '#FEE2E2', fg: '#991B1B' }, health: { bg: '#FEF3C7', fg: '#92400E' }, dietary: { bg: '#DBEAFE', fg: '#1E40AF' } };
               const sev = t.severity || 'note';
-              const sevDot = sev === 'anaphylactic' ? '🚨' : sev === 'severe' ? '⚠' : '';
+              const sevDot = (sev === 'anaphylactic' || sev === 'severe') ? '🚨' : '';   // matches the editor's top level (2026-11-27)
               const c = colors[t.kind] || { bg: '#F3F4F6', fg: '#374151' };
               return `<span style="background:${c.bg};color:${c.fg};padding:4px 10px;border-radius:6px;margin-right:6px;margin-bottom:4px;font-size:13px;display:inline-block;font-weight:600;">${sevDot} ${esc((t.kind || '').toUpperCase())}: ${esc(t.label || '')}</span>`;
             }).join('')}

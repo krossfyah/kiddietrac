@@ -38,6 +38,8 @@ final class AiController extends Controller
         $base = \App\Support\Live::families(\App\Support\Live::centres(DB::table('families as f')
             ->join('centres as c', 'c.id', '=', 'f.centre_id'), 'c'), 'f')
             ->where('c.agency_id', $agencyId)
+            // A centre director sees their own centres' families only (2026-11-27, CentreScope; privacy).
+            ->when(($scope = \App\Support\CentreScope::ids($request, (int) $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
             ->whereNull('f.deleted_at')
             ->select('f.id', 'f.family_name');
 

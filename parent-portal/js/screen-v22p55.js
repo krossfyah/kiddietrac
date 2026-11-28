@@ -102,7 +102,10 @@
     main.innerHTML = '<div style="padding:24px;">Loading alerts…</div>';
     const r = await Api.get('/operations/allergy-alerts').catch(() => ({ data: [] }));
     const list = r.data || [];
-    const anaphylactic = list.filter(c => (c.tags || []).some(t => t.severity === 'anaphylactic')).length;
+    const unrec = (r && r.unrecorded) || [];
+    // The editor offers Mild / Moderate / Anaphylactic; an older "severe" record counts as the top level too (2026-11-27).
+    const isTop = (t) => t.severity === 'anaphylactic' || t.severity === 'severe';
+    const anaphylactic = list.filter(c => (c.tags || []).some(isTop)).length;
     const dietary = list.filter(c => (c.tags || []).some(t => t.kind === 'dietary')).length;
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
@@ -119,7 +122,12 @@
         <div style="font-size:13px;color:#64748B;">Anything recorded here reaches the educator's roster, the day brief and the weekly menu.</div>
         <button id="kt-allergy-add" type="button" data-kt-iconized="1" style="margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13.5px;cursor:pointer;">+ Add a record</button>
       </div>
-      <div id="kt-allergy-list" data-kt-list="1">${list.length ? '' : '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No active alerts. Use <strong>+ Add a record</strong> to note an allergy, a dietary need or a health alert.</div>'}</div>
+      ${unrec.length ? `<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 16px;margin:0 0 14px;">
+        <div style="font-weight:800;font-size:14px;color:#92400E;">Nothing recorded for ${unrec.length} enrolled ${unrec.length === 1 ? 'child' : 'children'}</div>
+        <div style="margin-top:6px;font-size:13px;color:#78350F;line-height:1.6;">An empty list means no allergies have been <em>entered</em>, not that there are none. Confirm with each family and record it on the child&rsquo;s record, even when the answer is none.</div>
+        <div style="margin-top:9px;font-size:12.5px;color:#92400E;">${unrec.map(k => esc(k.first_name + ' ' + (k.last_name || ''))).join(' · ')}</div>
+      </div>` : ''}
+      <div id="kt-allergy-list" data-kt-list="1">${list.length ? '' : (unrec.length ? '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No allergy or dietary information has been entered yet (see above).</div>' : '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No active alerts. Use <strong>+ Add a record</strong> to note an allergy, a dietary need or a health alert.</div>')}</div>
     </div>`;
 
     /* ADDING A RECORD FROM HERE.
@@ -137,7 +145,7 @@
       const renderAllergyCard = (c) => `<div class="kt-alert">
         <div class="kt-alert-title">${esc(c.first_name)} ${esc(c.last_name)}</div>
         <div class="kt-alert-body">${(c.tags || []).map(t => {
-          const sevDot = t.severity === 'anaphylactic' ? '🚨 ' : t.severity === 'severe' ? '⚠ ' : '';
+          const sevDot = isTop(t) ? '🚨 ' : '';
           return `<span class="kt-tag severity-${esc(t.severity || 'note')} kind-${esc(t.kind || '')}">${sevDot}<strong>${esc((t.kind || '').toUpperCase())}</strong>&nbsp;${esc(t.label || '')}</span>`;
         }).join('')}</div>
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
@@ -527,7 +535,7 @@
               <td>${fmtDate(e.created_at)}</td>
               <td><span class="kt-pill kt-pill-purple">${esc(e.doc_type)}</span></td>
               <td><span class="kt-pill ${pill}">${esc(e.status)}</span></td>
-              <td style="font-size:12px;font-family:ui-monospace,monospace;color:#475569;">${esc(Object.entries(fields).slice(0, 3).map(([k, v]) => k + '=' + v).join(', '))}</td>
+              <td style="font-size:12.5px;color:#475569;">${esc(Object.entries(fields).filter(([, v]) => v != null && v !== '' && typeof v !== 'object').slice(0, 3).map(([k, v]) => String(k).replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase()) + ': ' + v).join(' · '))}</td>
               <td>${e.status === 'extracted' ? `<button class="kt-btn kt-btn-primary" data-link-id="${e.id}">Auto-link</button>` : ''}</td>
             </tr>`;
           }).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#64748B;">No extractions yet. Use the AI Doc Extract screen.</td></tr>'}</tbody>
@@ -536,8 +544,11 @@
     </div>`;
     main.querySelectorAll('button[data-link-id]').forEach(b => b.onclick = async () => {
       b.disabled = true; b.textContent = '…';
-      const r = await Api.post(`/ai/doc-extract/${b.dataset.linkId}/auto-link`, {});
-      alert(`Action: ${r.action}. Matches: ${(r.matches || []).length}`);
+      try {
+        const r = await Api.post(`/ai/doc-extract/${b.dataset.linkId}/auto-link`, {});
+        const n = (r && r.matches || []).length;
+        if (window.KT && KT.toast) KT.toast(n ? `Linked: ${n} matching record${n === 1 ? '' : 's'} found.` : 'No matching staff or child record was found.', n ? 'success' : 'info');
+      } catch (e) { if (window.KT && KT.toast) KT.toast((e && e.message) || 'Auto-link did not work this time. Please try again.', 'error'); }
       renderDocAutolink(main);
     });
   }

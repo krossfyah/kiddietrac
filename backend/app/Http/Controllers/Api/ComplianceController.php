@@ -225,6 +225,8 @@ final class ComplianceController extends Controller
     public function retentionReport(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        // A centre director counts their own centres' children only (2026-11-27, CentreScope; privacy).
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         $cohorts = [];
         for ($i = 0; $i < 12; $i++) {
             $cohortStart = Carbon::now()->subMonths($i)->startOfMonth();
@@ -234,6 +236,7 @@ final class ComplianceController extends Controller
                 ->join('families as f', 'f.id', '=', 'ch.family_id')
                 ->join('centres as c', 'c.id', '=', 'f.centre_id')
                 ->where('c.agency_id', $agencyId)
+                ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
                 ->whereNull('ch.deleted_at')
                 ->whereBetween('ch.enrolled_at', [$cohortStart, $cohortEnd])
                 ->count();
@@ -241,6 +244,7 @@ final class ComplianceController extends Controller
                 ->join('families as f', 'f.id', '=', 'ch.family_id')
                 ->join('centres as c', 'c.id', '=', 'f.centre_id')
                 ->where('c.agency_id', $agencyId)
+                ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
                 ->whereNull('ch.deleted_at')
                 ->whereBetween('ch.enrolled_at', [$cohortStart, $cohortEnd])
                 ->whereNull('ch.withdrawn_at')

@@ -2972,10 +2972,27 @@
           <option value="enrollment">Enrollment form</option>
         </select></label>
       <button id="aid-go" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:6px;margin-top:18px;cursor:pointer;">Extract fields</button>
-      <pre id="aid-out" style="background:#1F2937;color:#10B981;padding:14px;border-radius:6px;margin-top:18px;font-size:12px;overflow:auto;max-height:400px;"></pre></div>`;
+      <div id="aid-out" style="margin-top:18px;"></div></div>`;
+    /* What was read, as a list of labelled fields (2026-11-27): the result used to be dumped as raw JSON. */
+    const label = (k) => String(k).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase());
+    const show = (v) => {
+      if (v == null || v === '') return '<span style="color:#94A3B8;">Not found</span>';
+      if (Array.isArray(v)) return v.map((x) => (x && typeof x === 'object') ? Object.entries(x).map(([a, b]) => label(a) + ': ' + (b == null ? '' : b)).join(' · ') : String(x)).map(escapeHtml).join('<br>');
+      if (typeof v === 'object') return Object.entries(v).map(([a, b]) => escapeHtml(label(a) + ': ' + (b == null ? '' : (typeof b === 'object' ? JSON.stringify(b) : b)))).join('<br>');
+      if (v === true) return 'Yes';
+      if (v === false) return 'No';
+      return escapeHtml(String(v));
+    };
+    const paint = (fields) => {
+      const rows = Object.entries(fields || {});
+      if (!rows.length) return '<div class="kt-card" style="padding:18px;color:#64748B;">Nothing could be read from this document. Try a clearer photo or scan.</div>';
+      return '<div class="kt-card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;">'
+        + rows.map(([k, v]) => `<tr><th style="text-align:left;vertical-align:top;padding:9px 14px;border-bottom:1px solid #F1F5F9;font-size:12.5px;color:#475569;width:34%;">${escapeHtml(label(k))}</th><td style="padding:9px 14px;border-bottom:1px solid #F1F5F9;font-size:13.5px;color:#0F172A;">${show(v)}</td></tr>`).join('')
+        + '</table></div>';
+    };
     document.getElementById('aid-go').onclick = async () => {
       const out = document.getElementById('aid-out');
-      out.textContent = 'Extracting…';
+      out.innerHTML = '<div style="color:#64748B;font-size:13px;">Extracting…</div>';
       try {
         const fileEl = document.getElementById('aid-file');
         const docType = document.getElementById('aid-type').value;
@@ -2991,8 +3008,8 @@
             doc_type: docType,
           });
         }
-        out.textContent = JSON.stringify(r.fields, null, 2);
-      } catch (e) { out.textContent = 'Error: ' + (e.message || e); }
+        out.innerHTML = paint(r && r.fields);
+      } catch (e) { out.innerHTML = '<div style="color:#B91C1C;font-size:13px;">' + escapeHtml((e && e.message) || 'The document could not be read. Please try again.') + '</div>'; }
     };
   }
 

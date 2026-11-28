@@ -340,6 +340,7 @@ post compliance/subsidies/{id}/end | Ended a subsidy
 post conferences/slots | Opened parent-teacher conference times
 post conferences/slots/{id}/book | Booked a parent-teacher conference
 post conferences/slots/{id}/cancel | Cancelled a parent-teacher conference
+delete conferences/slots/{id} | Deleted a parent-teacher conference time
 post contacts | Added a contact
 post contacts/scan-card | Scanned a business card
 patch contacts/{id} | Updated a contact
