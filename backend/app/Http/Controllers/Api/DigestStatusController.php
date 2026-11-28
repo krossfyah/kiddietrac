@@ -193,10 +193,13 @@ class DigestStatusController extends Controller
             return response()->json(['error' => 'Child not found'], 404);
         }
 
+        /* Words for people (2026-11-27): agency staff saw "Anthropic API key missing", "check storage/logs" and raw
+           exception text. The cause goes to the log; the screen gets a sentence. Model and token counts are for
+           the platform team only. */
         if (! $this->ai->isConfigured()) {
             return response()->json([
-                'error'   => 'AI service not configured',
-                'detail'  => 'Anthropic API key missing. Falls back to templated digest.',
+                'error'   => 'not_available',
+                'message' => 'AI digests are not available right now. Families still get the standard daily summary.',
             ], 503);
         }
 
@@ -207,24 +210,28 @@ class DigestStatusController extends Controller
 
             if (! $digest) {
                 return response()->json([
-                    'error'   => 'Digest generation returned null',
-                    'detail'  => 'Check storage/logs for the AI API error. Most common: Anthropic credit balance too low, or no events on this date.',
+                    'error'   => 'not_generated',
+                    'message' => 'The digest could not be written this time. If there were no updates logged for this child that day, there is nothing to summarise; otherwise please try again later.',
                 ], 502);
             }
 
-            return response()->json([
+            $out = [
                 'success'      => true,
                 'child_id'     => $childId,
                 'date'         => $date,
                 'body'         => $digest->body,
                 'generated_at' => $digest->generated_at,
-                'model_used'   => $digest->model_used,
-                'tokens_used'  => $digest->tokens_used,
-            ]);
+            ];
+            if ($this->isPlatformAdminUser($request->user())) {
+                $out['model_used'] = $digest->model_used;
+                $out['tokens_used'] = $digest->tokens_used;
+            }
+            return response()->json($out);
         } catch (\Throwable $e) {
+            report($e);
             return response()->json([
-                'error'  => 'Regeneration exception',
-                'detail' => $e->getMessage(),
+                'error'   => 'failed',
+                'message' => 'The digest could not be written this time. Please try again later.',
             ], 500);
         }
     }

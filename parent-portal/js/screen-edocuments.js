@@ -25,7 +25,7 @@
     }
     var res = await fetch(apiBase() + path, opts);
     var json = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(json.message || ('API ' + res.status));
+    if (!res.ok) throw new Error(json.message || 'Something went wrong. Please try again.');
     return json;
   }
 
@@ -49,10 +49,11 @@
     var resp;
     try { resp = await api('GET', '/director/edocuments'); }
     catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Documents could not be loaded. Please refresh and try again.</div>';
       return;
     }
     var docs = resp.templates || [];
+    CENTRES = resp.centres || [];
 
     container.innerHTML =
       '<div style="padding:24px;max-width:1800px;">' +
@@ -81,6 +82,13 @@
         downloadWithAuth(parseInt(a.dataset.download, 10), false);
       });
     });
+  }
+
+  // The centres this person may upload for (from the list call). A centre picker shows when there is more than one.
+  var CENTRES = [];
+  function centreName(id) {
+    for (var i = 0; i < CENTRES.length; i++) { if (String(CENTRES[i].id) === String(id)) return CENTRES[i].name; }
+    return '';
   }
 
   function docCard(d) {
@@ -139,7 +147,7 @@
       if (!url) throw new Error('No link returned');
       openExternalUrl(url);
     } catch (e) {
-      alert('Could not open the document: ' + ((e && e.message) || e));
+      if (window.KT && KT.toast) KT.toast('The document could not be opened. Please try again.', 'error');
     }
   }
   // Open an https URL so a PDF actually renders. The embedded Android WebView has
@@ -178,7 +186,7 @@
       var filename = (m && decodeURIComponent(m[1].replace(/"/g, ''))) || ('document-' + id + '.pdf');
       openBlob(blob, filename);
     } catch (e) {
-      alert('Could not open the document: ' + ((e && e.message) || e));
+      if (window.KT && KT.toast) KT.toast('The document could not be opened. Please try again.', 'error');
     }
   }
 
@@ -186,6 +194,13 @@
     var body = document.createElement('div');
     body.innerHTML =
       '<div style="display:grid;gap:10px;">' +
+        (CENTRES.length > 1
+          ? '<label style="font-size:12px;font-weight:700;color:#6B7280;">Centre</label>' +
+            '<select id="kt-centre" style="padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
+              '<option value="">Choose a centre…</option>' +
+              CENTRES.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') +
+            '</select>'
+          : '') +
         '<label style="font-size:12px;font-weight:700;color:#6B7280;">Document name</label>' +
         '<input id="kt-name" placeholder="Photo release form 2026" style="padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
         '<label style="font-size:12px;font-weight:700;color:#6B7280;">Description (optional)</label>' +
@@ -209,6 +224,9 @@
           handler: async function () {
             var name = body.querySelector('#kt-name').value.trim();
             var file = body.querySelector('#kt-file').files[0];
+            var centrePick = body.querySelector('#kt-centre');
+            var centreId = centrePick ? centrePick.value : (CENTRES[0] ? String(CENTRES[0].id) : '');
+            if (centrePick && !centreId) { setMsg(body, 'Choose the centre this document is for', true); return false; }
             if (!name) { setMsg(body, 'Name is required', true); return false; }
             if (!file) { setMsg(body, 'Choose a PDF file', true); return false; }
             if (file.type !== 'application/pdf') { setMsg(body, 'File must be a PDF', true); return false; }
@@ -218,12 +236,13 @@
             fd.append('description', body.querySelector('#kt-desc').value.trim());
             fd.append('required', body.querySelector('#kt-required').checked ? '1' : '0');
             fd.append('audience', 'all_families');
+            if (centreId) fd.append('centre_id', centreId);
             fd.append('pdf', file);
             try {
               await api('POST', '/director/edocuments', fd, true);
               renderDirector(container);
             } catch (e) {
-              setMsg(body, 'Upload failed: ' + e.message, true);
+              setMsg(body, (e && e.message) || 'The upload did not go through. Please try again.', true);
               return false;
             }
           },
@@ -240,7 +259,7 @@
   async function openSignaturesModal(id) {
     var resp;
     try { resp = await api('GET', '/director/edocuments/' + id + '/signatures'); }
-    catch (e) { alert('Could not load: ' + e.message); return; }
+    catch (e) { if (window.KT && KT.toast) KT.toast('The signatures could not be loaded. Please try again.', 'error'); return; }
     var sigs = resp.signatures || [];
     var missing = resp.missing_families || [];
 
@@ -290,7 +309,7 @@
     var resp;
     try { resp = await api('GET', '/parent/edocuments'); }
     catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Documents could not be loaded. Please refresh and try again.</div>';
       return;
     }
     var docs = resp.templates || [];
@@ -364,7 +383,7 @@
         '<p style="margin:0 0 14px;font-size:13px;color:#6B7280;">View the PDF first if you haven\'t. Your signature will be recorded with date, time, and IP for compliance.</p>' +
       '</div>' +
       '<label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:6px;">Type your full name (legal acknowledgement)</label>' +
-      '<input id="kt-typed" placeholder="e.g. Anthony Hosein" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;">' +
+      '<input id="kt-typed" placeholder="Your full name" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;">' +
       '<label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:6px;">Draw your signature</label>' +
       '<div id="kt-sig"></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center;">' +
@@ -413,13 +432,14 @@
   // ============================================================
   function render(container) {
     var r = role();
-    if (r === 'agency_admin' || r === 'centre_director') return renderDirector(container);
+    // platform_admin too (2026-11-27): a platform admin inside an agency got "available to directors and parents".
+    if (r === 'agency_admin' || r === 'centre_director' || r === 'platform_admin') return renderDirector(container);
     if (r === 'guardian') return renderParent(container);
     container.innerHTML = '<div style="padding:24px;color:#6B7280;">eDocuments are available to directors and parents.</div>';
   }
 
   if (Shell && Shell.registerScreen) {
-    ['agency_admin', 'centre_director', 'guardian'].forEach(function (r) {
+    ['platform_admin', 'agency_admin', 'centre_director', 'guardian'].forEach(function (r) {
       Shell.registerScreen(r + ':edocuments', render);
     });
   }

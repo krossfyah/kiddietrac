@@ -16,8 +16,9 @@
 
   function formatDate(d) {
     if (!d) return '-';
-    try { return new Date(d).toLocaleString('en-CA', { hour: 'numeric', minute: 'numeric' }); }
-    catch (e) { return d; }
+    // Agency time, not the device's (2026-11-27).
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(d) || '-';
+    return String(d);
   }
 
   function statusBadge(status) {
@@ -58,7 +59,7 @@
       data = await Api.get(`/director/digest-status?date=${encodeURIComponent(date)}`);
     } catch (e) {
       Dom.clear(root);
-      root.appendChild(emptyState('!', 'Could not load digest status', e.message || 'Server error'));
+      root.appendChild(emptyState('!', 'Could not load digest status', 'Please refresh and try again.'));
       return;
     }
 
@@ -183,29 +184,30 @@
             Shell.Modal.open({
               title: `Digest for ${childName}`,
               body: `
-                <div style="margin-bottom:16px; padding:12px; background:var(--kt-bg); border-radius:8px; font-size:13px; color:var(--kt-text-muted);">
-                  Model: ${esc(result.model_used || 'unknown')}
+                ${result.model_used ? `<div style="margin-bottom:16px; padding:12px; background:var(--kt-bg); border-radius:8px; font-size:13px; color:var(--kt-text-muted);">
+                  Model: ${esc(result.model_used)}
                   ${result.tokens_used ? ` &middot; ${result.tokens_used} tokens` : ''}
-                </div>
+                </div>` : ''}
                 <div style="font-size:15px; line-height:1.6; white-space:pre-wrap;">${esc(result.body)}</div>
               `,
               actions: [{ label: 'Close', style: 'btn-primary' }],
               onClose: () => renderDigestStatus(main, ctx),
             });
           } else {
-            const msg = result?.detail || result?.error || 'Generation failed';
-            Dom.toast(msg, 'error');
+            Dom.toast((result && result.message) || 'The digest could not be written this time. Please try again later.', 'error');
             btn.disabled = false;
             btn.textContent = original;
           }
         } catch (e) {
-          // Try to parse the error body for a useful detail
-          let detail = e.message || 'Network error';
+          // The server sends a sentence in `message`; never show raw error text (kiddietrac-no-raw-errors).
+          let detail = 'The digest could not be written this time. Please try again later.';
           if (e.body) {
             try {
               const parsed = typeof e.body === 'string' ? JSON.parse(e.body) : e.body;
-              detail = parsed.detail || parsed.error || detail;
+              if (parsed && parsed.message) detail = parsed.message;
             } catch (_) {}
+          } else if (e && e.message && !/^(HTTP|API|Request failed|Failed to fetch)/i.test(e.message)) {
+            detail = e.message;
           }
           Dom.toast(detail, 'error');
           btn.disabled = false;
@@ -216,6 +218,9 @@
   }
 
   function todayISO() {
+    // The agency's today, not the browser's (an evening in the Americas is already tomorrow in UTC, and a device can
+    // sit in another zone). 2026-11-27.
+    if (window.KT && KT.agencyToday) return KT.agencyToday();
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');

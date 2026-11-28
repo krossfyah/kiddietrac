@@ -37,8 +37,50 @@ final class DocumentWorkflowController extends Controller
             return (int) $step->signer_user_id === $uid && $this->userBelongsToAgency($uid, (int) $w->agency_id);
         }
         $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+        // An unnamed PARENT step belongs to the family the document is about, not to every parent of the agency
+        // (2026-11-27, person boundary - reader and guard move together with stepSigners()).
+        if ((string) $step->signer_role === 'guardian') {
+            return $agencyId > 0 && (int) $w->agency_id === $agencyId && in_array($uid, $this->stepSigners($w, $step), true);
+        }
         return $agencyId > 0 && (int) $w->agency_id === $agencyId
             && in_array((string) $step->signer_role, \App\Support\AgencyRole::names($request), true);
+    }
+
+    /* WHO IS TOLD IT IS THEIR TURN (2026-11-27). A step with no named signer told nobody, so the workflow stalled
+       until someone happened to look. Now: the named signer; for an unnamed STAFF step, everyone who may sign it
+       (holders of that role in the workflow's agency, never a platform outsider); for an unnamed PARENT step, the
+       parents of the family the document is about (related family/child), never every parent in the agency. */
+    private function stepSigners(object $w, object $step): array
+    {
+        if ($step->signer_user_id) return [(int) $step->signer_user_id];
+        $agencyId = (int) $w->agency_id;
+        if ($step->signer_role === 'guardian') {
+            $familyId = 0;
+            if ($w->related_table === 'families') $familyId = (int) $w->related_id;
+            if ($w->related_table === 'children') $familyId = (int) DB::table('children')->where('id', (int) $w->related_id)->value('family_id');
+            if (! $familyId || (int) DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->where('f.id', $familyId)->value('c.agency_id') !== $agencyId) return [];
+            return DB::table('guardians')->where('family_id', $familyId)->whereNotNull('user_id')
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        }
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        return \App\Support\AgencyOutsiders::exclude(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id'))
+            ->whereNull('u.deleted_at')->where('ra.active', 1)->where('ra.role', $step->signer_role)
+            ->where(fn ($q) => $q->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds ?: [0]))
+            ->pluck('u.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
+
+    private function tellSigners(object $w, object $step, string $title, string $body, int $exceptUserId = 0): void
+    {
+        foreach ($this->stepSigners($w, $step) as $uid) {
+            if ($uid === $exceptUserId) continue;
+            \App\Support\Notify::write([
+                'user_id' => $uid, 'type' => 'document_workflow',
+                'title' => $title, 'body' => $body,
+                'data' => json_encode(['link' => '#doc-workflows', 'workflow_id' => (int) $w->id]),
+                'created_at' => now(),
+            ]);
+        }
     }
 
     public function listMine(Request $request): JsonResponse
@@ -54,7 +96,18 @@ final class DocumentWorkflowController extends Controller
         } else {
             // For parents: workflows where they are a signer
             $workflowIds = DB::table('document_workflow_steps')->where('signer_user_id', $u->id)->pluck('workflow_id');
-            $q->whereIn('id', $workflowIds);
+            /* An educator is now told about an unnamed educator step (tellSigners), so the list shows the ones in
+               the active agency waiting on a role they hold; show()/sign() already let them in. Staff roles only:
+               an unnamed parent step is reached through its own family's notice, never listed to every parent. */
+            $staffRoles = array_values(array_intersect(\App\Support\AgencyRole::names($request), ['educator', 'centre_director', 'agency_admin']));
+            $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+            if ($staffRoles && $agencyId) {
+                $workflowIds = $workflowIds->merge(DB::table('document_workflow_steps as s')
+                    ->join('document_workflows as w', 'w.id', '=', 's.workflow_id')
+                    ->where('w.agency_id', $agencyId)->whereNull('s.signer_user_id')
+                    ->whereIn('s.signer_role', $staffRoles)->pluck('s.workflow_id'));
+            }
+            $q->whereIn('id', $workflowIds->unique()->values());
         }
         $rows = $q->limit(100)->get();
         return response()->json(['data' => $rows]);
@@ -109,16 +162,12 @@ final class DocumentWorkflowController extends Controller
                 'status' => $i === 0 ? 'awaiting' : 'pending',
                 'created_at' => now(),
             ]);
-            // Notify first-step signer immediately
-            if ($i === 0 && !empty($s['signer_user_id'])) {
-                \App\Support\Notify::write([
-                    'user_id' => $s['signer_user_id'], 'type' => 'document_workflow',
-                    'title' => 'Awaiting your signature: ' . $data['title'],
-                    'body' => 'Please review and sign.',
-                    'data' => json_encode(['link' => '#doc-workflows', 'workflow_id' => $workflowId]),
-                    'created_at' => now(),
-                ]);
-            }
+        }
+        // Tell whoever signs the first step (named, or everyone who may sign it - see stepSigners).
+        $w = DB::table('document_workflows')->where('id', $workflowId)->first();
+        $first = DB::table('document_workflow_steps')->where('workflow_id', $workflowId)->where('step_order', 1)->first();
+        if ($w && $first) {
+            $this->tellSigners($w, $first, 'Awaiting your signature: ' . $data['title'], 'Please review and sign.', (int) $u->id);
         }
         return response()->json(['id' => $workflowId], 201);
     }
@@ -136,8 +185,16 @@ final class DocumentWorkflowController extends Controller
         $inActive = $agencyId > 0 && (int) $w->agency_id === $agencyId;
         $named = (int) $w->started_by_user_id === $uid
             || DB::table('document_workflow_steps')->where('workflow_id', $id)->where('signer_user_id', $uid)->exists();
+        $staffNames = array_values(array_diff(\App\Support\AgencyRole::names($request), ['guardian']));
         $roleStep = $inActive && DB::table('document_workflow_steps')->where('workflow_id', $id)
-            ->whereNull('signer_user_id')->whereIn('signer_role', \App\Support\AgencyRole::names($request))->exists();
+            ->whereNull('signer_user_id')->whereIn('signer_role', $staffNames ?: ['-'])->exists();
+        // A parent reads an unnamed parent step's document only when it is about their own family (stepSigners).
+        if (! $roleStep && $inActive) {
+            foreach (DB::table('document_workflow_steps')->where('workflow_id', $id)->whereNull('signer_user_id')
+                         ->where('signer_role', 'guardian')->get() as $gs) {
+                if (in_array($uid, $this->stepSigners($w, $gs), true)) { $roleStep = true; break; }
+            }
+        }
         abort_unless(($inActive && $this->isManager($request)) || $roleStep
             || ($named && $this->userBelongsToAgency($uid, (int) $w->agency_id)), 403);
         $steps = DB::table('document_workflow_steps as s')
@@ -202,15 +259,7 @@ final class DocumentWorkflowController extends Controller
             ]);
             DB::table('document_workflow_steps')->where('id', $nextStep->id)
                 ->update(['status' => 'awaiting']);
-            if ($nextStep->signer_user_id) {
-                \App\Support\Notify::write([
-                    'user_id' => $nextStep->signer_user_id, 'type' => 'document_workflow',
-                    'title' => 'Your turn to sign: ' . $workflow->title,
-                    'body' => 'Previous step complete.',
-                    'data' => json_encode(['link' => '#doc-workflows', 'workflow_id' => $id]),
-                    'created_at' => now(),
-                ]);
-            }
+            $this->tellSigners($workflow, $nextStep, 'Your turn to sign: ' . $workflow->title, 'Previous step complete.', (int) $u->id);
         } else {
             DB::table('document_workflows')->where('id', $id)->update([
                 'status' => 'complete', 'completed_at' => now(), 'updated_at' => now(),

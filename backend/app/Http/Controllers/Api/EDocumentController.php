@@ -90,7 +90,7 @@ class EDocumentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $centreIds = $this->directorCentreIds($request);
-        if (! $centreIds) return response()->json(['templates' => []]);
+        if (! $centreIds) return response()->json(['templates' => [], 'centres' => []]);
 
         $rows = EDocumentTemplate::query()
             ->whereIn('centre_id', $centreIds)
@@ -124,7 +124,10 @@ class EDocumentController extends Controller
             return $arr;
         });
 
-        return response()->json(['templates' => $out]);
+        /* The centres this person may upload for (2026-11-27): the upload had no centre picker, so a template
+           always landed on the first centre. Open centres only. */
+        $centres = DB::table('centres')->whereIn('id', $centreIds)->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']);
+        return response()->json(['templates' => $out, 'centres' => $centres]);
     }
 
     public function store(Request $request): JsonResponse
