@@ -21,7 +21,9 @@ namespace App\Support;
  *           union default these are where the matrix is wider than reality — the keys to split
  *           before enforcement (B2). Shadow mode reports them as "would allow".
  *
- * Nothing here gates anything yet: shadow mode only compares and logs (see Permissions).
+ * Built-in roles: nothing here gates them; shadow mode only compares and logs (see Permissions).
+ * CUSTOM ROLES (2026-11-28) ARE ENFORCED: App\Support\CustomRoles refuses the routes and hides the screens of
+ * every key a custom role turns off (DEFAULTS + CUSTOM_OFFER of its base = what it may turn off).
  */
 final class PermissionMap
 {
@@ -115,6 +117,21 @@ final class PermissionMap
         'zones.manage' => 'Create activity zones and log visits',
         'ai.use' => 'AI assistants (lesson plans, document extract, insights)',
         'integrations.manage' => 'Integrations, imports, QuickBooks, Xero and Sage',
+        // Custom roles (2026-11-28): areas the 10-06 matrix did not cover.
+        'credentials.own' => 'Keep their own certificates, PD hours and household records',
+        'files.share' => 'Share files with families (Files)',
+        'supplies.manage' => 'Ask families for supplies (diapers, wipes, spare clothes)',
+        'parent_issues.manage' => 'Read and answer concerns parents raise (Parent issues)',
+        'hr.self' => 'HR for themselves: leave, schedule, claims, documents, courses',
+        'hr.manage' => 'HR for others: staff files, rota, approvals, hiring, HR reports',
+        'kudos.use' => 'Educator points, thank-yous and rewards',
+        'phone.use' => 'Phone: calls, dialer and voicemail',
+        'walkie.use' => 'Walkie-talkie',
+        'drills.manage' => 'Fire drills and fire plans',
+        'safety.record' => 'Headcounts, sleep checks and hazard reports',
+        'funding.manage' => 'Government funding programs (CWELCC, OCCMS, SUTQ, PFCC, workforce funding)',
+        'privacy.manage' => 'Privacy breaches and privacy requests',
+        'policies.manage' => 'Write policies and see who has read them',
     ];
 
     public const ROUTES = [
@@ -1047,6 +1064,34 @@ final class PermissionMap
         'guardian' => ['edocuments.sign', 'incidents.acknowledge', 'own_children.view', 'own_invoices.pay', 'own_invoices.view', 'own_tasks.view'],
         'home_visitor' => ['announcements.create', 'announcements.view', 'attendance.record', 'awards.manage', 'care_logs.view', 'children.view', 'edocuments.sign', 'expenses.manage', 'expenses.view', 'field_trips.manage', 'home_visits.file', 'incidents.create', 'incidents.view', 'lesson_plans.create', 'lesson_plans.view', 'medications.authorize', 'medications.view', 'messages.use', 'observations.create', 'observations.view', 'own_tasks.view', 'payroll.manage', 'payroll.view', 'photos.manage', 'rooms.edit', 'rooms.view', 'staff.schedule'],
         'auditor' => ['expenses.view', 'forms.view', 'messages.use', 'payroll.view', 'reports.attendance', 'rooms.view'],
+    ];
+
+    /** CUSTOM ROLES (2026-11-28): what each base role reaches beyond DEFAULTS - areas added since 10-06 and old keys
+        whose routes or menu screens the role reaches today. DEFAULTS stay byte-for-byte (they drive the watch-only
+        check and Ask KiddieTrac for built-in roles); a custom role may turn off DEFAULTS[base] + CUSTOM_OFFER[base]. */
+    public const CUSTOM_OFFER = [
+        'agency_admin' => ['credentials.own', 'drills.manage', 'files.share', 'funding.manage', 'hr.manage', 'hr.self', 'kudos.use', 'parent_issues.manage', 'phone.use', 'policies.manage', 'privacy.manage', 'safety.record', 'supplies.manage', 'walkie.use'],
+        'centre_director' => ['credentials.own', 'drills.manage', 'files.share', 'funding.manage', 'hr.manage', 'hr.self', 'integrations.manage', 'kudos.use', 'parent_issues.manage', 'phone.use', 'policies.manage', 'privacy.manage', 'safety.record', 'supplies.manage', 'walkie.use'],
+        'educator' => ['credentials.own', 'drills.manage', 'families.view', 'files.share', 'hr.manage', 'hr.self', 'kudos.use', 'late_pickups.decide', 'parent_issues.manage', 'phone.use', 'safety.record', 'supplies.manage', 'tasks.assign', 'walkie.use'],
+        'home_visitor' => ['credentials.own', 'files.share', 'hr.manage', 'hr.self', 'kudos.use', 'safety.record', 'supplies.manage', 'tasks.assign', 'walkie.use'],
+        'auditor' => ['audit.view', 'children.view', 'reports.compliance'],
+    ];
+
+    /** The Roles & permissions screen's groups, in order, with plain names (custom roles, 2026-11-28). Every
+        CATALOG key is in exactly one group; kt:permission-map-check fails otherwise. */
+    public const GROUPS = [
+        'Everyday' => ['ai.use', 'announcements.create', 'announcements.view', 'contacts.view', 'dashboard.view', 'files.share', 'messages.use', 'own_tasks.view', 'phone.use', 'walkie.use'],
+        'Children & families' => ['children.archive', 'children.edit', 'children.view', 'families.edit', 'families.invite', 'families.view', 'parent_issues.manage', 'waitlist.manage'],
+        'Daily care' => ['attendance.record', 'awards.manage', 'cacfp.manage', 'care_logs.manage', 'care_logs.view', 'kiosk.manage', 'late_pickups.decide', 'late_pickups.log', 'menu.manage', 'menu.view', 'photos.manage', 'photos.view', 'safe_arrival.manage', 'supplies.manage', 'wellness.manage', 'zones.manage', 'zones.view'],
+        'Learning' => ['lesson_plans.create', 'lesson_plans.view', 'observations.create', 'observations.view', 'report_cards.manage'],
+        'Health & safety' => ['bus_routes.manage', 'closures.manage', 'drills.manage', 'field_trips.manage', 'immunizations.manage', 'immunizations.view', 'incidents.create', 'incidents.notify_parent', 'incidents.review', 'incidents.view', 'medications.authorize', 'medications.view', 'safety.record'],
+        'Staff & HR' => ['credentials.own', 'help.assign', 'home_visits.file', 'home_visits.review', 'hr.manage', 'hr.self', 'kudos.use', 'policies.manage', 'staff.certifications', 'staff.edit', 'staff.invite', 'staff.schedule', 'staff.view', 'tasks.assign'],
+        'Money' => ['expenses.manage', 'expenses.view', 'funding.manage', 'fundraising.manage', 'invoices.generate', 'invoices.refund', 'invoices.view', 'payroll.manage', 'payroll.view'],
+        'Forms & documents' => ['edocuments.send', 'edocuments.sign', 'edocuments.view', 'forms.manage', 'forms.view'],
+        'Marketing & events' => ['email_templates.manage', 'marketing.manage', 'rsvp.manage', 'rsvp.senders'],
+        'Reports & records' => ['audit.view', 'privacy.manage', 'reports.attendance', 'reports.compliance'],
+        'Agency set-up' => ['centres.create', 'centres.delete', 'centres.edit', 'centres.view', 'integrations.manage', 'mfa.enforce', 'roles.manage', 'rooms.edit', 'rooms.view', 'settings.edit'],
+        'Their own family (parents)' => ['incidents.acknowledge', 'own_children.view', 'own_invoices.pay', 'own_invoices.view'],
     ];
 
     /** Decision 3: the auditor default for the ENFORCEMENT phase (read-only, everything an

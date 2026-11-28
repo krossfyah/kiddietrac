@@ -132,6 +132,11 @@ final class Permissions
         sort($roles);
         $ck = 'perm.eff.' . (int) Cache::get(self::VER_KEY, 0) . '.' . ($agencyId ?: 0) . '.' . implode(',', $roles);
         $keys = $roles ? Cache::remember($ck, 60, fn () => self::compute($agencyId, $roles)) : [];
+        // A custom role (2026-11-28) also loses the keys it turns off - Ask KiddieTrac reads them here.
+        $custom = CustomRoles::forRequest($request, (int) $user->id);
+        if ($custom !== null && $custom['refused']) {
+            $keys = array_values(array_diff($keys, $custom['refused']));
+        }
         $request->attributes->set(self::REQ_KEY, ['uid' => $user->id, 'aid' => $agencyId, 'keys' => $keys]);
         return $keys;
     }

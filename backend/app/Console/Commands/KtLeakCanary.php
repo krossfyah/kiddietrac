@@ -114,8 +114,21 @@ final class KtLeakCanary extends Command
             $sp = $user('staff_parent');          $role('staff_parent_staff', $sp, 'educator', $centre); $role('staff_parent_guardian', $sp, 'guardian', $centre);
             $integ = $user('integration');        $role('integration', $integ, 'integration', null);
             $auditor = $user('auditor');          $role('auditor', $auditor, 'auditor', null);   // agency-wide, read-only
+            /* A CUSTOM-ROLE person (2026-11-28): an educator whose agency's own "Canary custom educator" role turns payroll and
+               HR off. role_assignments.role stays 'educator' (the base); custom_role_id narrows it (App\Support\CustomRoles). */
+            $customRoleId = $get('custom_role', 'roles', fn () => DB::table('roles')->insertGetId([
+                'agency_id' => $agencyId, 'key' => 'leakguard_canary_' . Str::lower(Str::random(6)), 'name' => 'Canary custom educator ' . $marker,
+                'description' => 'Leak guard canary - internal', 'is_system' => 0, 'base_role' => 'educator', 'scope' => 'centre',
+                'permissions' => json_encode(array_values(array_diff(\App\Support\CustomRoles::offered('educator'), ['payroll.view', 'payroll.manage', 'hr.manage']))),
+                'created_at' => $now, 'updated_at' => $now,
+            ]));
+            $custom = $user('custom_role');
+            $get('ra:custom_role', 'role_assignments', fn () => DB::table('role_assignments')->insertGetId([
+                'user_id' => $custom, 'role' => 'educator', 'custom_role_id' => $customRoleId, 'agency_id' => $agencyId, 'centre_id' => $centre,
+                'active' => 1, 'created_at' => $now,
+            ]));
 
-            foreach (['educator' => $educator, 'staff_parent' => $sp] as $k => $uid) {
+            foreach (['educator' => $educator, 'staff_parent' => $sp, 'custom_role' => $custom] as $k => $uid) {
                 $get('educator_room:' . $k, 'educator_rooms', fn () => DB::table('educator_rooms')->insertGetId([
                     'user_id' => $uid, 'room_id' => $room, 'assigned_by_id' => $admin, 'created_at' => $now,
                 ]));

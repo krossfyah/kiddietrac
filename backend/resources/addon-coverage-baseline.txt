@@ -762,6 +762,7 @@ job kt:licences
 job kt:mail-gate-watch
 job kt:notify-audience-check
 job kt:page-help-check
+job kt:permission-map-check
 job kt:personal-announcements
 job kt:photo-consent-check
 job kt:proposal-followups

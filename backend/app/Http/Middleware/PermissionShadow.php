@@ -56,6 +56,10 @@ class PermissionShadow
         if (! $key || Permissions::isPlatform($request)) {
             return;
         }
+        // A custom-role holder is enforced, not watched (EnforceCustomRole logs its own refusals).
+        if (\App\Support\CustomRoles::forRequest($request, (int) $user->id) !== null) {
+            return;
+        }
         $agencyId = Permissions::agencyFor($request);
         $roles = Permissions::rolesIn($request, $agencyId);
         if (! $roles) {

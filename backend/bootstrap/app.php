@@ -74,6 +74,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // (App\Support\SignInLocks, 2026-11-10).
             \App\Http\Middleware\EnforceSignInLocks::class,
             EnforceAuditorReadOnly::class,
+            // Custom roles are enforced: what the role turns off answers 403, unmapped routes too (App\Support\CustomRoles,
+            // 2026-11-28). People on built-in roles pass straight through.
+            \App\Http\Middleware\EnforceCustomRole::class,
             // Pick-up logins see the parent view minus billing: refuse money paths (2026-10-13).
             \App\Http\Middleware\PickupOnlyNoBilling::class,
             SecurityHeaders::class,

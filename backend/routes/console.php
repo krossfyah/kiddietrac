@@ -625,6 +625,9 @@ Schedule::command('kt:child-scope-check --quiet-ok')->dailyAt('05:55')->timezone
 // --strict since 2026-11-27: also fails on a fallback (~) or thin guide — every screen has its own step-by-step guide.
 Schedule::command('kt:page-help-check --strict --quiet-ok')->dailyAt('05:47')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 Schedule::command('kt:screen-guard-check --quiet-ok')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+/* Custom roles are enforced (2026-11-28): a route or menu screen with no permission is refused to custom-role
+   holders, so new ones are flagged to the platform the morning after (App\Support\PermissionRoutes). */
+Schedule::command('kt:permission-map-check --quiet-ok')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 /* LEAK GUARD (2026-11-27, Anthony: "leaks should have a guard to constantly check for cross leaks"). kt:leak-probe calls
    every GET API route in-process as canary people of test agencies 6 and 18 and fails on the other agency's canary
    data; kt:leak-integrity finds rows filed under the wrong agency. Hourly: a 1/24 slice of the routes (each route is

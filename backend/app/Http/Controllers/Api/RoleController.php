@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Support\PermissionMap;
 use App\Support\Permissions;
+use App\Support\CustomRoles;
+use App\Support\PermissionRoutes;
 
 /**
  * v22p8 Phase A — custom roles CRUD.
@@ -29,6 +31,11 @@ use App\Support\Permissions;
  *    when it is based on Agency admin (decision 2).
  *  - The catalog and the built-in defaults come from App\Support\PermissionMap.
  *  - Platform-only: the watch-only permission check (shadow) summary and its kill switch.
+ *
+ * CUSTOM ROLES (2026-11-28): a custom role is always BASED ON a built-in role (App\Support\CustomRoles::BASES) and
+ * keeps a subset of what that base offers; it is enforced for whoever holds it (EnforceCustomRole). Its reach comes
+ * from the base (agency for Agency admin and Auditor, otherwise the centres the person is placed at), so `scope` is
+ * derived, never chosen. Duplicate, delete (refused while anyone holds it), and every change is audited.
  */
 final class RoleController extends Controller
 {
@@ -44,24 +51,34 @@ final class RoleController extends Controller
             ->orderBy('is_system', 'desc')
             ->orderBy('name')
             ->get();
+        $holders = CustomRoles::holderCounts((int) $agencyId);
 
         $isPlatform = $this->isPlatform($request);
+        $offered = [];
+        foreach (CustomRoles::BASES as $b) {
+            $offered[$b] = CustomRoles::offered($b);
+        }
         return response()->json([
-            'roles' => $roles->map(fn ($r) => $this->serialize($r))->all(),
+            'roles' => $roles->map(fn ($r) => $this->serialize($r, $holders))->all(),
             'can_edit_builtin' => $isPlatform,
             'is_platform' => $isPlatform,
-            'base_roles' => array_keys(PermissionMap::DEFAULTS),
+            'base_roles' => CustomRoles::BASES,
+            'base_labels' => CustomRoles::BASE_LABELS,
+            // What a role based on each built-in may keep or turn off, the groups the screen shows them in, and the
+            // screen each permission opens (the "what this person will see" preview).
+            'offered' => $offered,
+            'groups' => PermissionMap::GROUPS,
+            'screens' => PermissionRoutes::SCREENS,
             'permissions_mode' => Permissions::mode(),
+            'custom_enforced' => true,
         ]);
     }
 
     public function permissionCatalog(Request $request): JsonResponse
     {
-        // Live-read from the migration's static catalog so the source of truth
-        // stays in one place. The migration class is anonymous so we can't
-        // reference it directly; rebuild the array here in lockstep instead.
         return response()->json([
             'catalog' => $this->catalogStatic(),
+            'groups' => PermissionMap::GROUPS,
         ]);
     }
 
@@ -78,9 +95,22 @@ final class RoleController extends Controller
 
         if (! $role) return response()->json(['message' => 'Not found'], 404);
 
-        return response()->json(['role' => $this->serialize($role)]);
+        $out = $this->serialize($role, CustomRoles::holderCounts((int) $agencyId));
+        if (! $role->is_system) {
+            // Who holds it (this agency's people only).
+            $out['holder_list'] = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                ->where('ra.custom_role_id', $role->id)->where('ra.active', true)
+                ->select('u.id', 'u.first_name', 'u.last_name')->distinct()->orderBy('u.first_name')->limit(200)->get()
+                ->map(fn ($u) => ['id' => (int) $u->id, 'name' => trim($u->first_name . ' ' . $u->last_name)])->all();
+            $out['hidden_screens'] = CustomRoles::hiddenScreensForSet((string) $role->base_role, $out['permissions']);
+        }
+        return response()->json(['role' => $out]);
     }
 
+    /**
+     * POST /admin/roles - a custom role, always BASED ON a built-in one (2026-11-28). `permissions` = the keys it
+     * keeps; only keys its base offers survive. Empty = keep everything its base offers.
+     */
     public function store(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -91,50 +121,50 @@ final class RoleController extends Controller
             'description' => ['nullable', 'string', 'max:500'],
             'permissions' => ['present', 'array'],
             'permissions.*' => ['string', 'max:100'],
-            'base_role' => ['nullable', 'string', 'in:' . implode(',', array_keys(PermissionMap::DEFAULTS))],
-            'scope' => ['nullable', 'string', 'in:centre,agency'],
+            'base_role' => ['required', 'string', 'in:' . implode(',', CustomRoles::BASES)],
+        ], [
+            'base_role.required' => 'Pick the built-in role this one is based on.',
+            'base_role.in' => 'A custom role can be based on Agency admin, Centre director, Educator, Home visitor or Auditor.',
         ]);
-        $baseRole = $data['base_role'] ?? null;
-        $scope = $data['scope'] ?? 'centre';
-        if ($scope === 'agency' && $baseRole !== 'agency_admin') {
-            return response()->json(['message' => 'Only a role based on Agency admin can cover the whole agency. Other custom roles are limited to one centre.'], 422);
+        $name = trim((string) $data['name']);
+        if ($this->nameTaken((int) $agencyId, $name)) {
+            return response()->json(['message' => 'There is already a role called "' . $name . '". Pick another name.'], 422);
         }
-
-        $validKeys = array_keys($this->catalogStatic());
-        // Starting from a built-in role with no keys ticked = take that role's current set.
-        $start = $data['permissions'];
-        if (! $start && $baseRole) {
-            $baseRow = DB::table('roles')->where('agency_id', $agencyId)->where('key', $baseRole)->where('is_system', true)->whereNull('deleted_at')->value('permissions');
-            $start = $baseRow ? (json_decode((string) $baseRow, true) ?: []) : PermissionMap::DEFAULTS[$baseRole];
-        }
-        $perms = array_values(array_unique(array_intersect($start, $validKeys)));
-
-        // Derive a stable key slug from the name; ensure unique per agency.
-        $base = Str::slug($data['name'], '_');
-        if ($base === '') $base = 'role_'.uniqid();
-        $key = $base;
-        $i = 1;
-        while (DB::table('roles')->where('agency_id', $agencyId)->where('key', $key)->exists()) {
-            $key = $base.'_'.(++$i);
-        }
-
-        $id = DB::table('roles')->insertGetId([
-            'agency_id' => $agencyId,
-            'key' => $key,
-            'name' => $data['name'],
-            'description' => $data['description'] ?? null,
-            'permissions' => json_encode($perms),
-            'scope' => $scope,
-            'base_role' => $baseRole,
-            'is_system' => false,
-            'created_at' => now(),
-            'updated_at' => now(),
+        $base = (string) $data['base_role'];
+        $perms = $data['permissions'] ? CustomRoles::clean($base, $data['permissions']) : CustomRoles::offered($base);
+        $id = $this->insertCustom((int) $agencyId, $name, $data['description'] ?? null, $base, $perms);
+        $this->auditRole($request, (int) $agencyId, 'roles.custom_created', $id, [
+            'name' => $name, 'base_role' => $base, 'kept' => count($perms), 'turned_off' => CustomRoles::refusedFor($base, $perms),
         ]);
-        Permissions::bump();
 
-        return response()->json([
-            'role' => $this->serialize(DB::table('roles')->find($id)),
-        ], 201);
+        return response()->json(['role' => $this->serialize(DB::table('roles')->find($id), [])], 201);
+    }
+
+    /** POST /admin/roles/{role}/duplicate {name?} - a copy of a built-in role (as a custom role on it) or of a custom one. */
+    public function duplicate(Request $request, int $roleId): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency context'], 403);
+        $src = DB::table('roles')->where('id', $roleId)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        if (! $src) return response()->json(['message' => 'Not found'], 404);
+        $base = $src->is_system ? (string) $src->key : (string) $src->base_role;
+        if (! in_array($base, CustomRoles::BASES, true)) {
+            return response()->json(['message' => 'A custom role cannot be based on ' . $src->name . '.'], 422);
+        }
+        $data = $request->validate(['name' => ['nullable', 'string', 'max:120']]);
+        $name = trim((string) ($data['name'] ?? '')) ?: ('Copy of ' . $src->name);
+        if ($this->nameTaken((int) $agencyId, $name)) {
+            return response()->json(['message' => 'There is already a role called "' . $name . '". Pick another name.'], 422);
+        }
+        $perms = $src->is_system
+            ? CustomRoles::offered($base)
+            : CustomRoles::clean($base, json_decode((string) $src->permissions, true) ?: []);
+        $id = $this->insertCustom((int) $agencyId, $name, $src->is_system ? null : $src->description, $base, $perms);
+        $this->auditRole($request, (int) $agencyId, 'roles.custom_duplicated', $id, [
+            'name' => $name, 'from_role_id' => (int) $src->id, 'from' => $src->name, 'base_role' => $base,
+        ]);
+
+        return response()->json(['role' => $this->serialize(DB::table('roles')->find($id), [])], 201);
     }
 
     public function update(Request $request, int $roleId): JsonResponse
@@ -158,37 +188,53 @@ final class RoleController extends Controller
             'permissions' => ['sometimes', 'array'],
             'permissions.*' => ['string', 'max:100'],
         ];
-        // System rows: name and key are immutable (they're referenced by code).
         if (! $role->is_system) {
             $rules['name'] = ['sometimes', 'string', 'max:120'];
-            $rules['scope'] = ['sometimes', 'string', 'in:centre,agency'];
-            $rules['base_role'] = ['sometimes', 'nullable', 'string', 'in:' . implode(',', array_keys(PermissionMap::DEFAULTS))];
+            $rules['base_role'] = ['sometimes', 'string', 'in:' . implode(',', CustomRoles::BASES)];
         }
-
         $data = $request->validate($rules);
-        if (! $role->is_system) {
-            $scope = $data['scope'] ?? ($role->scope ?? 'centre');
-            $base = array_key_exists('base_role', $data) ? $data['base_role'] : ($role->base_role ?? null);
-            if ($scope === 'agency' && $base !== 'agency_admin') {
-                return response()->json(['message' => 'Only a role based on Agency admin can cover the whole agency. Other custom roles are limited to one centre.'], 422);
-            }
-        }
 
         $update = ['updated_at' => now()];
-        if (array_key_exists('name', $data)) $update['name'] = $data['name'];
-        if (array_key_exists('description', $data)) $update['description'] = $data['description'];
-        if (array_key_exists('scope', $data)) $update['scope'] = $data['scope'];
-        if (array_key_exists('base_role', $data)) $update['base_role'] = $data['base_role'];
-        if (array_key_exists('permissions', $data)) {
-            $validKeys = array_keys($this->catalogStatic());
-            $update['permissions'] = json_encode(array_values(array_unique(array_intersect($data['permissions'], $validKeys))));
+        $before = json_decode((string) $role->permissions, true) ?: [];
+        if ($role->is_system) {
+            if (array_key_exists('description', $data)) $update['description'] = $data['description'];
+            if (array_key_exists('permissions', $data)) {
+                $update['permissions'] = json_encode(array_values(array_unique(array_intersect($data['permissions'], array_keys($this->catalogStatic())))));
+            }
+        } else {
+            $base = (string) ($data['base_role'] ?? $role->base_role);
+            if ($base !== $role->base_role && (CustomRoles::holderCounts((int) $agencyId)[(int) $role->id] ?? 0) > 0) {
+                return response()->json(['message' => 'People hold this role, so its base cannot change. Make a new role with the other base instead.'], 422);
+            }
+            if (array_key_exists('name', $data)) {
+                $name = trim((string) $data['name']);
+                if ($name === '') return response()->json(['message' => 'Give the role a name.'], 422);
+                if ($this->nameTaken((int) $agencyId, $name, (int) $role->id)) {
+                    return response()->json(['message' => 'There is already a role called "' . $name . '". Pick another name.'], 422);
+                }
+                $update['name'] = $name;
+            }
+            if (array_key_exists('description', $data)) $update['description'] = $data['description'];
+            $update['base_role'] = $base;
+            $update['scope'] = in_array($base, ['agency_admin', 'auditor'], true) ? 'agency' : 'centre';
+            $kept = array_key_exists('permissions', $data) ? $data['permissions'] : $before;
+            $update['permissions'] = json_encode(CustomRoles::clean($base, $kept));
         }
 
         DB::table('roles')->where('id', $roleId)->update($update);
         Permissions::bump();
+        $after = json_decode((string) ($update['permissions'] ?? $role->permissions), true) ?: [];
+        $this->auditRole($request, (int) $agencyId, $role->is_system ? 'roles.builtin_updated' : 'roles.custom_updated', (int) $role->id, array_filter([
+            'name' => $update['name'] ?? $role->name,
+            'renamed_from' => isset($update['name']) && $update['name'] !== $role->name ? $role->name : null,
+            'base_role' => $update['base_role'] ?? $role->base_role,
+            'base_changed_from' => isset($update['base_role']) && $update['base_role'] !== $role->base_role ? $role->base_role : null,
+            'turned_on' => array_values(array_diff($after, $before)),
+            'turned_off' => array_values(array_diff($before, $after)),
+        ], fn ($v) => $v !== null && $v !== []));
 
         return response()->json([
-            'role' => $this->serialize(DB::table('roles')->find($roleId)),
+            'role' => $this->serialize(DB::table('roles')->find($roleId), CustomRoles::holderCounts((int) $agencyId)),
         ]);
     }
 
@@ -203,15 +249,23 @@ final class RoleController extends Controller
             ->whereNull('deleted_at')
             ->first();
         if (! $role) return response()->json(['message' => 'Not found'], 404);
-        if ($role->is_system) return response()->json(['message' => 'System roles cannot be deleted'], 422);
+        if ($role->is_system) return response()->json(['message' => 'Built-in roles cannot be deleted.'], 422);
+        // Never from under its holders (2026-11-28). Deactivated people's old rows count too: reactivating them
+        // must not bring back a role that is gone.
+        $held = DB::table('role_assignments')->where('custom_role_id', $role->id)->distinct()->count('user_id');
+        if ($held > 0) {
+            return response()->json(['message' => $held . ' ' . ($held === 1 ? 'person holds' : 'people hold') . ' "' . $role->name
+                . '" (counting deactivated accounts). Give them another role in User management first.', 'holders' => $held], 422);
+        }
 
         DB::table('roles')->where('id', $roleId)->update([
             'deleted_at' => now(),
             'updated_at' => now(),
         ]);
         Permissions::bump();
+        $this->auditRole($request, (int) $agencyId, 'roles.custom_deleted', (int) $role->id, ['name' => $role->name, 'base_role' => $role->base_role]);
 
-        return response()->json(['message' => 'Role archived']);
+        return response()->json(['message' => 'Role deleted']);
     }
 
     /**
@@ -315,20 +369,63 @@ final class RoleController extends Controller
             ->value('agency_id');
     }
 
-    private function serialize(object $r): array
+    private function serialize(object $r, array $holders = []): array
     {
+        $perms = json_decode($r->permissions, true) ?: [];
+        $base = $r->is_system ? (string) $r->key : (string) ($r->base_role ?? '');
         return [
             'id' => (int) $r->id,
             'key' => $r->key,
             'name' => $r->name,
             'description' => $r->description,
-            'permissions' => json_decode($r->permissions, true) ?: [],
+            'permissions' => $perms,
+            // A built-in role's reach today (its row + the areas added since the matrix was written), for display.
+            'reaches' => $r->is_system && in_array($base, CustomRoles::BASES, true)
+                ? array_values(array_unique(array_merge($perms, PermissionMap::CUSTOM_OFFER[$base] ?? [])))
+                : null,
             'is_system' => (bool) $r->is_system,
-            'scope' => $r->is_system ? null : ($r->scope ?? 'centre'),
-            'base_role' => $r->base_role ?? null,
+            'scope' => $r->is_system ? null : (in_array($base, ['agency_admin', 'auditor'], true) ? 'agency' : 'centre'),
+            'base_role' => $r->is_system ? null : ($r->base_role ?? null),
+            'can_be_base' => $r->is_system && in_array((string) $r->key, CustomRoles::BASES, true),
+            'holders' => $r->is_system ? null : (int) ($holders[(int) $r->id] ?? 0),
+            'turned_off' => $r->is_system || ! $base ? [] : CustomRoles::refusedFor($base, $perms),
             'created_at' => $r->created_at,
             'updated_at' => $r->updated_at,
         ];
+    }
+
+    private function nameTaken(int $agencyId, string $name, int $exceptId = 0): bool
+    {
+        return DB::table('roles')->where('agency_id', $agencyId)->whereNull('deleted_at')->where('id', '<>', $exceptId)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])->exists();
+    }
+
+    private function insertCustom(int $agencyId, string $name, ?string $description, string $base, array $perms): int
+    {
+        // A stable key slug from the name, unique per agency (archived rows included: the unique index covers them).
+        $slug = Str::slug($name, '_');
+        if ($slug === '') $slug = 'role_' . uniqid();
+        $key = $slug;
+        $i = 1;
+        while (DB::table('roles')->where('agency_id', $agencyId)->where('key', $key)->exists()) {
+            $key = $slug . '_' . (++$i);
+        }
+        $id = DB::table('roles')->insertGetId([
+            'agency_id' => $agencyId, 'key' => $key, 'name' => $name, 'description' => $description,
+            'permissions' => json_encode(array_values($perms)),
+            'scope' => in_array($base, ['agency_admin', 'auditor'], true) ? 'agency' : 'centre',
+            'base_role' => $base, 'is_system' => false, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        Permissions::bump();
+        return (int) $id;
+    }
+
+    private function auditRole(Request $request, int $agencyId, string $action, int $roleId, array $payload): void
+    {
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id, 'agency_id' => $agencyId, 'action' => $action,
+            'entity_type' => 'role', 'entity_id' => $roleId, 'payload' => json_encode($payload), 'created_at' => now(),
+        ]);
     }
 
     /**

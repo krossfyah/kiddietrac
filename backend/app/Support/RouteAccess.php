@@ -31,6 +31,10 @@ final class RouteAccess
         } catch (Throwable $e) {
             return false;
         }
+        // A custom role (2026-11-28) hides the buttons of what it turns off, by the same rule EnforceCustomRole applies.
+        if (! CustomRoles::allows(CustomRoles::forRequest($request), strtoupper($method), $route->uri())) {
+            return false;
+        }
         foreach ($route->gatherMiddleware() as $m) {
             if (is_string($m) && str_starts_with($m, 'role:')) {
                 $roles = array_values(array_filter(array_map('trim', explode(',', substr($m, 5)))));

@@ -1989,6 +1989,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'show']);
         Route::patch('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'update']);
         Route::delete('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'destroy']);
+        // Custom roles (2026-11-28): copy a built-in role as a custom one, or copy a custom role.
+        Route::post('/roles/{role}/duplicate', [\App\Http\Controllers\Api\RoleController::class, 'duplicate']);
         // Permissions step 1 (2026-10-06): platform-only watch-only check + kill switch (controller checks platform_admin).
         Route::get('/permission-shadow', [\App\Http\Controllers\Api\RoleController::class, 'shadowSummary']);
         Route::post('/permission-shadow/mode', [\App\Http\Controllers\Api\RoleController::class, 'shadowMode']);

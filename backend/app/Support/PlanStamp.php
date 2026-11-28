@@ -68,8 +68,10 @@ final class PlanStamp
         return self::applyHeader($userId, $default ? (int) $default : null);
     }
 
-    public static function forAgency(?int $agencyId, array $roles = []): string
+    public static function forAgency(?int $agencyId, array $roles = [], ?int $userId = null): string
     {
+        // A custom role (2026-11-28): its screens follow an edit at once. '' for built-in roles, so their stamp is unchanged.
+        $custom = $userId ? CustomRoles::stamp($userId, $agencyId) : '';
         static $catalogue = null;
         $catalogue ??= md5(json_encode(FeatureFlagController::FEATURES));
         $roles = array_values(array_unique($roles));
@@ -81,6 +83,9 @@ final class PlanStamp
             $parts[] = rescue(fn () => AiConfig::offFor($agencyId) ? 'ai-off' : 'ai', '', false);
             $parts[] = rescue(fn () => AgencyTime::todayDate($agencyId)->toDateString(), '', false);
         }
+        if ($custom !== '') {
+            $parts[] = $custom;
+        }
 
         return substr(sha1(implode('|', $parts)), 0, 12);
     }
@@ -90,6 +95,6 @@ final class PlanStamp
     {
         $roles = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)->pluck('role')->all();
 
-        return self::forAgency(self::featureAgency($userId), $roles);
+        return self::forAgency(self::featureAgency($userId), $roles, $userId);
     }
 }

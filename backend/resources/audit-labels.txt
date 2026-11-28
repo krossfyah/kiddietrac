@@ -166,6 +166,7 @@ post admin/report-schedules/{id}/run | Ran a scheduled report now
 post admin/roles | Created a role
 patch admin/roles/{role} | Updated a role
 delete admin/roles/{role} | Deleted a role
+post admin/roles/{role}/duplicate | Copied a role as a new custom role
 post admin/rsvp/events | Created an event
 post admin/rsvp/events/{id} | Updated an event
 delete admin/rsvp/events/{id} | Deleted an event

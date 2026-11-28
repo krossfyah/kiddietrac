@@ -2449,6 +2449,9 @@ final class AdminController extends Controller
             })
             ->get()
             ->groupBy('user_id');
+        // Custom roles held (2026-11-28): shown beside the base role in User management.
+        $customRoleRows = DB::table('roles')->whereIn('id', $allAssignments->flatten()->pluck('custom_role_id')->filter()->unique()->values()->all() ?: [0])
+            ->get(['id', 'name', 'base_role'])->keyBy('id');
 
         /* families.deleted_at is pulled deliberately. Without it this join treated a
            departed family exactly like a current one, so a de-boarded guardian was still
@@ -2509,7 +2512,7 @@ final class AdminController extends Controller
         /* $deviceCount and $prefRows must be imported HERE as well: the comms closure
            below is nested inside this one, and PHP closures capture nothing implicitly.
            Missing them off this line is what 500'd the whole users list. */
-        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy, $deviceCount, $prefRows, $siblings, $appInstalls) {
+        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy, $deviceCount, $prefRows, $siblings, $appInstalls, $customRoleRows) {
             $roles = ($allAssignments[$u->id] ?? collect())->pluck('role')->unique()->values()->all();
             $guardianLinks = $allGuardianLinks[$u->id] ?? collect();
             // Only a family that is still here makes someone a current guardian.
@@ -2646,6 +2649,9 @@ final class AdminController extends Controller
                 })(),
                 'profile_extras' => $extras,
                 'roles' => $roles,
+                'custom_roles' => ($allAssignments[$u->id] ?? collect())->pluck('custom_role_id')->filter()->unique()
+                    ->map(fn ($id) => $customRoleRows->get((int) $id))->filter()
+                    ->map(fn ($r) => ['id' => (int) $r->id, 'name' => $r->name, 'base_role' => $r->base_role])->values()->all(),
                 'created_at' => $u->created_at,
             ];
         });
@@ -3467,7 +3473,20 @@ final class AdminController extends Controller
             'role' => ['required', 'in:agency_admin,centre_director,educator,auditor,platform_admin,home_visitor,sales_rep'],
             'centre_id' => ['nullable', 'integer'],
             'active' => ['nullable', 'boolean'],
+            // A custom role (2026-11-28): one of THIS agency's, based on the role above. Omitted = the built-in role.
+            'custom_role_id' => ['nullable', 'integer'],
         ]);
+        $customRole = null;
+        if (! empty($data['custom_role_id'])) {
+            $customRole = $agencyId ? DB::table('roles')->where('id', (int) $data['custom_role_id'])->where('agency_id', $agencyId)
+                ->where('is_system', false)->whereNull('deleted_at')->first() : null;
+            if (! $customRole) {
+                return response()->json(['message' => 'That custom role is not one of this agency\'s roles.'], 422);
+            }
+            if ($customRole->base_role !== $data['role'] || ! in_array($data['role'], \App\Support\CustomRoles::BASES, true)) {
+                return response()->json(['message' => 'That custom role is based on ' . (\App\Support\CustomRoles::BASE_LABELS[$customRole->base_role] ?? $customRole->base_role) . ', so it can only be given with that role.'], 422);
+            }
+        }
 
         $callerIsPlatform = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
@@ -3516,8 +3535,24 @@ final class AdminController extends Controller
             ['active' => $data['active'] ?? true]
         );
 
+        /* The custom role rides on EVERY row of that base role the person holds in this agency (2026-11-28), so they
+           cannot be a full Educator at one centre and a narrowed one at the next; choosing the built-in role clears it.
+           Only rows of a role a custom role can be based on, only this agency's. The role column never changes. */
+        $customBefore = null;
+        if ($assignmentAgencyId && in_array($data['role'], \App\Support\CustomRoles::BASES, true)) {
+            $centreIdsHere = \App\Support\AgencyRole::centreIds((int) $assignmentAgencyId);
+            $sameRole = DB::table('role_assignments')->where('user_id', $userId)->where('role', $data['role'])
+                ->where(fn ($w) => $w->where('agency_id', $assignmentAgencyId)->orWhereIn('centre_id', $centreIdsHere ?: [0]));
+            $customBefore = (clone $sameRole)->whereNotNull('custom_role_id')->value('custom_role_id');
+            if ($customRole || $customBefore) {
+                $sameRole->update(['custom_role_id' => $customRole ? (int) $customRole->id : null]);
+            }
+            \App\Support\UserRoles::forget($request);
+        }
+
         \App\Support\HrTalent::coursesForUser((int) $userId);   // KiddieTrac HR: courses that go to everyone in this role
-        $this->audit($request->user()->id, 'user.role_set', 'user', $userId, $data);
+        $this->audit($request->user()->id, $customRole ? 'user.custom_role_set' : 'user.role_set', 'user', $userId,
+            ($customRole || $customBefore) ? $data + ['custom_role_name' => $customRole->name ?? null, 'custom_role_before' => $customBefore ? (int) $customBefore : null] : $data);
         return response()->json(['message' => 'Role updated']);
     }
 

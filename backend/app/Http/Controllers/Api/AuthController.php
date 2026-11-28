@@ -1623,6 +1623,8 @@ final class AuthController extends Controller
            — honour X-Active-Agency-Id, but only for somebody entitled to use it. */
         // One rule, shared with GET /badges plan_v (App\Support\PlanStamp, 2026-11-26).
         $featureAgencyId = \App\Support\PlanStamp::applyHeader((int) $user->id, ($tzAgencyId ?: $agencyId) ? (int) ($tzAgencyId ?: $agencyId) : null);
+        // A custom role in the agency in view (null for built-in roles: nothing changes for them).
+        $customRole = rescue(fn () => \App\Support\CustomRoles::context((int) $user->id, $featureAgencyId ? (int) $featureAgencyId : null), null, false);
 
         /* WAITING FOR THE AGENCY (2026-10-21). A parent account made so a form could be sent
            to someone not on the system yet ("Created a not-yet-invited account ... so forms
@@ -1677,14 +1679,18 @@ final class AuthController extends Controller
             // The AI Bundle LICENCE alone (2026-11-26): Play Spark's saved ideas, pictures, "We did it", library and report.
             // ai_bundle above is licence AND AI allowed - only that one may offer "Spark an idea" or a scan.
             'play_spark' => rescue(fn () => \App\Support\AiBundle::licensed($featureAgencyId ? (int) $featureAgencyId : null), false, false),
-            'hidden_screens' => \App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
+            'hidden_screens' => array_values(array_unique(array_merge(\App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
                 $featureAgencyId ? (int) $featureAgencyId : null,
                 in_array('platform_admin', $roles ?? [], true),
                 $roles ?? []
-            ),
+            ), \App\Support\CustomRoles::hiddenScreens($customRole)))),
+            /* A CUSTOM ROLE (2026-11-28): its name(s) and the permissions it turns off. Absent for built-in roles, whose
+               payload is unchanged. The screens it hides are in hidden_screens above, so the menu, tiles, search and
+               route guard follow it; the API refuses the same (EnforceCustomRole). */
+            ...($customRole !== null ? ['custom_role' => ['roles' => $customRole['roles'], 'refused' => $customRole['refused']]] : []),
             /* The fingerprint the plan fields above were computed from (App\Support\PlanStamp, 2026-11-26). GET /badges
                carries the current one; when they differ the open tab asks /auth/me again and adopts the new plan. */
-            'plan_v' => rescue(fn () => \App\Support\PlanStamp::forAgency($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? []), null, false),
+            'plan_v' => rescue(fn () => \App\Support\PlanStamp::forAgency($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? [], (int) $user->id), null, false),
             // An agency admin's features the plan leaves out, drawn greyed with "Upgrade" (App\Support\PlanUpsell, 2026-11-26).
             'locked_screens' => (object) rescue(fn () => \App\Support\PlanUpsell::lockedFor($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? []), [], false),
             // Shown once when the app opens: the centre is closed today, or will be
