@@ -704,6 +704,14 @@ class PayrollDocumentController extends Controller
                 ]);
             }
         }
+        /* THE HOUSE PAYSLIP (2026-11-27, App\Support\Payroll\PayslipPdf): every payslip drawn here - manual, Generate payroll,
+           and the office view of an iLearn payslip - uses the one KiddieTrac layout (agency band + logo, full employee block,
+           only the deductions that were recorded, else "Deductions not calculated in KiddieTrac", terms, NON-NEGOTIABLE
+           watermark). A payroll invoice keeps the layout below. */
+        if ($doc->kind !== 'invoice') {
+            return \App\Support\Payroll\PayslipPdf::response(\App\Support\Payroll\PayslipPdf::fromDocument($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf');
+        }
+
         $period = $doc->period_start
             ? Carbon::parse($doc->period_start)->format('j M Y') . ' – ' . Carbon::parse($doc->period_end ?: $doc->period_start)->format('j M Y')
             : '—';

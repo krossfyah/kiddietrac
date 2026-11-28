@@ -118,6 +118,13 @@ class PayController extends Controller
         $name = trim(($p['user']->first_name ?? '') . ' ' . ($p['user']->last_name ?? '')) ?: 'Staff member';
 
         $agencyId = $this->agencyIdFor($uid);
+        /* THE HOUSE PAYSLIP (2026-11-27, App\Support\Payroll\PayslipPdf): the same layout as every other payslip, gross only,
+           with "Deductions not calculated in KiddieTrac". The older layout below is kept only for a person with no agency. */
+        if ($agencyId) {
+            return \App\Support\Payroll\PayslipPdf::response(
+                \App\Support\Payroll\PayslipPdf::fromWeekly((int) $agencyId, $uid, $p, $start, $end, (float) $units, (float) $gross),
+                'payslip-' . $start . '.pdf', 'attachment');
+        }
         $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
         $agencyName = $agency->name ?? 'KiddieTrac';
         $settings = ($agency && $agency->settings) ? (json_decode($agency->settings, true) ?: []) : [];

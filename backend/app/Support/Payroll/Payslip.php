@@ -122,14 +122,11 @@ final class Payslip
             . '</body></html>';
     }
 
+    /* THE HOUSE PAYSLIP (2026-11-27): the PDF is drawn by PayslipPdf (agency band + logo, full employee block, earnings and
+       deductions with year to date, employer contributions, leave, remarks, terms, NON-NEGOTIABLE watermark). Same frozen
+       figures as view(); html() stays for anything that wants the plain version. */
     public static function pdf(object $doc)
     {
-        $pdf = new Dompdf();
-        $pdf->loadHtml(self::html($doc));
-        $pdf->setPaper('letter');
-        $pdf->render();
-
-        return response($pdf->output(), 200, ['Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="payslip-' . ($doc->period_start ?: $doc->id) . '.pdf"']);
+        return PayslipPdf::response(PayslipPdf::fromEngine($doc), 'payslip-' . ($doc->period_start ?: $doc->id) . '.pdf');
     }
 }

@@ -4,6 +4,20 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🧾",
+            "title": "New payslip design",
+            "body": "Every payslip PDF now has your agency colour and logo at the top, the employee details, earnings and deductions with year to date, net pay in a large box, leave balances, your terms and conditions, and a NON-NEGOTIABLE watermark. Admins can change the terms in Payroll settings.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🧭",
             "title": "Step-by-step guides for every screen",
             "body": "Every screen in KiddieTrac now has its own step-by-step guide behind the ? in its banner: what the screen is for, the exact buttons to press, who can do what and answers to common questions, in English, French, Spanish and Hindi.",

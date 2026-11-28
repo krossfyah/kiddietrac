@@ -32,6 +32,9 @@ final class PayrollSettingsController extends Controller
         'anchor_date' => null,
         // Semi-monthly pays twice a month on fixed dates; 31 clamps to the month end.
         'semimonthly_days' => [15, 31],
+        // Payslip terms and conditions (2026-11-27). '' = the default statements (PayslipPdf::TERMS, 4 languages).
+        'payslip_terms' => '',
+        'payslip_terms_days' => 30,
     ];
 
     private function resolveAgencyId(Request $request): int
@@ -174,6 +177,7 @@ final class PayrollSettingsController extends Controller
             'agency_id' => $row->id,
             'agency_name' => $row->name,
             'payroll' => self::read($agencyId),
+            'payslip_terms_default' => \App\Support\Payroll\PayslipPdf::TERMS['en'],
             'next_payday' => self::nextPayday($agencyId),
             // Who may be copied on payslip emails: this agency's admins and centre directors.
             'bcc_choices' => array_values(\App\Support\PayslipNotices::bccChoices($agencyId)),
@@ -200,6 +204,8 @@ final class PayrollSettingsController extends Controller
             'email_batch_time' => ['nullable', 'regex:/^\d{2}:\d{2}$/'],
             'email_bcc_user_ids' => ['nullable', 'array', 'max:20'],
             'email_bcc_user_ids.*' => ['integer'],
+            'payslip_terms' => ['nullable', 'string', 'max:3000'],
+            'payslip_terms_days' => ['nullable', 'integer', 'min:1', 'max:365'],
         ]);
 
         $current = self::read($agencyId);
@@ -214,6 +220,14 @@ final class PayrollSettingsController extends Controller
         }
         foreach (['email_timing', 'email_batch_time'] as $k) {
             if (! empty($data[$k])) $current[$k] = $data[$k];
+        }
+        if ($request->has('payslip_terms')) {
+            // Saving the default text unchanged keeps the default (so it stays in the reader's language).
+            $t = trim(str_replace("\r\n", "\n", (string) ($data['payslip_terms'] ?? '')));
+            $current['payslip_terms'] = $t === trim(\App\Support\Payroll\PayslipPdf::TERMS['en']) ? '' : $t;
+        }
+        if ($request->has('payslip_terms_days') && $data['payslip_terms_days'] !== null) {
+            $current['payslip_terms_days'] = (int) $data['payslip_terms_days'];
         }
         if ($request->has('email_bcc_user_ids')) {
             // Only this agency's admins and centre directors can be copied - never a typed address, never anyone else.

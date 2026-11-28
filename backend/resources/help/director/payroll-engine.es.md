@@ -42,3 +42,20 @@ Los administradores y directores (para el personal de sus centros) pueden abrir 
 ## Saldos iniciales (administradores de la agencia)
 
 Si empieza a mitad de año, escriba en **Nómina → Saldos iniciales** lo que su nómina anterior pagó a cada persona este año, para que el CPP y el EI se detengan en el máximo anual y el acumulado de los recibos sea correcto. Puede pegar una hoja de cálculo. No puede escribir el suyo.
+
+## Lo que muestra el recibo de pago
+
+Todos los recibos de pago en PDF tienen el mismo diseño:
+
+- **Una franja con el color de su agencia** con su logotipo en una insignia redonda, su razón social, dirección, teléfono, correo, número de empresa de la CRA (si está configurado) y el centro.
+- **El empleado**: nombre completo, ID de empleado, puesto, centro, tipo de empleo, fecha de inicio, domicilio, teléfono y correo.
+- **Datos del pago**: el SIN se muestra solo como **XXX-XXX-123** (nunca el número completo), provincia de empleo, periodo de pago, fecha de pago, número de recibo, nómina, tarifa y forma de pago (en el depósito directo solo los últimos 4 dígitos de la cuenta).
+- **Acumulado del año y este pago**: bruto, deducciones y neto, con el **pago neto** en un recuadro grande.
+- **Ingresos** (tarifa, horas, este pago, acumulado del año) y **Deducciones** (CPP o QPP, EI o QPIP, impuesto federal y provincial, otras) con totales. Las contribuciones del empleador y los saldos de permisos se muestran como información.
+- Las **observaciones** de la nómina, sus **términos y condiciones** y una marca de agua diagonal suave **NO NEGOCIABLE** con la línea **NO NEGOCIABLE — ESTO NO ES UN CHEQUE** en cada página.
+
+Un recibo en el que la nómina no calculó deducciones (un recibo manual o solo el pago bruto) muestra lo registrado e indica **Deducciones no calculadas en KiddieTrac**. No se inventa ninguna cifra.
+
+## Términos y condiciones del recibo (administradores de la agencia)
+
+Abra **Configuración de nómina** y busque **Términos y condiciones del recibo de pago**. Escriba una declaración por línea. Indique cuántos días tiene el personal para informar de un error en el pago (30 por defecto); `{days}` en su texto se sustituye por ese número. Si deja el texto estándar, cada persona lo lee en su idioma (inglés, francés, español o hindi). **Usar el texto estándar** lo restablece.

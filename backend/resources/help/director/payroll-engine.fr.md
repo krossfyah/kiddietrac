@@ -42,3 +42,20 @@ Les administrateurs et les directeurs (pour le personnel de leurs centres) peuve
 ## Soldes d'ouverture (administrateurs de l'agence)
 
 Si vous commencez en cours d'année, saisissez dans **Paie → Soldes d'ouverture** ce que votre ancienne paie a versé à chaque personne cette année, pour que le RPC et l'AE s'arrêtent au maximum annuel et que le cumul des talons soit juste. Vous pouvez coller un tableur. Vous ne pouvez pas saisir le vôtre.
+
+## Ce que montre la fiche de paie
+
+Chaque fiche de paie PDF a la même présentation :
+
+- **Une bande aux couleurs de votre agence** avec votre logo dans un badge rond, votre raison sociale, adresse, téléphone, courriel, numéro d'entreprise de l'ARC (s'il est saisi) et le centre.
+- **L'employé** : nom complet, numéro d'employé, poste, centre, type d'emploi, date d'entrée, adresse personnelle, téléphone et courriel.
+- **Détails de la paie** : NAS affiché uniquement sous la forme **XXX-XXX-123** (jamais le numéro complet), province d'emploi, période de paie, date de paie, numéro de fiche, cycle de paie, taux de rémunération et mode de paiement (pour le dépôt direct, seuls les 4 derniers chiffres du compte).
+- **Cumul annuel et cette paie** : brut, retenues et net, avec la **paie nette** dans un grand encadré.
+- **Gains** (taux, heures, cette paie, cumul annuel) et **Retenues** (RPC ou RRQ, AE ou RQAP, impôt fédéral et provincial, autres) avec les totaux. Les cotisations de l'employeur et les soldes de congés sont donnés à titre d'information.
+- Les **remarques** du cycle de paie, vos **conditions** et un filigrane diagonal léger **NON NÉGOCIABLE** avec la ligne **NON NÉGOCIABLE — CECI N'EST PAS UN CHÈQUE** sur chaque page.
+
+Une fiche pour laquelle la paie n'a pas calculé les retenues (fiche manuelle ou salaire brut seulement) montre ce qui a été enregistré et indique **Retenues non calculées dans KiddieTrac**. Aucun montant n'est inventé.
+
+## Conditions de la fiche de paie (administrateurs d'agence)
+
+Ouvrez **Paramètres de paie** et trouvez **Conditions de la fiche de paie**. Écrivez un énoncé par ligne. Indiquez le nombre de jours dont le personnel dispose pour signaler une erreur de paie (30 par défaut); `{days}` dans votre texte est remplacé par ce nombre. Gardez le texte standard et chacun le lit dans sa langue (anglais, français, espagnol ou hindi). **Utiliser le texte standard** le rétablit.

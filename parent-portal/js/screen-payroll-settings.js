@@ -219,6 +219,50 @@
       try { KT.WorkforceFunding.paintSettings(main); } catch (e) {}
     }
     paintBreaks(main);
+    paintTerms(main, p, data.payslip_terms_default || '');
+  }
+
+  /* PAYSLIP TERMS AND CONDITIONS (2026-11-27, App\Support\Payroll\PayslipPdf): printed at the foot of every payslip PDF,
+     above the NON-NEGOTIABLE line. Empty = the standard statements, printed in each reader's language (English, French,
+     Spanish, Hindi). {days} = the report window below. Saved with the button (POST /admin/payroll-settings). */
+  function paintTerms(main, p, dflt) {
+    var box = document.createElement('div');
+    box.className = 'kt-card';
+    box.style.cssText = 'max-width:680px;margin-top:16px;';
+    box.setAttribute('data-kt-self-live', '1');
+    var custom = (p.payslip_terms || '').trim();
+    var days = p.payslip_terms_days || 30;
+    box.innerHTML = '<div class="kt-card-header"><h3 class="kt-card-title">📜 Payslip terms and conditions</h3></div>'
+      + '<p style="color:#64748B;font-size:13px;margin:0 0 4px;line-height:1.6;">Printed at the bottom of every payslip PDF, one statement per line, '
+      + 'above the <b>NON-NEGOTIABLE &mdash; THIS IS NOT A CHEQUE</b> line. Leave the standard wording and each person gets it in their own language '
+      + '(English, French, Spanish or Hindi). <code>{days}</code> becomes the number of days below.</p>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 0 0;">'
+      + '<span style="font-size:14px;color:#334155;font-weight:600;">Staff report a pay error within</span>'
+      + '<input id="pt_days" type="number" min="1" max="365" value="' + esc(days) + '" style="' + INP + 'width:80px;height:32px;padding:4px 10px;">'
+      + '<span style="font-size:14px;color:#334155;">days of the pay date</span></div>'
+      + '<textarea id="pt_text" rows="7" spellcheck="true" style="' + INP + 'width:100%;margin-top:12px;min-height:150px;font-size:13px;line-height:1.5;">'
+      + esc(custom || dflt) + '</textarea>'
+      + '<div style="margin-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+      + '<button id="pt-save" class="kt-btn kt-btn-primary" type="button">Save terms</button>'
+      + '<button id="pt-reset" class="kt-btn" type="button"' + (custom ? '' : ' style="display:none;"') + '>Use the standard wording</button>'
+      + '<span id="pt-status" style="font-size:13px;"></span></div>';
+    main.appendChild(box);
+    var st = box.querySelector('#pt-status');
+    function save(text) {
+      st.style.color = '#64748B'; st.textContent = 'Saving…';
+      Api.post('/admin/payroll-settings', {
+        payslip_terms: text,
+        payslip_terms_days: Math.max(1, Math.min(365, parseInt(box.querySelector('#pt_days').value, 10) || 30)),
+      }).then(function (res) {
+        var saved = ((res && res.payroll && res.payroll.payslip_terms) || '').trim();
+        box.querySelector('#pt-reset').style.display = saved ? '' : 'none';
+        if (!saved) box.querySelector('#pt_text').value = dflt;
+        st.style.color = '#1E8E60'; st.textContent = saved ? '✓ Saved - your wording is on every new payslip PDF' : '✓ Saved - the standard wording, in each person\'s language';
+        setTimeout(function () { st.textContent = ''; }, 3200);
+      }).catch(function (e) { st.style.color = '#BE4038'; st.textContent = (e && e.message) || 'Save failed'; });
+    }
+    box.querySelector('#pt-save').onclick = function () { save(box.querySelector('#pt_text').value); };
+    box.querySelector('#pt-reset').onclick = function () { save(''); };
   }
 
   /* LUNCH AND BREAKS (2026-11-05, App\Support\StaffBreaks): whether an educator's lunch and

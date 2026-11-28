@@ -42,3 +42,20 @@ Admins and directors (for their own centres' staff) can open a payslip in the po
 ## Opening balances (agency admins)
 
 If you start mid-year, enter in **Payroll → Opening balances** what your previous payroll paid each person this year, so CPP and EI stop at the yearly maximum and the year to date on payslips is right. You can paste a spreadsheet. You cannot enter your own.
+
+## What the payslip shows
+
+Every payslip PDF has the same layout:
+
+- **A band in your agency's colour** with your logo in a round badge, your legal name, address, phone, email, CRA business number (when set) and the centre.
+- **The employee**: full name, employee ID, position, centre, employment type, start date, home address, phone and email.
+- **Pay details**: SIN shown as **XXX-XXX-123** only (never the full number), province of employment, pay period, pay date, payslip number, pay run, pay rate and how they are paid (direct deposit shows only the last 4 digits of the account).
+- **Year to date and this pay**: gross, deductions and net, with **net pay** in a large box.
+- **Earnings** (rate, hours, this pay, year to date) and **Deductions** (CPP or QPP, EI or QPIP, federal and provincial income tax, other) with totals. Employer contributions and leave balances are shown for information.
+- **Remarks** from the pay run, your **terms and conditions**, and a light diagonal **NON-NEGOTIABLE** watermark with the line **NON-NEGOTIABLE — THIS IS NOT A CHEQUE** on every page.
+
+A payslip where payroll did not work out deductions (a manual payslip, or gross pay only) shows what was recorded and says **Deductions not calculated in KiddieTrac**. No figures are made up.
+
+## Payslip terms and conditions (agency admins)
+
+Open **Payroll settings** and find **Payslip terms and conditions**. Write one statement per line. Set how many days staff have to report a pay error (30 by default); `{days}` in your text becomes that number. Leave the standard wording and each person reads it in their own language (English, French, Spanish or Hindi). **Use the standard wording** puts it back.
