@@ -17,6 +17,9 @@
      Arrow keys move between choices; focus starts on the first and returns to the anchor.
    • z-index 2147483000/1: over the bottom bar and every popup, under the idle warning (2147483647) and #kt-urgent.
    • Opening it again from the same anchor while it is up closes it (a toggle). One at a time.
+   • Two additions (2026-11-28, the top-bar 📻 walkie popover): an item may be { el: <node> } - a glass card holding
+     live controls (a hold-to-talk button, a short picker) that stays open while used - and { keep: true } runs a
+     choice without closing (a toggle such as Do not disturb); its run(button) may update the button's own text.
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -33,7 +36,8 @@
       ['.kt-qp-item', 'color:#F1F5F9;background:rgba(13,27,51,.6);border-color:rgba(255,255,255,.16);'],
       ['.kt-qp-item:hover', 'background:rgba(13,27,51,.76);'],
       ['.kt-qp-item.danger', 'color:#FCA5A5;'],
-      ['.kt-qp-none', 'color:#E2E8F0;background:rgba(13,27,51,.6);']];
+      ['.kt-qp-none', 'color:#E2E8F0;background:rgba(13,27,51,.6);'],
+      ['.kt-qp-card', 'color:#F1F5F9;background:rgba(13,27,51,.72);border-color:rgba(255,255,255,.16);']];
     var dark = D.map(function (d) { return d[0] + '{' + d[1] + '}'; }).join('');
     var themed = D.map(function (d) { return 'html.kt-dark ' + d[0] + ',html[data-theme="dark"] ' + d[0] + '{' + d[1] + '}'; }).join('');
     st.textContent = ''
@@ -50,6 +54,7 @@
       + '.kt-qp-item[disabled]{opacity:.5;cursor:default;}.kt-qp-item.danger{color:#B91C1C;}'
       + '.kt-qp-i{font-size:24px;line-height:1;flex:0 0 auto;width:28px;display:flex;justify-content:center;}.kt-qp-i svg{width:26px;height:26px;display:block;}'
       + '.kt-qp-t{font-weight:800;font-size:15px;line-height:1.2;min-width:0;}.kt-qp-s{display:block;font-weight:600;font-size:12px;opacity:.72;margin-top:2px;}'
+      + '.kt-qp-card{padding:12px 14px;border-radius:18px;color:#0B1B33;background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.85);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);box-shadow:0 10px 30px -12px rgba(8,28,65,.45);}'
       + '.kt-qp-none{padding:12px 16px;border-radius:16px;font-size:13.5px;font-weight:600;color:#334155;background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);}'
       + '@media (prefers-color-scheme: dark){' + dark + '}'
       + themed
@@ -92,7 +97,9 @@
       pop.appendChild(none);
     }
     items.forEach(function (it) {
+      if (it.el) { var card = document.createElement('div'); card.className = 'kt-qp-card'; card.appendChild(it.el); pop.appendChild(card); return; }
       var b = document.createElement('button');
+      if (it.id) b.id = it.id;
       b.type = 'button';
       b.className = 'kt-qp-item' + (it.danger ? ' danger' : '');
       b.setAttribute('role', 'menuitem');
@@ -103,6 +110,7 @@
         + '<span class="kt-qp-t">' + esc(it.label) + (it.sub ? '<span class="kt-qp-s">' + esc(it.sub) + '</span>' : '') + '</span>';
       b.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation();
+        if (it.keep) { try { if (typeof it.run === 'function') it.run(b); } catch (err) { if (window.console) console.error(err); } return; }
         close(true);
         try { if (typeof it.run === 'function') it.run(); } catch (err) { if (window.console) console.error(err); }
       });
@@ -129,6 +137,7 @@
 
     function onKey(e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target && e.target.closest && e.target.closest('.kt-qp-card input')) return;   // a card's own search box
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         var live = btns.filter(function (b) { return !b.disabled; });
         if (!live.length) return;

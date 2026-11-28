@@ -120,6 +120,22 @@ final class MessageController extends Controller
             ? DB::table('message_reactions')->whereIn('message_id', $msgIds)->get()->groupBy('message_id')
             : collect());
 
+        /* The messages these reply to (2026-11-27, parent reply): read from THIS conversation only
+           (App\Support\ChatReply - P0, a quote can never carry text out of another thread). A quoted message from
+           someone this parent blocked reads as the blocked line, never its words. */
+        $quotes = \App\Support\ChatReply::quotes('family', $conversationId,
+            $messages->pluck('reply_to_id')->filter()->all());
+        if ($quotes) {
+            $senderOf = DB::table('messages')->whereIn('id', array_keys($quotes))->where('conversation_id', $conversationId)
+                ->pluck('sender_id', 'id')->all();
+            foreach ($quotes as $qid => $q) {
+                $sid = (int) ($senderOf[$qid] ?? 0);
+                if (empty($q['deleted']) && $sid && \App\Support\UserBlocks::hides((int) $user->id, $sid, false, false)) {
+                    $quotes[$qid]['snippet'] = \App\Support\UserBlocks::hiddenText((string) ($q['author_first_name'] ?? ''));
+                }
+            }
+        }
+
         // Mark messages from others as read
         DB::table('messages')
             ->where('conversation_id', $conversationId)
@@ -129,7 +145,7 @@ final class MessageController extends Controller
 
         return response()->json([
             'conversation' => $convo,
-            'messages' => $messages->map(function ($m) use ($user, $reactsByMsg) {
+            'messages' => $messages->map(function ($m) use ($user, $reactsByMsg, $quotes) {
                 $mine = (int) $m->sender_id === (int) $user->id;
                 $deleted = !empty($m->deleted_at);
                 $system = !empty($m->is_system);
@@ -152,6 +168,8 @@ final class MessageController extends Controller
                     'can_edit' => $mine && !$deleted && !$system && empty($atts),
                     'can_delete' => $mine && !$deleted && !$system,
                     'reactions' => $this->groupReactions(($reactsByMsg[$m->id] ?? collect()), (int) $user->id),
+                    'reply_to_id' => ! $deleted && ! empty($m->reply_to_id) ? (int) $m->reply_to_id : null,
+                    'reply_to' => ! $deleted && ! empty($m->reply_to_id) ? ($quotes[(int) $m->reply_to_id] ?? null) : null,
                     'created_at' => $m->created_at,
                     'read_at' => $m->read_at,
                     'time_display' => Carbon::parse($m->created_at)->format('M j, g:i A'),
@@ -219,6 +237,7 @@ final class MessageController extends Controller
             // room = the child's educators (the thread about that child); office = the centre's directors and the
             // agency's admins (App\Support\MessagingRules::OFFICE, one thread per family).
             'to' => ['sometimes', 'in:room,office'],
+            'reply_to_id' => ['sometimes', 'nullable', 'integer'],   // App\Support\ChatReply
         ]);
         $emergency = \App\Support\EmergencyMessage::requested($request);
         $office = ($data['to'] ?? 'room') === 'office';
@@ -280,7 +299,7 @@ final class MessageController extends Controller
             $attachments[] = ['type' => $isAudio ? 'audio' : 'image', 'url' => '/storage/' . $path];
         }
 
-        $msgId = DB::table('messages')->insertGetId([
+        $row = [
             'conversation_id' => $convoId,
             'sender_id' => $user->id,
             'body' => $data['body'] ?? '',
@@ -288,7 +307,14 @@ final class MessageController extends Controller
             'is_emergency' => $emergency,
             'created_at' => now(),
             'delivered_at' => now(),
-        ]);
+        ];
+        // A reply (2026-11-27): only a live message in the conversation this message lands in; anything else is
+        // dropped to null, never an error (App\Support\ChatReply::valid).
+        $replyTo = \App\Support\ChatReply::valid('family', (int) $convoId, $data['reply_to_id'] ?? null);
+        if ($replyTo) {
+            $row['reply_to_id'] = $replyTo;
+        }
+        $msgId = DB::table('messages')->insertGetId($row);
 
         DB::table('conversations')->where('id', $convoId)->update(['last_message_at' => now()]);
 

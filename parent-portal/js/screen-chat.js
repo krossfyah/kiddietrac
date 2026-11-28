@@ -2016,8 +2016,10 @@
       if (chip) { staffReact(chip.getAttribute('data-react-mid'), chip.getAttribute('data-emoji')); return; }
       var rb = e.target.closest('.kt-st-react');
       if (!rb) return;
-      var open = document.querySelector('.kt-st-pop'); if (open) open.remove();
       var mid = rb.getAttribute('data-react-mid');
+      // The one reaction picker (kt-chat-reply.js -> KT.quickPop row), the same in every thread (2026-11-27).
+      if (RP() && RP().reactPicker) { RP().reactPicker(rb, function (em) { staffReact(mid, em); }); return; }
+      var open = document.querySelector('.kt-st-pop'); if (open) open.remove();
       var pop = document.createElement('div');
       pop.className = 'kt-st-pop';
       pop.style.cssText = 'position:fixed;background:#fff;border:1px solid #E5E7EB;border-radius:20px;'
@@ -3104,8 +3106,9 @@
       if (chip) { toggleReaction(chip.getAttribute('data-react-mid'), chip.getAttribute('data-emoji')); return; }
       var rb = e.target.closest('.kt-msg-react');
       if (!rb) return;
-      var openPop = document.querySelector('.kt-msg-react-pop'); if (openPop) openPop.remove();
       var mid = rb.getAttribute('data-react-mid');
+      if (RP() && RP().reactPicker) { RP().reactPicker(rb, function (em) { toggleReaction(mid, em); }); return; }
+      var openPop = document.querySelector('.kt-msg-react-pop'); if (openPop) openPop.remove();
       var pop = document.createElement('div');
       pop.className = 'kt-msg-react-pop';
       pop.style.cssText = 'position:fixed;background:#fff;border:1px solid #E5E7EB;border-radius:20px;box-shadow:0 6px 20px rgba(0,0,0,.16);padding:4px 6px;display:flex;gap:2px;z-index:100000;';

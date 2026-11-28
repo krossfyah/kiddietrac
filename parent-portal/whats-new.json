@@ -2,6 +2,29 @@
     "updated": "2026-11-28",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-28",
+            "icon": "↩️",
+            "title": "Reply to one message, everywhere",
+            "body": "Parents can now reply to one particular message too: press the ↩ beside it, or swipe it right on a phone, and your reply shows the message it answers. Every chat now has the same quiet + to react and ↩ to reply, and the same row of reactions when you press +.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "Répondre à un message précis, partout",
+            "body_fr": "Les parents peuvent maintenant eux aussi répondre à un message précis : appuyez sur le ↩ à côté, ou glissez-le vers la droite sur un téléphone, et votre réponse affiche le message auquel elle répond. Chaque discussion a maintenant le même + discret pour réagir et le même ↩ pour répondre, et la même rangée de réactions quand vous appuyez sur +.",
+            "title_es": "Responder a un mensaje concreto, en todas partes",
+            "body_es": "Ahora los padres también pueden responder a un mensaje concreto: pulse la ↩ junto a él, o deslícelo hacia la derecha en un teléfono, y su respuesta muestra el mensaje al que contesta. Todos los chats tienen ahora el mismo + discreto para reaccionar y la misma ↩ para responder, y la misma fila de reacciones al pulsar +.",
+            "title_hi": "किसी एक संदेश का जवाब, हर जगह",
+            "body_hi": "अब अभिभावक भी किसी एक खास संदेश का जवाब दे सकते हैं: उसके पास वाले ↩ को दबाएँ, या फ़ोन पर उसे दाईं ओर स्वाइप करें, और आपके जवाब के साथ वह संदेश दिखेगा जिसका आप जवाब दे रहे हैं। अब हर चैट में प्रतिक्रिया के लिए एक जैसा हल्का + और जवाब के लिए एक जैसा ↩ है, और + दबाने पर प्रतिक्रियाओं की एक जैसी पंक्ति खुलती है।"
+        },
+        {
             "type": "new",
             "date": "2026-11-28",
             "icon": "💛",

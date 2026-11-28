@@ -141,6 +141,13 @@
       + '.kt-wcx-m{display:flex;flex-direction:column;max-width:82%}.kt-wcx-m.l{align-self:flex-start;align-items:flex-start}.kt-wcx-m.r{align-self:flex-end;align-items:flex-end}'
       + '.kt-wcx-who{font-size:10.5px;color:#94A3B8;margin:0 5px 2px;font-weight:700}'
       + '.kt-wcx-b{padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}'
+      /* The team's own replies: the same soft teal as every other thread's "mine" bubble (screen-chat.js .kt-st-mine,
+         2026-11-27), not the dark #1F6080. A white-label agency keeps its own tint (branding-loader recolours the inline
+         colour and sets html.kt-tinted, which this leaves alone). */
+      + 'html:not(.kt-tinted) .kt-wcx-b.kt-wcx-mine{background:#DCF1F4!important;color:#0D1B2A!important;border:1px solid #C9E7EC!important}'
+      + 'html:not(.kt-tinted) .kt-wcx-mine .kt-rp-q.kt-rp-dark{background:rgba(15,23,42,.06)!important;border-left-color:#159FB4!important}'
+      + 'html:not(.kt-tinted) .kt-wcx-mine .kt-rp-q.kt-rp-dark b{color:#0E7490!important}'
+      + ':is(html.kt-dark,html[data-theme="dark"]):not(.kt-tinted) .kt-wcx-b.kt-wcx-mine{background:#134E5E!important;color:#E6FFFB!important;border-color:#134E5E!important}'
       + '.kt-wcx-sys{align-self:center;font-size:11.5px;color:#64748B;background:#F1F5F9;border-radius:999px;padding:3px 11px;text-align:center;max-width:90%}'
       + '.kt-wcx-typing{flex:0 0 auto;font-size:12px;color:#64748B;padding:0 14px 4px;min-height:17px}'
       + '.kt-wcx-comp{flex:0 0 auto;display:flex;gap:6px;padding:10px;border-top:1px solid #E5E7EB;align-items:center;background:#fff}'
@@ -210,7 +217,7 @@
       var w = mk('div', { class: 'kt-wcx-m ' + (mine ? 'r' : 'l'), 'data-mid': String(m.id) });
       w.appendChild(mk('div', { class: 'kt-wcx-who' }, esc(who(m)) + ' · ' + esc(clock(m.at))
         + (RP ? RP.btn(m.id, who(m), body) : '')));
-      w.appendChild(mk('div', { class: 'kt-wcx-b', style: bg }, (RP ? RP.quote(m, { dark: m.sender === 'agent' }) : '')
+      w.appendChild(mk('div', { class: 'kt-wcx-b' + (m.sender === 'agent' ? ' kt-wcx-mine' : ''), style: bg }, (RP ? RP.quote(m, { dark: m.sender === 'agent' }) : '')
         + esc(body.replace(/\*\*([^*]+)\*\*/g, '$1'))));
       return w;
     }

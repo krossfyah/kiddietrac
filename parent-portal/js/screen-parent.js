@@ -197,7 +197,7 @@
   }
 
   // Send a parent message with an optional image — multipart (KT.Api is JSON-only).
-  function sendParentMessage(childId, body, file, emergency, to) {
+  function sendParentMessage(childId, body, file, emergency, to, replyTo) {
     var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
     var fd = new FormData();
@@ -206,6 +206,7 @@
     if (file) fd.append('attachment', file);
     if (emergency) fd.append('emergency', '1');   // App\Support\EmergencyMessage
     if (to === 'office') fd.append('to', 'office');   // the centre office thread (App\Support\MessagingRules::OFFICE)
+    if (replyTo) fd.append('reply_to_id', String(replyTo));   // reply to one message (App\Support\ChatReply, same thread only)
     var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
     try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; var va = sessionStorage.getItem('kt_view_as'); if (va) h['X-View-As-Role'] = va; } catch (e) {}
     return fetch(base + '/parent/messages', { method: 'POST', headers: h, body: fd }).then(function (r) {
@@ -4357,6 +4358,15 @@
     editBanner.appendChild(Dom.el('span', {}, '✏️ Editing message'));
     editBanner.appendChild(editBannerX);
     tw.insertBefore(editBanner, compose);   // sits just above the composer
+    /* REPLY TO ONE MESSAGE, for parents too (2026-11-27, Anthony: every message screen matches the React / Reply
+       pair). The same module the staff threads use (kt-chat-reply.js): the ↩ beside each message, swipe right on a
+       phone, "Replying to …" above the box. The server keeps a reply to this conversation (App\Support\ChatReply). */
+    const RPm = (window.KT && KT.chatReply) || null;
+    const rpKey = 'pm:' + convo.id;
+    if (RPm) {
+      tw.insertBefore(Dom.el('div', { class: 'kt-rp-slot' }), compose);
+      RPm.wire(tw, { key: rpKey, input: () => input });
+    }
     function updateAction() {
       if (editingId) { action.textContent = '✓'; action.style.background = '#159FB4'; return; }
       if (input.value.trim()) { action.textContent = '➤'; action.style.background = '#159FB4'; action.style.paddingLeft = '2px'; return; }
@@ -4425,6 +4435,8 @@
     function closeReactPicker() { document.querySelectorAll('.kt-react-pop').forEach((p) => p.remove()); }
     function showReactPicker(anchor, m) {
       closeReactPicker();
+      // The one reaction picker every thread uses (kt-chat-reply.js -> KT.quickPop row, 2026-11-27).
+      if (window.KT && KT.chatReply && KT.chatReply.reactPicker) { KT.chatReply.reactPicker(anchor, (em) => doReact(m, em)); return; }
       const pop = Dom.el('div', { class: 'kt-react-pop', style: 'position:fixed;z-index:15000;display:flex;gap:2px;background:#fff;border:1px solid rgba(0,0,0,.12);border-radius:22px;padding:4px 6px;box-shadow:0 8px 24px rgba(0,0,0,.18);' });
       QUICK_REACTS.forEach((em) => {
         const eb = Dom.el('button', { type: 'button', style: 'background:none;border:none;font-size:22px;line-height:1;padding:4px;cursor:pointer;border-radius:50%;' }, em);
@@ -4461,7 +4473,7 @@
           }
           const mine = m.is_mine;
           const col = senderColor(m.sender_name);
-          const row = Dom.el('div', { style: `display:flex;gap:6px;align-items:flex-end;max-width:100%;${mine ? 'flex-direction:row-reverse;' : ''}` });
+          const row = Dom.el('div', { 'data-mid': String(m.id), style: `display:flex;gap:6px;align-items:flex-end;max-width:100%;${mine ? 'flex-direction:row-reverse;' : ''}` });
           if (!mine) row.appendChild(msgAvatar(m.sender_name, m.sender_photo_url, col));
           // Outgoing = teal brand tint (right); incoming = violet brand tint (left).
           // Two distinct filled bubbles, like a real chat.
@@ -4474,6 +4486,12 @@
             // A lone 😀 shows big, in a bubble with no fill (kt-chat-composer.css .kt-emo-big / .kt-emo-bubble).
             const emo = !(m.attachments && m.attachments.length) && emojiOnly(m.body);
             if (emo) b.classList.add('kt-emo-bubble');
+            b.setAttribute('data-kt-rp-bubble', '1');
+            if (RPm && m.reply_to_id) {
+              const qt = document.createElement('template');
+              qt.innerHTML = RPm.quote(m);
+              if (qt.content.firstElementChild) b.appendChild(qt.content.firstElementChild);
+            }
             if (m.body) b.appendChild(Dom.el('div', emo ? { class: 'kt-emo-big' } : {}, emo ? String(m.body).trim() : m.body));
             (m.attachments || []).forEach(a => {
               if (!a || !a.url) return;
@@ -4510,7 +4528,15 @@
             }
             if (!reactBtn) reactBtn = Dom.el('button', { type: 'button', title: 'React', style: 'background:none;border:none;color:inherit;opacity:.7;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;' }, '☺');
             reactBtn.addEventListener('click', (ev) => { ev.stopPropagation(); showReactPicker(reactBtn, m); });
-            foot.appendChild(reactBtn);
+            // React + Reply as one pair, spaced exactly like the staff threads (3px + the button's own 1px).
+            const pair = Dom.el('span', { class: 'kt-chat-pair', style: 'display:inline-flex;align-items:center;gap:3px;' });
+            pair.appendChild(reactBtn);
+            if (RPm && childId) {
+              const rt = document.createElement('template');
+              rt.innerHTML = RPm.btn(m.id, mine ? 'You' : m.sender_name, m.body, m.attachments);
+              if (rt.content.firstElementChild) pair.appendChild(rt.content.firstElementChild);
+            }
+            foot.appendChild(pair);
           }
           // ⋯ on a message from the centre: report it, or block the person (kt-report-block.js, 2026-11-03).
           if (!mine && !m.deleted && !m.is_system && m.sender_id && window.KT && KT.reportBlock) {
@@ -4637,6 +4663,8 @@
       const text = input.value.trim();
       const em = !!(mobEm && KT.emergency.isOn(mobEm));
       if (mobEm) KT.emergency.reset(mobEm);
+      const replyTo = RPm ? RPm.peek(rpKey) : null;
+      if (replyTo) RPm.clear(rpKey, tw);
       input.value = ''; input.placeholder = 'Message…'; updateAction();
       emojiPanel.style.display = 'none';
       if (!file) { try { input.focus(); } catch (e0) {} }
@@ -4649,7 +4677,7 @@
       action.setAttribute('aria-busy', 'true');
       mobChain = mobChain.then(async () => {
         try {
-          await sendParentMessage(childId, text, file, em, convo.channel === 'office' ? 'office' : null);
+          await sendParentMessage(childId, text, file, em, convo.channel === 'office' ? 'office' : null, replyTo);
           ghost.style.opacity = '';
           mobPending.splice(mobPending.indexOf(ghost), 1);
         } catch (e) {

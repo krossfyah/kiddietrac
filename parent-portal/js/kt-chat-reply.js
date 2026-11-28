@@ -76,7 +76,7 @@
   function btn(mid, who, text, attachments) {
     css();
     var tip = tipOf('Reply');
-    return '<button type="button" class="kt-chr-btn kt-chat-act" data-kt-iconized="1" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
+    return '<button type="button" class="kt-chr-btn kt-chat-act" data-kt-iconized="1" data-kt-nobreathe="1" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
       + '" data-rp-text="' + esc(snippetOf(text, attachments)) + '" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + ICON_REPLY + '</button>';
   }
   /* Its partner, the "+" that offers a reaction. cls = the renderer's own hook (kt-msg-react / kt-st-react),
@@ -84,8 +84,41 @@
   function reactBtn(mid, cls) {
     css();
     var tip = tipOf('React');
-    return '<button type="button" class="' + esc(cls || 'kt-msg-react') + ' kt-chat-act" data-kt-iconized="1" data-react-mid="' + esc(mid)
+    return '<button type="button" class="' + esc(cls || 'kt-msg-react') + ' kt-chat-act" data-kt-iconized="1" data-kt-nobreathe="1" data-react-mid="' + esc(mid)
       + '" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + ICON_REACT + '</button>';
+  }
+
+  /* THE REACTION PICKER, ONE FOR EVERY THREAD (2026-11-27, Anthony: every message screen should match the new
+     React / Reply pair). The team chat, the family Message Centre and the parent's own thread each drew their own
+     white pill of emoji at their own z-index and size. Now all three open this: the one quick popover
+     (KT.quickPop, kt-quickpop.js) as a single row of round glass buttons, the same six reactions everywhere, each
+     with a spoken/tooltip name. onPick(emoji) does the renderer's own API call. A page without kt-quickpop.js
+     (never expected) gets a plain row so reacting still works. */
+  var REACTIONS = [['\u{1F44D}', 'Like'], ['\u2764\uFE0F', 'Love'], ['\u{1F602}', 'Funny'], ['\u{1F62E}', 'Wow'], ['\u{1F622}', 'Sad'], ['\u{1F64F}', 'Thanks']];
+  function reactPicker(anchor, onPick) {
+    var run = function (em) { return function () { try { onPick(em); } catch (e) { if (w.console) console.error(e); } }; };
+    if (KT.quickPop) {
+      return KT.quickPop({ anchor: anchor, row: true, label: tipOf('React'), id: 'kt-react-picker',
+        items: REACTIONS.map(function (r) { return { icon: r[0], label: '', aria: tipOf(r[1]), run: run(r[0]) }; }) });
+    }
+    var old = d.getElementById('kt-react-picker'); if (old) old.remove();
+    var pop = d.createElement('div');
+    pop.id = 'kt-react-picker';
+    pop.setAttribute('role', 'menu');
+    pop.style.cssText = 'position:fixed;z-index:2147483001;display:flex;gap:4px;padding:4px;border-radius:24px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.18);';
+    REACTIONS.forEach(function (r) {
+      var b = d.createElement('button');
+      b.type = 'button'; b.textContent = r[0]; b.setAttribute('aria-label', tipOf(r[1]));
+      b.style.cssText = 'background:none;border:0;font-size:22px;width:40px;height:40px;cursor:pointer;border-radius:50%;';
+      b.addEventListener('click', function (e) { e.stopPropagation(); pop.remove(); run(r[0])(); });
+      pop.appendChild(b);
+    });
+    d.body.appendChild(pop);
+    var rc = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(rc.left - 60, w.innerWidth - pop.offsetWidth - 8)) + 'px';
+    pop.style.top = (rc.top > 60 ? rc.top - 52 : rc.bottom + 6) + 'px';
+    setTimeout(function () { d.addEventListener('click', function off(e) { if (!pop.contains(e.target)) { pop.remove(); d.removeEventListener('click', off, true); } }, true); }, 0);
+    return { close: function () { pop.remove(); } };
   }
 
   /* The quote above a reply. m.reply_to = { id, author_first_name, snippet, deleted } from the server. */
@@ -190,6 +223,8 @@
   KT.chatReply = {
     btn: btn,
     reactBtn: reactBtn,
+    reactPicker: reactPicker,
+    reactions: function () { return REACTIONS.map(function (r) { return r[0]; }); },
     quote: quote,
     wire: wire,
     snippet: snippetOf,
