@@ -32,6 +32,14 @@ Centre directors see the children in the rooms they work in; with no room of the
 
 > ℹ️ **💊 Medicine** here tells the parent what was given. The formal administration record, with the parent's consent, is still kept on the Medications screen.
 
+## After you press Log it
+
+A card slides in (top right on a computer, just above the bottom bar on a phone) saying what you logged, for whom and when, for example **🍽️ Meal logged for Liam and 3 others · 12:04**. It also says who sees it: **👪 Shared with family** for moments the family sees, or **🔒 Staff only** for a late pick-up or arrival, which only your director reviews. The same card appears when you log from your room's children list or the sleep room.
+
+- **Undo**: tap it within a few seconds to take the entry back off the log and off the family's Today screen. The family may already have had the notification. Undo only works on your own entries from the last 10 minutes.
+- Log several things quickly and they join the same card (**3 entries logged**, **Undo all**) instead of piling up.
+- The card closes by itself after a few seconds. Tap **×**, or swipe it sideways on a phone, to close it sooner. Pointing at it or touching it keeps it open.
+
 ## Logging for the whole room at once
 
 1. Choose **All children** in the **Child** list.

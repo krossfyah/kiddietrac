@@ -518,3 +518,13 @@ kt-phone-gutter.js). Its own banner goes inside it as the first child.
   a main record type or a NEW table has neither.
 - A result opens its screen through the HASH (so kt-screen-loader runs), never by calling a lazy
   screen's function directly. Show the record's number / RefCode, never a raw id.
+
+## A daily-log save confirms with KT.logToast (2026-11-28)
+
+- **Every save of a child's daily-log entry** (care log, room roster quick log, room-wide log, sleep room)
+  confirms with `KT.logToast({ type, label, icon, names, count, at, shared, note, undo, onUndone })`
+  (kt-toasts.js), never a bare "Saved" / "Meal logged ✓". It says what, for whom, when (agency time),
+  "Shared with family" or "Staff only", and offers Undo when you pass `undo: { care: [ids] }` or
+  `{ events: [ids] }` - `POST /care/logs/undo` takes back only the caller's own rows from the last
+  10 minutes (CareController::undoLogs). Quick repeats merge into the one card. Generic settings saves
+  keep the kt-progress "✅ Saved".

@@ -842,7 +842,12 @@
           note: (modal.querySelector('#lt-note').value || '').trim() || null,
         }).then(function () {
           overlay.remove();
-          if (window.KT && KT.toast) {
+          // A late arrival or pick-up goes to the director, not the family: the logged toast says Staff only.
+          var _lk = CHILDREN.filter(function (x) { return String(x.id) === String(childId); })[0];
+          if (window.KT && window.KT.logToast) {
+            window.KT.logToast({ type: 'late', icon: '⏰', label: kind === 'departure' ? 'Late pick-up' : 'Late arrival',
+              names: _lk ? [_lk.name] : [], count: 1, shared: false, note: 'Your director will review it.' });
+          } else if (window.KT && KT.toast) {
             KT.toast('⏰', 'Logged', (kind === 'departure' ? 'Late pick-up' : 'Late arrival') + ' — your director will review it.');
           }
         }).catch(function (e) {
@@ -1268,7 +1273,7 @@
       var cancel = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;' }, 'Cancel');
       cancel.addEventListener('click', function () { overlay.remove(); });
       var save = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Log it');
-      var logSaved = false;
+      var logSaved = false, logRes = null;
       save.addEventListener('click', function () {
         // "Other" means the typed text IS the detail — don't file it as the
         // literal word "Other".
@@ -1369,13 +1374,32 @@
           var payload = extra ? Object.assign({}, body, extra) : body;
           // The not-signed-in question is asked by Api.request() itself (KT.warnNotSignedIn, the bold yellow
           // warning every log path shares); Cancel arrives here as an error with ktCancelled set.
-          return Api.post('/care/logs', payload).then(function () { logSaved = true; });
+          return Api.post('/care/logs', payload).then(function (r) { logSaved = true; logRes = r || {}; });
         }
         (logSaved ? Promise.resolve() : postLog()).then(function () {
           // The care log is saved. If media was attached, upload it as a second
           // step so a failed/slow upload can never lose the log itself — we report
           // the upload separately rather than rolling anything back.
-          if (!mediaFile) { overlay.remove(); loadRecent(); return null; }
+          if (!mediaFile) {
+            overlay.remove(); loadRecent();
+            /* The "logged" toast (KT.logToast, kt-toasts.js): what, for whom, when, that the family sees it, and
+               Undo for a few seconds (POST /care/logs/undo). It replaces the bare "Saved" (2026-11-28). */
+            try {
+              if (window.KT && window.KT.logToast) {
+                var _ids = Array.isArray(childId) ? childId : [childId];
+                var _names = _ids.map(function (id) {
+                  var k = CHILDREN.filter(function (x) { return String(x.id) === String(id); })[0];
+                  return k ? k.name : '';
+                }).filter(Boolean);
+                window.KT.logToast({ type: t.type, label: t.label, icon: t.icon, names: _names,
+                  count: (logRes && logRes.count) || _ids.length, at: body.occurred_at || null, note: body.details || '',
+                  shared: roleOf() === 'guardian' ? null : true,
+                  undo: (logRes && logRes.ids && logRes.ids.length) ? { care: logRes.ids } : null,
+                  onUndone: function () { loadRecent(); } });
+              }
+            } catch (e) {}
+            return null;
+          }
           save.textContent = 'Uploading…';
           mediaMsg.style.color = '#64748B';
           mediaMsg.textContent = 'Uploading ' + (/^video\//.test(mediaFile.type) ? 'video' : 'photo') + '…';

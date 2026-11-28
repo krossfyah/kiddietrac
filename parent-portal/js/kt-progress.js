@@ -245,17 +245,19 @@
   /* ── the Saved toast ── */
   var toastAt = 0, confirmAt = 0;
   // Note every toast the screen shows, so a save it already confirmed (or explained) is not confirmed again.
-  function watchOne(host) {
-    if (!host || typeof host.toast !== 'function' || host.toast.__ktSavedWatch) return;
-    var t = host.toast;
+  function watchOne(host, key) {
+    key = key || 'toast';
+    if (!host || typeof host[key] !== 'function' || host[key].__ktSavedWatch) return;
+    var t = host[key];
     var w = function () { toastAt = Date.now(); return t.apply(this, arguments); };
     w.__ktSavedWatch = true;
     for (var k in t) { try { if (!(k in w)) w[k] = t[k]; } catch (e) {} }
-    host.toast = w;
+    host[key] = w;
   }
   function watchToasts() {
     var K = window.KT;
     watchOne(K);
+    watchOne(K, 'logToast');   // the daily-log "logged" toast (kt-toasts.js) answers for its save too (2026-11-28)
     watchOne(window.Dom || (K && K.Dom));
   }
   function savedToast(body, bad) {

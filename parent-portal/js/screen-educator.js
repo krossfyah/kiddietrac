@@ -1619,6 +1619,20 @@
    * Children present are ticked by default, because that is nearly always the answer -
    * but every one is unticked-able, since "everyone had sunscreen" is rarely quite true.
    */
+  /* The "logged" toast (KT.logToast, kt-toasts.js, 2026-11-28): what was logged, for whom, when, that families
+     see it, and Undo for a few seconds (POST /care/logs/undo takes the daily_events ids). Falls back to the
+     plain toast if kt-toasts.js has not loaded. */
+  function ktLogged(entry, fallback) {
+    try {
+      if (window.KT && window.KT.logToast) {
+        entry.shared = true;
+        entry.onUndone = function () { renderRoster(Dom.$('#educatorRoster')); };
+        return window.KT.logToast(entry);
+      }
+    } catch (e) {}
+    Dom.toast(fallback, 'success');
+  }
+
   function openBulkLog(roster) {
     const present = (roster || []).filter(c => c.is_at_centre);
     const pool = present.length ? present : (roster || []);
@@ -1808,7 +1822,15 @@
               });
               const refused = (res && res.refused) || [];
               const base = (res && res.message) || 'Logged';
-              Dom.toast(base + (refused.length ? ' · ' + refused.length + ' skipped' : ''), 'success');
+              const savedIds = ids.filter(i => refused.indexOf(i) === -1);
+              const tp = TYPES.find(x => x.type === chosen) || {};
+              ktLogged({
+                type: chosen, label: tp.label, icon: tp.icon,
+                names: pool.filter(c => savedIds.indexOf(c.id) !== -1).map(c => c.display_name || c.first_name || ''),
+                count: (res && res.saved) || savedIds.length, at: occurredAt,
+                note: refused.length ? refused.length + ' skipped' : '',
+                undo: (res && res.event_ids && res.event_ids.length) ? { events: res.event_ids } : null,
+              }, base + (refused.length ? ' · ' + refused.length + ' skipped' : ''));
               await renderRoster(Dom.$('#educatorRoster'));
               return true;                       // closes the dialog
             } catch (e) {
@@ -1900,13 +1922,14 @@
         class: 'quick-log-btn',
         onClick: async () => {
           try {
-            await Api.post('/provider/events', {
+            const r = await Api.post('/provider/events', {
               child_id: child.id,
               room_id: currentRoomId,
               event_type: 'snack',
               payload: { meal: s.meal },
             });
-            Dom.toast(`${s.label} logged ✓`, 'success');
+            ktLogged({ type: 'snack', label: s.label, names: [child.display_name], count: 1,
+              undo: r && r.event_id ? { events: [r.event_id] } : null }, `${s.label} logged ✓`);
             if (activeModal) activeModal.close();
             await renderRoster(Dom.$('#educatorRoster'));
           } catch (e) {
@@ -1944,13 +1967,17 @@
             if (!sIso && !wIso) { Dom.toast('Enter at least one time', 'error'); return; }
             if (sIso && wIso && new Date(wIso) < new Date(sIso)) { Dom.toast('Woke-up time is before fell-asleep time', 'error'); return; }
             try {
+              const napIds = [];
               if (sIso) {
-                await Api.post('/provider/events', { child_id: child.id, room_id: currentRoomId, event_type: 'nap_start', occurred_at: sIso, payload: {} });
+                const r1 = await Api.post('/provider/events', { child_id: child.id, room_id: currentRoomId, event_type: 'nap_start', occurred_at: sIso, payload: {} });
+                if (r1 && r1.event_id) napIds.push(r1.event_id);
               }
               if (wIso) {
-                await Api.post('/provider/events', { child_id: child.id, room_id: currentRoomId, event_type: 'nap_end', occurred_at: wIso, payload: {} });
+                const r2 = await Api.post('/provider/events', { child_id: child.id, room_id: currentRoomId, event_type: 'nap_end', occurred_at: wIso, payload: {} });
+                if (r2 && r2.event_id) napIds.push(r2.event_id);
               }
-              Dom.toast('Nap logged ✓', 'success');
+              ktLogged({ type: 'nap', label: 'Nap', names: [child.display_name], count: 1, at: wIso || sIso,
+                undo: napIds.length ? { events: napIds } : null }, 'Nap logged ✓');
               await renderRoster(Dom.$('#educatorRoster'));
             } catch (e) {
               Dom.toast((e && e.message) || 'Could not log the nap — please try again', 'error');
@@ -2077,14 +2104,16 @@
           style: 'btn-primary',
           handler: async () => {
             try {
-              await Api.post('/provider/events', {
+              const at = isoForTimeToday(when.input.value);
+              const r = await Api.post('/provider/events', {
                 child_id: child.id,
                 room_id: currentRoomId,
                 event_type: quickLog.type,
-                occurred_at: isoForTimeToday(when.input.value),
+                occurred_at: at,
                 payload: payloadBuilder(),
               });
-              Dom.toast(`${quickLog.label} logged ✓`, 'success');
+              ktLogged({ type: quickLog.type, label: quickLog.label, icon: quickLog.icon, names: [child.display_name], count: 1, at: at,
+                undo: r && r.event_id ? { events: [r.event_id] } : null }, `${quickLog.label} logged ✓`);
               await renderRoster(Dom.$('#educatorRoster'));
             } catch (e) {
               Dom.toast((e && e.message) || 'Could not log — please try again', 'error');

@@ -20,6 +20,14 @@ La pantalla **Registro diario** (su banner dice **Registrar un momento**) sirve 
 
 > 💡 La ventana del pañal tiene un interruptor **🧴 Cream applied**, el biberón pide la cantidad en **oz**, y **Medicine** pide **Medicine and dose** (por ejemplo "Tylenol infantil 5 ml").
 
+## Después de pulsar Log it
+
+Aparece una tarjeta (arriba a la derecha en una computadora, justo encima de la barra inferior en un teléfono) que dice qué registró, para quién y a qué hora, por ejemplo **🍽️ Comida — registrado para Liam y 3 más · 12:04**. También dice quién lo ve: **👪 Compartido con la familia** para los momentos que ve la familia, o **🔒 Solo personal** para una recogida o llegada tardía, que solo revisa su director. La misma tarjeta aparece cuando registra desde la lista de niños de su salón o desde la sala de siesta.
+
+- **Deshacer**: tóquelo en los segundos siguientes para quitar el registro del diario y de la pantalla Hoy de la familia. Es posible que la familia ya haya recibido la notificación. Deshacer solo funciona con sus propios registros de los últimos 10 minutos.
+- Si registra varias cosas seguidas, se juntan en la misma tarjeta (**3 registros anotados**, **Deshacer todo**) en lugar de amontonarse.
+- La tarjeta se cierra sola a los pocos segundos. Toque **×**, o deslícela hacia un lado en un teléfono, para cerrarla antes. Si pasa el puntero o la toca, se queda abierta.
+
 ## Registrar para todo el salón a la vez
 
 1. En **Niño**, elija **Todos los niños**.
@@ -53,7 +61,7 @@ Debajo de los mosaicos, el registro de hoy muestra lo registrado para el niño (
 ??? Elegí Todos los niños y dice "No children are checked in right now, so there is nobody to log this for." | Los registros de salón solo van a los niños presentes. Registre primero su llegada o elija un niño.
 ??? Dice "That time is later today. A log records what has already happened". | La hora en **When did it happen?** está en el futuro. Elija la hora real.
 ??? Dice "Pick a child to log for — All children does not apply to diaper." | Pañal, baño, medicina y ropa se registran para un solo niño. Elija al niño y toque el mosaico otra vez.
-??? Me equivoqué. ¿Puedo editar o borrar el registro? | En esta pantalla no se pueden editar ni borrar registros. Registre el correcto y avise a su director, que puede corregir el expediente.
+??? Me equivoqué. ¿Puedo editar o borrar el registro? | Justo después de registrar, toque **Deshacer** en la tarjeta que aparece. Funciona unos segundos, con sus propios registros de los últimos 10 minutos. Después, en esta pantalla no se pueden editar ni borrar registros: registre el correcto y avise a su director, que puede corregir el expediente.
 ??? ¿Medicine reemplaza el registro de medicamentos? | No. Solo informa a la familia de lo que se dio. Las dosis de un medicamento autorizado se siguen registrando en **Medicamentos** con **+ Registrar dosis**.
 ??? ¿A quién se le avisa cuando registro algo? | Los tutores del niño reciben un aviso en la app y una notificación en el teléfono, salvo que hayan desactivado los momentos diarios o que su agencia haya desactivado los momentos instantáneos. Varios registros en dos minutos se agrupan en un solo aviso.
 

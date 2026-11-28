@@ -29,6 +29,14 @@ Les directeurs de centre voient les enfants des salles où ils travaillent; sans
 
 > ℹ️ **💊 Medicine** ici dit au parent ce qui a été donné. Le registre officiel d’administration, avec le consentement du parent, reste tenu dans l’écran des médicaments.
 
+## Après avoir appuyé sur Log it
+
+Une carte apparaît (en haut à droite sur un ordinateur, juste au-dessus de la barre du bas sur un téléphone) et indique ce que vous avez consigné, pour qui et à quelle heure, par exemple **🍽️ Repas — noté pour Liam et 3 autres · 12 h 04**. Elle indique aussi qui le voit : **👪 Partagé avec la famille** pour les moments que la famille voit, ou **🔒 Personnel seulement** pour un départ ou une arrivée tardive, que seule votre direction examine. La même carte apparaît quand vous consignez depuis la liste des enfants de votre groupe ou la salle de sieste.
+
+- **Annuler** : touchez-le dans les secondes qui suivent pour retirer l'entrée du journal et de l'écran Aujourd'hui de la famille. La famille a peut-être déjà reçu la notification. L'annulation ne fonctionne que sur vos propres entrées des 10 dernières minutes.
+- Si vous consignez plusieurs choses rapidement, elles s'ajoutent à la même carte (**3 entrées notées**, **Tout annuler**) au lieu de s'empiler.
+- La carte se ferme seule après quelques secondes. Touchez **×**, ou glissez-la sur le côté sur un téléphone, pour la fermer plus tôt. La survoler ou la toucher la garde ouverte.
+
 ## Consigner pour toute la salle à la fois
 
 1. Choisissez **Tous les enfants** dans la liste **Enfant**.

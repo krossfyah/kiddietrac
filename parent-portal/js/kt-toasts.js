@@ -176,6 +176,248 @@
   }
   window.KT = window.KT || {}; window.KT.toast = toast;
 
+  /* ═══ THE "LOGGED" TOAST (2026-11-28, Anthony: "when logging daily moments shows a toast saying saved - can you not
+     make that better with a better toast"). Every daily-log save (Log a moment, the room roster's quick logs, a
+     room-wide log, the sleep room) said only "Saved" or "Meal logged ✓". KT.logToast(entry) says what was logged,
+     for whom and when, whether the family sees it, and offers Undo for a few seconds where the entry can be taken back
+     (POST /care/logs/undo: the person's own entries from the last few minutes - CareController::undoLogs).
+       entry = { type, label?, icon?, title?, names: [first names], count?: children without a name, at?: ISO,
+                 shared: true (families see it) | false (staff only) | null (say nothing), note?,
+                 undo?: { care: [daily_care_logs ids], events: [daily_events ids] }, onUndone?: fn(res), view?: '#hash' }
+     ONE toast: a second log while it is up joins it (the count goes up) instead of stacking another card.
+     role=status + aria-live=polite; swipe it sideways to dismiss on a phone; hover or touch pauses it.
+     Generic settings "✅ Saved" toasts are not this - they stay as they are (kt-progress.js). ═══ */
+  (function () {
+    var EMO = { meal: '🍽️', snack: '🍎', bottle: '🍼', nap: '😴', nap_start: '😴', nap_end: '🌅', diaper: '🧷',
+      bathroom: '🚽', mood: '🙂', activity: '🎨', note: '📝', outdoor: '🌳', sunscreen: '🧴', medicine: '💊',
+      medication: '💊', clothing: '👕', late: '⏰', walk: '🚶' };
+    var LBL = { meal: 'Meal', snack: 'Snack', bottle: 'Bottle', nap: 'Nap', nap_start: 'Nap started', nap_end: 'Woke up',
+      diaper: 'Diaper', bathroom: 'Bathroom', mood: 'Mood', activity: 'Activity', note: 'Note', outdoor: 'Outdoor play',
+      sunscreen: 'Sunscreen', medicine: 'Medicine', medication: 'Medication', clothing: 'Change of clothes', late: 'Late' };
+    var TINT = { meal: '#16A34A', snack: '#F59E0B', bottle: '#65A30D', nap: '#7C3AED', nap_start: '#7C3AED', nap_end: '#7C3AED',
+      diaper: '#EA580C', bathroom: '#1F6080', mood: '#7C3AED', outdoor: '#2E7D32', sunscreen: '#D97706', medicine: '#DB2777',
+      clothing: '#0284C7', late: '#DC2626' };
+    var LIFE_UNDO = 6000, LIFE = 4000;
+    function T(s) { try { return (window.KT && KT.i18n && KT.i18n.t) ? KT.i18n.t(s, 'log-toast') : s; } catch (e) { return s; } }
+    function fill(s, o) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return o[k] == null ? m : o[k]; }); }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function first(n) { n = String(n || '').trim(); return n.split(/\s+/)[0] || n; }
+    function who(names, extra) {
+      var n = names.length + extra;
+      if (!names.length) return n === 1 ? T('1 child') : fill(T('{n} children'), { n: n });
+      if (n === 1) return names[0];
+      if (n === 2 && names.length === 2) return fill(T('{a} and {b}'), { a: names[0], b: names[1] });
+      return n - 1 === 1 ? fill(T('{name} and 1 other'), { name: names[0] }) : fill(T('{name} and {n} others'), { name: names[0], n: n - 1 });
+    }
+    function clock(at) {
+      try { if (window.KT && KT.fmtTime) return KT.fmtTime(at || new Date().toISOString()); } catch (e) {}
+      var d = at ? new Date(at) : new Date();
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+    function labelOf(e) { return e.label || LBL[e.type] || 'Entry'; }
+
+    var st = document.createElement('style');
+    st.textContent =
+      '.kt-lt{pointer-events:auto;position:relative;overflow:hidden;width:100%;box-sizing:border-box;display:flex;gap:11px;align-items:flex-start;background:#fff;color:#0D1B2A;' +
+      'border:1px solid #E2E8F0;border-left:4px solid var(--lt-c,#0E7C90);border-radius:12px;padding:11px 10px 12px 12px;box-shadow:0 14px 32px -14px rgba(15,23,42,.45),0 2px 6px rgba(15,23,42,.06);' +
+      'font-family:system-ui,-apple-system,"Segoe UI",sans-serif;animation:kt-toast-in .3s cubic-bezier(.2,.7,.2,1) both;touch-action:pan-y;user-select:none;-webkit-user-select:none;}' +
+      '.kt-lt-ic{flex:0 0 34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;background:#F1F5F9;background:color-mix(in srgb,var(--lt-c,#0E7C90) 13%,#fff);}' +
+      '.kt-lt-b{min-width:0;flex:1;}' +
+      '.kt-lt-t{font-weight:700;font-size:13.5px;line-height:1.3;color:#0D1B2A;overflow-wrap:anywhere;}' +
+      '.kt-lt-l{font-size:12.5px;color:#475569;margin-top:2px;line-height:1.35;overflow-wrap:anywhere;}' +
+      '.kt-lt-m{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:5px;font-size:12px;color:#64748B;}' +
+      '.kt-lt-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-weight:600;font-size:11.5px;line-height:18px;}' +
+      '.kt-lt-chip.fam{background:#ECFDF5;color:#047857;}.kt-lt-chip.staff{background:#F1F5F9;color:#334155;}' +
+      '.kt-lt-a{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto;align-self:center;}' +
+      '.kt-lt-u{height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;font-family:inherit;}' +
+      '.kt-lt-u:hover{background:#F0F7FA;border-color:#1F6080;}.kt-lt-u:focus-visible,.kt-lt-x:focus-visible{outline:2px solid #1F6080;outline-offset:1px;}' +
+      '.kt-lt-u[disabled]{opacity:.6;cursor:default;}' +
+      '.kt-lt-x{width:28px;height:28px;border:none;background:transparent;color:#94A3B8;font-size:17px;line-height:1;cursor:pointer;border-radius:7px;flex-shrink:0;}' +
+      '.kt-lt-x:hover{background:#F1F5F9;color:#475569;}' +
+      '.kt-lt-bar{position:absolute;left:0;bottom:0;height:3px;background:var(--lt-c,#0E7C90);opacity:.55;transform-origin:left;}' +
+      '@media (prefers-reduced-motion:reduce){.kt-lt{animation:none;}.kt-lt-bar{display:none;}}';
+    (document.head || document.documentElement).appendChild(st);
+
+    var cur = null;   // the toast that is up: { el, entries, state, timer, left, until }
+
+    function summary(es) {
+      var types = [], names = [], extra = 0;
+      es.forEach(function (e) {
+        if (types.indexOf(e.type + '|' + labelOf(e)) === -1) types.push(e.type + '|' + labelOf(e));
+        (e.names || []).forEach(function (n) { n = first(n); if (n && names.indexOf(n) === -1) names.push(n); });
+        extra += Math.max(0, (e.count || 0) - (e.names || []).length);
+      });
+      return { types: types, names: names, extra: extra, kids: names.length + extra };
+    }
+
+    function render() {
+      var c = cur, es = c.entries, last = es[es.length - 1], s = summary(es), el = c.el;
+      var icon, title, line = '', color;
+      if (c.state === 'undone') {
+        icon = '↩️'; color = '#475569'; title = T('Undone');
+        line = esc(c.msg || '');
+      } else if (c.state === 'failed') {
+        icon = '⚠️'; color = '#DC2626'; title = T('Could not undo');
+        line = esc(c.msg || '');
+      } else if (s.types.length === 1) {
+        icon = last.icon || EMO[last.type] || '📝'; color = TINT[last.type] || '#0E7C90';
+        title = (es.length === 1 && last.title) ? T(last.title)
+          : fill(T('{what} logged for {who}'), { what: T(labelOf(last)), who: who(s.names, s.extra) });
+        if (es.length > 1) line = fill(T('{n} entries'), { n: es.length });
+        else if (last.note) line = T(last.note);
+        title = esc(title); line = esc(line);
+      } else {
+        icon = '📝'; color = '#0E7C90';
+        title = esc(fill(T('{n} entries logged'), { n: es.length }));
+        line = es.slice(-3).reverse().map(function (e) {
+          return esc((e.icon || EMO[e.type] || '') + ' ' + T(labelOf(e)) + ' · ' + who((e.names || []).map(first), Math.max(0, (e.count || 0) - (e.names || []).length)));
+        }).join('<br>') + (es.length > 3 ? '<br>…' : '');
+      }
+      el.style.setProperty('--lt-c', color);
+      var meta = '';
+      if (c.state === 'live') {
+        meta = '<span>' + esc(clock(last.at)) + '</span>';
+        var sh = es.some(function (e) { return e.shared === true; }), staff = es.every(function (e) { return e.shared === false; });
+        if (sh) meta += '<span class="kt-lt-chip fam">👪 ' + esc(T(s.kids > 1 ? 'Shared with families' : 'Shared with family')) + '</span>';
+        else if (staff) meta += '<span class="kt-lt-chip staff">🔒 ' + esc(T('Staff only')) + '</span>';
+      }
+      var canUndo = c.state === 'live' && es.every(function (e) { return e.undo && ((e.undo.care || []).length || (e.undo.events || []).length); });
+      var view = c.state === 'live' && !canUndo ? (last.view || '') : '';
+      el.innerHTML = '<span class="kt-lt-ic" aria-hidden="true">' + icon + '</span>' +
+        '<div class="kt-lt-b"><div class="kt-lt-t">' + title + '</div>' + (line ? '<div class="kt-lt-l">' + line + '</div>' : '') +
+        (meta ? '<div class="kt-lt-m">' + meta + '</div>' : '') + '</div>' +
+        '<div class="kt-lt-a">' +
+        (canUndo ? '<button type="button" class="kt-lt-u" data-lt="undo">' + esc(T(es.length > 1 ? 'Undo all' : 'Undo')) + '</button>' : '') +
+        (view ? '<button type="button" class="kt-lt-u" data-lt="view">' + esc(T('View')) + '</button>' : '') +
+        '<button type="button" class="kt-lt-x" data-lt="x" aria-label="' + esc(T('Dismiss')) + '">×</button></div>' +
+        (canUndo ? '<span class="kt-lt-bar" aria-hidden="true"></span>' : '');
+      c.canUndo = canUndo;
+      var u = el.querySelector('[data-lt="undo"]'); if (u) u.onclick = function (ev) { ev.stopPropagation(); undo(); };
+      var v = el.querySelector('[data-lt="view"]'); if (v) v.onclick = function (ev) { ev.stopPropagation(); dismiss(); location.hash = view; };
+      el.querySelector('[data-lt="x"]').onclick = function (ev) { ev.stopPropagation(); dismiss(); };
+    }
+
+    function arm(ms) {
+      var c = cur; if (!c) return;
+      clearTimeout(c.timer);
+      c.left = ms; c.until = Date.now() + ms;
+      c.timer = setTimeout(dismiss, ms);
+      var bar = c.el.querySelector('.kt-lt-bar');
+      if (bar) {
+        bar.style.transition = 'none'; bar.style.width = '100%';
+        void bar.offsetWidth;
+        bar.style.transition = 'width ' + ms + 'ms linear'; bar.style.width = '0%';
+      }
+    }
+    function pause() {
+      var c = cur; if (!c || c.paused) return;
+      c.paused = true; clearTimeout(c.timer);
+      c.left = Math.max(1500, c.until - Date.now());
+      var bar = c.el.querySelector('.kt-lt-bar');
+      if (bar) { var w = getComputedStyle(bar).width; bar.style.transition = 'none'; bar.style.width = w; }
+    }
+    function resume() {
+      var c = cur; if (!c || !c.paused) return;
+      c.paused = false; arm(c.left);
+    }
+    function dismiss(fly) {
+      var c = cur; if (!c) return;
+      cur = null; clearTimeout(c.timer);
+      var el = c.el;
+      el.style.transition = 'transform .22s ease,opacity .22s ease';
+      if (fly) { el.style.transform = 'translateX(' + (fly > 0 ? 110 : -110) + '%)'; el.style.opacity = '0'; }
+      else el.style.animation = 'kt-toast-out .28s ease forwards';
+      setTimeout(function () { el.remove(); }, 300);
+    }
+
+    function undo() {
+      var c = cur; if (!c || c.state !== 'live') return;
+      var care = [], events = [];
+      c.entries.forEach(function (e) { care = care.concat(e.undo.care || []); events = events.concat(e.undo.events || []); });
+      clearTimeout(c.timer); c.state = 'undoing';
+      var b = c.el.querySelector('[data-lt="undo"]'); if (b) { b.disabled = true; b.textContent = T('Undoing…'); }
+      var bar = c.el.querySelector('.kt-lt-bar'); if (bar) bar.remove();
+      var shared = c.entries.some(function (e) { return e.shared === true; });
+      var Api = window.KT && KT.Api;
+      var p = Api ? Api.post('/care/logs/undo', { care_ids: care, event_ids: events }, { quiet: true })
+        : Promise.reject(new Error('Not available'));
+      p.then(function (r) {
+        if (cur !== c) return;
+        var refused = (r && r.refused) || 0;
+        c.state = 'undone';
+        c.msg = refused ? fill(T('{n} could not be undone: it is more than 10 minutes old or a sleep check is recorded on it.'), { n: refused })
+          : (T('Taken off the log.') + (shared ? ' ' + T('A notification may already have reached the family.') : ''));
+        render(); arm(refused ? LIFE_UNDO : LIFE);
+        c.entries.forEach(function (e) { try { if (e.onUndone) e.onUndone(r); } catch (x) {} });
+      }, function (er) {
+        if (cur !== c) return;
+        c.state = 'failed';
+        c.msg = (er && er.message && er.message !== 'Not available') ? er.message : T('It is still on the log. Remove it from the child’s log instead.');
+        render(); arm(LIFE_UNDO);
+        c.entries.forEach(function (e) { try { if (e.onUndone) e.onUndone(null); } catch (x) {} });
+      });
+    }
+
+    function bindGestures(el) {
+      el.addEventListener('mouseenter', pause);
+      el.addEventListener('mouseleave', resume);
+      el.addEventListener('focusin', pause);
+      el.addEventListener('focusout', function () { setTimeout(function () { if (cur && !cur.el.contains(document.activeElement)) resume(); }, 0); });
+      var x0 = null, y0 = 0, dx = 0, id = null;
+      el.addEventListener('pointerdown', function (e) {
+        if (e.target.closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        x0 = e.clientX; y0 = e.clientY; dx = 0; id = e.pointerId; pause();
+        el.style.transition = 'none';
+      });
+      el.addEventListener('pointermove', function (e) {
+        if (x0 === null || e.pointerId !== id) return;
+        dx = e.clientX - x0;
+        if (Math.abs(e.clientY - y0) > 30 && Math.abs(dx) < 20) { x0 = null; el.style.transform = ''; return; }
+        el.style.transform = 'translateX(' + dx + 'px)';
+        el.style.opacity = String(Math.max(0.25, 1 - Math.abs(dx) / 260));
+      });
+      function end(e) {
+        if (x0 === null || (e && e.pointerId !== id)) return;
+        x0 = null;
+        if (Math.abs(dx) > 70) { dismiss(dx); return; }
+        el.style.transition = 'transform .18s ease,opacity .18s ease'; el.style.transform = ''; el.style.opacity = '';
+        if (e && e.pointerType !== 'mouse') resume();
+      }
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+    }
+
+    function logToast(entry) {
+      entry = entry || {};
+      if (!entry.at) entry.at = new Date().toISOString();
+      if (cur && cur.state === 'live' && document.documentElement.contains(cur.el)) {
+        cur.entries.push(entry);
+        render();
+        cur.el.style.animation = 'none'; void cur.el.offsetWidth; cur.el.style.animation = 'kt-toast-in .18s ease';
+        if (!cur.paused) arm(cur.canUndo ? LIFE_UNDO : LIFE); else cur.left = cur.canUndo ? LIFE_UNDO : LIFE;
+        return cur.el;
+      }
+      if (cur) dismiss();
+      var el = document.createElement('div');
+      el.className = 'kt-lt';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.setAttribute('aria-atomic', 'true');
+      el.setAttribute('data-i18n-ctx', 'log-toast');
+      el.__ktAt = Date.now();
+      el.ktDismiss = function () { if (cur && cur.el === el) dismiss(); else el.remove(); };
+      cur = { el: el, entries: [entry], state: 'live', timer: null, paused: false };
+      render();
+      bindGestures(el);
+      var host = container();
+      host.appendChild(el);
+      try { while (host.children.length > 4) host.removeChild(host.firstElementChild); } catch (e) {}
+      arm(cur.canUndo ? LIFE_UNDO : LIFE);
+      return el;
+    }
+    window.KT.logToast = logToast;
+  })();
+
   /* NOT OVER A SCREEN THAT NEEDS AN ANSWER (2026-11-04, App Store screenshots: on a first sign-in the "Good afternoon,
      Taylor! Welcome" toast sat on top of the Terms screen's "Agree & continue" button). While the Terms, a password
      change, two-step sign-in or a lock is up, the welcome waits; it shows once that screen is done. */

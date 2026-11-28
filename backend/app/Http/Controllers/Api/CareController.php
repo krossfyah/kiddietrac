@@ -161,6 +161,84 @@ final class CareController extends Controller
     }
 
     /**
+     * POST /care/logs/undo {care_ids?: int[], event_ids?: int[]} - the Undo on the "logged" toast
+     * (2026-11-28, Anthony: "when logging daily moments shows a toast saying saved - can you not make that better").
+     *
+     * Takes back entries THIS person logged a moment ago, and nothing else:
+     *  - only rows they recorded themselves (recorded_by_id), so it can never remove a colleague's entry;
+     *  - only rows written in the last UNDO_MINUTES, so it is an undo, not a delete tool (older entries are
+     *    corrected where they always were);
+     *  - only children they can still reach (canSeeChild, the same check the log was written under);
+     *  - never a nap that already has sleep checks recorded against it (sleep_checks.nap_event_id).
+     * Covers both log tables: daily_care_logs (Log a moment) and daily_events (the room roster, room-wide logs,
+     * the sleep room). Anything refused is counted back, never silently dropped.
+     */
+    public const UNDO_MINUTES = 10;
+
+    public function undoLogs(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'care_ids' => ['nullable', 'array', 'max:100'],
+            'care_ids.*' => ['integer'],
+            'event_ids' => ['nullable', 'array', 'max:100'],
+            'event_ids.*' => ['integer'],
+        ]);
+        $me = (int) $request->user()->id;
+        $since = now()->subMinutes(self::UNDO_MINUTES);
+        $careIds = array_values(array_unique(array_map('intval', $data['care_ids'] ?? [])));
+        $eventIds = array_values(array_unique(array_map('intval', $data['event_ids'] ?? [])));
+        if (! $careIds && ! $eventIds) {
+            return response()->json(['message' => 'Nothing to undo.'], 422);
+        }
+
+        $removed = 0;
+        $asked = count($careIds) + count($eventIds);
+        $children = [];
+
+        if ($careIds) {
+            $rows = DB::table('daily_care_logs')->whereIn('id', $careIds)
+                ->where('recorded_by_id', $me)->where('created_at', '>=', $since)
+                ->get(['id', 'child_id']);
+            $ok = [];
+            foreach ($rows as $r) {
+                if ($this->canSeeChild($request, (int) $r->child_id)) { $ok[] = (int) $r->id; $children[(int) $r->child_id] = true; }
+            }
+            if ($ok) $removed += DB::table('daily_care_logs')->whereIn('id', $ok)->delete();
+        }
+
+        if ($eventIds) {
+            $rows = DB::table('daily_events')->whereIn('id', $eventIds)
+                ->where('recorded_by_id', $me)->where('created_at', '>=', $since)
+                ->get(['id', 'child_id']);
+            $checked = [];
+            try {
+                $checked = DB::table('sleep_checks')->whereIn('nap_event_id', $rows->pluck('id')->all())
+                    ->pluck('nap_event_id')->map(fn ($v) => (int) $v)->all();
+            } catch (\Throwable $e) { /* no sleep checks table: nothing depends on the row */ }
+            $ok = [];
+            foreach ($rows as $r) {
+                if (in_array((int) $r->id, $checked, true)) continue;
+                if ($this->canSeeChild($request, (int) $r->child_id)) { $ok[] = (int) $r->id; $children[(int) $r->child_id] = true; }
+            }
+            if ($ok) $removed += DB::table('daily_events')->whereIn('id', $ok)->delete();
+        }
+
+        // Today's AI digest may have read the entry: let it rebuild (best effort, as when logging).
+        if ($children) {
+            try {
+                DB::table('ai_daily_digests')->whereIn('child_id', array_keys($children))
+                    ->where('digest_date', \App\Support\AgencyTime::today())->delete();
+            } catch (\Throwable $e) { /* a stale digest is not worth failing the undo for */ }
+        }
+
+        return response()->json([
+            'removed' => $removed,
+            'refused' => max(0, $asked - $removed),
+            'message' => $removed ? 'Undone' : 'That entry can no longer be undone here.',
+        ], $removed ? 200 : 422);
+    }
+
+    /**
      * GET /care/logs/recent?child_ids=1,2,3 — the whole roster in one request.
      *
      * The per-child endpoint below is correct and stays; what was wrong was calling

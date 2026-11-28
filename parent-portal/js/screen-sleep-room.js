@@ -269,8 +269,16 @@
     if (!c) return;
     if (btn) btn.disabled = true;
     Api().post('/provider/events', { child_id: c.child_id, room_id: S.room, event_type: type, occurred_at: new Date().toISOString(), payload: {} })
-      .then(function () {
-        toast(type === 'nap_start' ? '😴' : '🌅', type === 'nap_start' ? c.first_name + ' is asleep' : c.first_name + ' woke up', type === 'nap_start' ? 'Sleep checks have started.' : 'Sleep checks have stopped.', '#4338CA');
+      .then(function (r) {
+        var asleep = type === 'nap_start';
+        // The "logged" toast (KT.logToast, 2026-11-28): Undo for a few seconds - refused once a sleep check is on the nap.
+        if (window.KT && window.KT.logToast) {
+          window.KT.logToast({ type: type, title: asleep ? c.first_name + ' is asleep' : c.first_name + ' woke up', names: [c.first_name], count: 1,
+            note: asleep ? 'Sleep checks have started.' : 'Sleep checks have stopped.', shared: true,
+            undo: r && r.event_id ? { events: [r.event_id] } : null, onUndone: function () { loadRoom(body); } });
+        } else {
+          toast(asleep ? '😴' : '🌅', asleep ? c.first_name + ' is asleep' : c.first_name + ' woke up', asleep ? 'Sleep checks have started.' : 'Sleep checks have stopped.', '#4338CA');
+        }
         loadRoom(body);
       })
       .catch(function (e) { if (btn) btn.disabled = false; toast('⚠️', 'Could not save', errMsg(e), '#DC2626'); });

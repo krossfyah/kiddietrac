@@ -29,6 +29,14 @@ Los directores de centro ven a los niños de las salas donde trabajan; si no tie
 
 > ℹ️ **💊 Medicine** aquí le dice al padre qué se dio. El registro formal de administración, con el consentimiento del padre, sigue estando en la pantalla de medicamentos.
 
+## Después de pulsar Log it
+
+Aparece una tarjeta (arriba a la derecha en una computadora, justo encima de la barra inferior en un teléfono) que dice qué registró, para quién y a qué hora, por ejemplo **🍽️ Comida — registrado para Liam y 3 más · 12:04**. También dice quién lo ve: **👪 Compartido con la familia** para los momentos que ve la familia, o **🔒 Solo personal** para una recogida o llegada tardía, que solo revisa su director. La misma tarjeta aparece cuando registra desde la lista de niños de su salón o desde la sala de siesta.
+
+- **Deshacer**: tóquelo en los segundos siguientes para quitar el registro del diario y de la pantalla Hoy de la familia. Es posible que la familia ya haya recibido la notificación. Deshacer solo funciona con sus propios registros de los últimos 10 minutos.
+- Si registra varias cosas seguidas, se juntan en la misma tarjeta (**3 registros anotados**, **Deshacer todo**) en lugar de amontonarse.
+- La tarjeta se cierra sola a los pocos segundos. Toque **×**, o deslícela hacia un lado en un teléfono, para cerrarla antes. Si pasa el puntero o la toca, se queda abierta.
+
 ## Registrar para toda la sala a la vez
 
 1. Elija **Todos los niños** en la lista **Niño**.

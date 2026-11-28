@@ -314,6 +314,7 @@ patch cacfp/child/{childId} | Changed a child's meal program tier
 get cacfp/claim | Opened the monthly meal program claim
 post cacfp/meal | Recorded a meal program meal
 post care/logs | Logged a care moment
+post care/logs/undo | Undid a care moment they had just logged
 post care/milestones | Recorded a milestone
 post chat-archive | Archived or restored a chat
 post chat/conversations/{id}/read | Read a conversation

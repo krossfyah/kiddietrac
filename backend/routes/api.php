@@ -1187,6 +1187,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         // v22p49 — Daily care logs, milestones, portfolio, time clock
         Route::post  ('/care/logs',                 [\App\Http\Controllers\Api\CareController::class, 'logCare']);
+        // Undo on the "logged" toast: own entries from the last few minutes only (CareController::undoLogs).
+        Route::post  ('/care/logs/undo',            [\App\Http\Controllers\Api\CareController::class, 'undoLogs'])->middleware('throttle:30,1,r-care-undo');
         /* One request for a whole roster. The per-child route below is fine; calling
            it once per child is what saturates the box at drop-off — the 508s cluster
            at 08:00–09:00 and name that exact path. */

@@ -4,6 +4,26 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🍽️",
+            "title": "A clearer card when you log a moment, with Undo",
+            "body": "Logging a meal, nap, diaper, mood or any daily moment now shows what you logged, for whom and when (\"Meal logged for Liam and 3 others · 12:04\"), and whether the family sees it or it stays with staff. Tap Undo within a few seconds to take back an entry you just made. Several quick logs join one card instead of piling up.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Une carte plus claire quand vous consignez un moment, avec Annuler",
+            "body_fr": "Quand vous consignez un repas, une sieste, une couche, une humeur ou tout autre moment, la carte indique maintenant ce que vous avez noté, pour qui et à quelle heure (« Repas — noté pour Liam et 3 autres · 12 h 04 »), et si la famille le voit ou si cela reste au personnel. Touchez Annuler dans les secondes qui suivent pour retirer une entrée que vous venez de faire. Plusieurs entrées rapides se regroupent sur une seule carte au lieu de s'empiler.",
+            "title_es": "Una tarjeta más clara al registrar un momento, con Deshacer",
+            "body_es": "Al registrar una comida, una siesta, un pañal, el estado de ánimo o cualquier momento del día, la tarjeta ahora muestra qué registró, para quién y a qué hora (\"Comida — registrado para Liam y 3 más · 12:04\"), y si la familia lo ve o queda solo para el personal. Toque Deshacer en los segundos siguientes para quitar un registro que acaba de hacer. Varios registros seguidos se juntan en una sola tarjeta en lugar de amontonarse.",
+            "title_hi": "पल दर्ज करने पर साफ़ कार्ड, पूर्ववत करने के विकल्प के साथ",
+            "body_hi": "भोजन, झपकी, डायपर, मनोदशा या कोई भी दैनिक पल दर्ज करने पर अब कार्ड बताता है कि आपने क्या, किसके लिए और कब दर्ज किया (\"Liam और 3 अन्य के लिए भोजन दर्ज किया गया · 12:04\"), और परिवार इसे देखता है या यह केवल स्टाफ़ के लिए है। अभी की गई एंट्री वापस लेने के लिए कुछ सेकंड के अंदर पूर्ववत करें टैप करें। जल्दी-जल्दी किए गए कई लॉग एक ही कार्ड में जुड़ जाते हैं, ढेर नहीं लगता।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "📈",
             "title": "NPS survey setting moved to Settings",
             "body": "Turn the NPS survey on or off, and choose how often and who it asks, in Settings › Agency notifications › NPS survey. The NPS screen keeps the results and Send now, with a Survey settings link.",

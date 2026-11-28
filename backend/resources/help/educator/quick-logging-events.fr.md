@@ -20,6 +20,14 @@ L'écran **Journal quotidien** (sa bannière dit **Consigner un moment**) sert �
 
 > 💡 La fenêtre d'une couche a un bouton **🧴 Cream applied**, un biberon demande la quantité en **oz**, et **Medicine** demande le **Medicine and dose** (par exemple « Tylenol pour enfants 5 ml »).
 
+## Après avoir appuyé sur Log it
+
+Une carte apparaît (en haut à droite sur un ordinateur, juste au-dessus de la barre du bas sur un téléphone) et indique ce que vous avez consigné, pour qui et à quelle heure, par exemple **🍽️ Repas — noté pour Liam et 3 autres · 12 h 04**. Elle indique aussi qui le voit : **👪 Partagé avec la famille** pour les moments que la famille voit, ou **🔒 Personnel seulement** pour un départ ou une arrivée tardive, que seule votre direction examine. La même carte apparaît quand vous consignez depuis la liste des enfants de votre groupe ou la salle de sieste.
+
+- **Annuler** : touchez-le dans les secondes qui suivent pour retirer l'entrée du journal et de l'écran Aujourd'hui de la famille. La famille a peut-être déjà reçu la notification. L'annulation ne fonctionne que sur vos propres entrées des 10 dernières minutes.
+- Si vous consignez plusieurs choses rapidement, elles s'ajoutent à la même carte (**3 entrées notées**, **Tout annuler**) au lieu de s'empiler.
+- La carte se ferme seule après quelques secondes. Touchez **×**, ou glissez-la sur le côté sur un téléphone, pour la fermer plus tôt. La survoler ou la toucher la garde ouverte.
+
 ## Consigner pour tout le groupe d'un coup
 
 1. Dans **Enfant**, choisissez **Tous les enfants**.
@@ -53,7 +61,7 @@ Sous les tuiles, le journal du jour liste ce qui a été consigné pour l'enfant
 ??? J'ai choisi Tous les enfants et le message dit « No children are checked in right now, so there is nobody to log this for. » | Les entrées de groupe ne vont qu'aux enfants présents. Faites d'abord l'arrivée des enfants, ou choisissez un enfant.
 ??? Le message dit « That time is later today. A log records what has already happened ». | L'heure dans **When did it happen?** est dans le futur. Choisissez l'heure réelle.
 ??? Le message dit « Pick a child to log for — All children does not apply to diaper. » | Les couches, toilettes, médicaments et vêtements se notent pour un seul enfant. Choisissez l'enfant et touchez la tuile de nouveau.
-??? Je me suis trompé·e. Puis-je modifier ou supprimer l'entrée? | On ne peut pas modifier ni supprimer une entrée sur cet écran. Consignez la bonne entrée et prévenez votre direction, qui peut corriger le dossier.
+??? Je me suis trompé·e. Puis-je modifier ou supprimer l'entrée? | Tout de suite après, touchez **Annuler** sur la carte qui apparaît. Cela fonctionne quelques secondes, sur vos propres entrées des 10 dernières minutes. Ensuite, on ne peut plus modifier ni supprimer une entrée sur cet écran : consignez la bonne entrée et prévenez votre direction, qui peut corriger le dossier.
 ??? Medicine remplace-t-il le registre des médicaments? | Non. Il informe la famille de ce qui a été donné. Les doses d'un médicament autorisé se notent toujours dans **Médicaments** avec **+ Consigner une dose**.
 ??? Qui est averti quand je consigne quelque chose? | Les tuteurs de l'enfant reçoivent un avis dans l'application et une notification sur leur téléphone, sauf s'ils ont désactivé les moments quotidiens ou si votre agence a désactivé les moments instantanés. Plusieurs entrées en deux minutes sont regroupées en un seul avis.
 
