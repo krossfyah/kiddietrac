@@ -76,6 +76,9 @@ error_log
 # Generated JS bundle (parent-portal/build-bundle.php rebuilds it; cron self-heals).
 # Derived from the individual js/*.js files — do not commit the 3.6MB artifact.
 parent-portal/js/app.bundle.js
+# Script bundles tools/kt-bundle.cjs builds at deploy time (portal speed step 4, 2026-11-28). Build output.
+parent-portal/js/ktb-*.js
+parent-portal/.kt-bundle-off
 backend/public/walk-maps/
 backend/storage/app/geoip/
 parent-portal/training-media/

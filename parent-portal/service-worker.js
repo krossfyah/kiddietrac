@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = 'kt-20261128spd3';
+const CACHE = 'kt-20261128spd4';
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -49,6 +49,20 @@ self.addEventListener('activate', (e) => {
       // Delete old SHELL caches, but KEEP the persistent versioned-asset cache so
       // immutable ?v= assets survive the deploy (that's what makes launches fast).
       await Promise.all(keys.filter(function (k) { return k !== CACHE && k !== STATIC; }).map(function (k) { return caches.delete(k); }));
+    } catch (e) {}
+    /* OLD SCRIPT BUNDLES OUT (2026-11-28, portal speed step 4). dashboard.html loads its always-on scripts as a few
+       bundles, js/ktb-<n>-<hash>.js (backend/build/kt-bundle.cjs); a deploy that changes one file makes a new hash. STATIC keeps
+       every exact URL, so without this each deploy would leave ~1 MB of old bundles in it. Keep only the bundles the
+       dashboard.html just cached by install names; if that copy is missing, delete nothing. */
+    try {
+      var shell = await (await caches.open(CACHE)).match('/dashboard.html');
+      var html = shell ? await shell.text() : '';
+      var live = {}; (html.match(/\/js\/ktb-\d+-[0-9a-f]{12}\.js/g) || []).forEach(function (p) { live[p] = 1; });
+      if (Object.keys(live).length) {
+        var st = await caches.open(STATIC);
+        var reqs = await st.keys();
+        await Promise.all(reqs.filter(function (r) { var p = new URL(r.url).pathname; return /^\/js\/ktb-\d+-[0-9a-f]{12}\.js$/.test(p) && !live[p]; }).map(function (r) { return st.delete(r); }));
+      }
     } catch (e) {}
     /* claim() is the whole update mechanism. It hands every open page the new
        worker, which fires `controllerchange` in each of them — and kt-native-ui.js
