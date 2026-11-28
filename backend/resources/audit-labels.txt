@@ -297,6 +297,7 @@ post auth/set-password | Set their password from an invite
 post auth/social/app-exchange | Signed in with Google or Apple
 post billing/prorate-preview | Previewed a pro-rated fee
 post billing/schedule | Set a family's billing schedule
+post billing/schedule/preview | Checked a billing schedule's next invoice date
 delete billing/schedule/{familyId} | Turned off a family's billing schedule
 post billing/tuition-increases | Scheduled a fee increase
 post billing/tuition-increases/preview | Previewed who a tuition increase affects

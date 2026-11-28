@@ -6,65 +6,66 @@ roles: agency_admin, centre_director, platform_admin
 ---
 # Calendrier de facturation
 
-**Finances → Calendrier de facturation** indique à quelle fréquence une famille est facturée : chaque semaine, aux deux semaines ou chaque mois, et quel jour. Utilisez-le pour une famille qui a convenu de payer à la semaine ou aux deux semaines plutôt qu'une fois par mois, afin que tout le bureau voie son rythme et sa prochaine date de facturation.
+**Finances → Calendrier de facturation** facture une famille selon son propre rythme : chaque semaine, aux deux semaines ou chaque mois, le jour choisi. À chaque date, KiddieTrac émet lui-même la facture de frais de garde de la famille, l'envoie par courriel et, si la famille paie par prélèvement automatique, débite sa carte enregistrée.
 
-[[open: #billing-schedule | Ouvrir le calendrier de facturation]]
+[[open: #billing-schedule | Ouvrir Calendrier de facturation]]
 
-## Définir le calendrier d'une famille
+## Établir le calendrier d'une famille
 
-1. Dans le menu latéral, ouvrez **Finances** et choisissez **Calendrier de facturation**.
-2. Choisissez la famille par son nom dans la liste **Famille**. Son calendrier se charge tout seul (ou appuyez sur **Charger**).
-3. Choisissez la **Fréquence** : **Hebdomadaire**, **Aux deux semaines** ou **Mensuel**. Une famille sans calendrier affiche **Mensuel**.
-4. Pour l'hebdomadaire ou aux deux semaines, entrez le **Day of week (0=Sun … 6=Sat)**. Par exemple, 1 est le lundi et 5 le vendredi.
-5. Pour le mensuel, entrez le **Day of month (1-31)**, par exemple 1 pour le premier du mois.
-6. Appuyez sur **Enregistrer l’horaire**. Le formulaire se recharge et affiche **Prochain prélèvement** avec la date calculée à partir de vos choix.
+1. Dans le menu, ouvrez **Finances** et choisissez **Calendrier de facturation**.
+2. Choisissez la famille dans la liste **Famille**. Son calendrier se charge (ou appuyez sur **Charger**).
+3. Choisissez **Fréquence** : **Chaque semaine**, **Aux deux semaines** ou **Chaque mois**.
+4. Pour chaque semaine ou aux deux semaines, choisissez le jour dans **Facturer le**. Pour chaque mois, choisissez le jour dans **Facturer le jour**.
+5. Lisez la ligne **Prochaine facture** : la date de la première facture et la période couverte. Elle change avec les champs.
+6. Appuyez sur **Enregistrer le calendrier**. Le calendrier fonctionne dès lors.
 
-> 💡 Seul le champ qui correspond à la fréquence est utilisé : le jour de la semaine pour l'hebdomadaire et aux deux semaines, le jour du mois pour le mensuel. Vous pouvez laisser l'autre tel quel.
+### Ce que couvre et coûte chaque facture
 
-### Comment la prochaine date est calculée
+| Fréquence | La facture couvre | Montant par enfant | Échéance |
+|---|---|---|---|
+| Chaque semaine | les 7 jours à partir de la date de facture | frais mensuels × 12 ÷ 52 | 7 jours après |
+| Aux deux semaines | les 14 jours à partir de la date de facture | frais mensuels × 24 ÷ 52 | 7 jours après |
+| Chaque mois | le 1er, ce mois-là; un autre jour, le mois **suivant** (facturé d'avance) | les frais mensuels | 15 jours après |
 
-- **Hebdomadaire** : la prochaine fois que ce jour de la semaine revient.
-- **Aux deux semaines** : une semaine après la prochaine fois que ce jour revient ; la première date tombe donc dans 8 à 14 jours.
-- **Mensuel** : ce jour-là le mois prochain.
+Les subventions et rabais familiaux sont calculés comme dans la facturation mensuelle, au prorata de la période. Les jours 29 à 31 deviennent le dernier jour d'un mois plus court (par exemple le 31 devient le 30 avril). Toutes les dates suivent le fuseau horaire de votre agence.
 
-## Modifier ou désactiver un calendrier
+## Ce qui se passe à chaque date
 
-1. Choisissez la famille dans la liste **Famille**.
-2. Pour le modifier, choisissez une nouvelle **Fréquence** ou un nouveau jour et appuyez de nouveau sur **Enregistrer l’horaire**. La nouvelle date remplace l'ancienne.
-3. Pour l'arrêter, appuyez sur **Désactiver**. La famille revient à la facturation habituelle de votre agence.
+- La facture est émise avec une ligne de frais par enfant inscrit, et la famille reçoit une notification et le courriel de la facture.
+- Si la famille (ou un parent, en facturation partagée) a le prélèvement automatique, la carte est débitée tout de suite par votre traitement des paiements habituel, visible dans **Finances → Traitement des paiements**.
+- Rien n'est émis, et le registre dit pourquoi, quand : une autre facture couvre déjà ces dates (la facturation mensuelle ou celle du partenaire), votre centre est fermé toute la période (fermetures touchant la facturation), ou aucun enfant n'a de frais.
+- Une date n'est facturée qu'une fois. Si une date est passée depuis plus de 3 jours (panne), elle n'est pas facturée en retard; elle apparaît comme ignorée et vous pouvez émettre cette facture à la main au besoin.
 
-## Où le calendrier apparaît
+## Dernières exécutions
 
-Le calendrier actif d'une famille apparaît dans son **grand livre** (administration de l'agence : **Finances → Grands livres des comptes**), sous **À venir**, comme « Next weekly invoice » (ou biweekly / monthly) avec la date. Cette ligne n'a pas de montant et indique qu'aucune facture n'a encore été émise, car le montant n'est fixé qu'à l'émission. Voir [Grands livres des comptes](account-ledgers).
+Sous le formulaire, **Dernières exécutions** montre les 12 dernières dates : la date, la période, le résultat (**Facturée**, **Débitée**, **Débit refusé**, **Ignorée** ou **Échec**), le montant, le numéro de facture et une note.
 
-> ℹ️ Enregistrer un calendrier de facturation ne crée pas de facture et ne débite aucune carte à lui seul. Les factures viennent toujours de vos moyens habituels : la **Facturation en lot**, un **plan de paiement** ou une facture créée à la main. Le prélèvement automatique débite une carte enregistrée quand une facture arrive à échéance. Voir [Prélèvement automatique](autopay).
+Si une facture n'a pas pu être émise ou si la carte est refusée, les administrateurs d'agence et la direction du centre reçoivent une notification **La facturation planifiée demande votre attention**. Une carte refusée laisse la facture ouverte; les courriels habituels de paiement refusé sont envoyés.
 
-## Quel outil choisir?
+## Modifier ou arrêter un calendrier
 
-| Vous voulez… | Utilisez |
-|---|---|
-| Indiquer qu'une famille est facturée chaque semaine, aux deux semaines ou chaque mois | **Calendrier de facturation** (cet écran) |
-| Répartir un total convenu en paiements datés, chacun avec sa facture | [Plans de paiement](payment-plans) |
-| Choisir la carte ou le compte avec lequel une famille paie | Le portefeuille de la famille et le [Prélèvement automatique](autopay) |
-| Définir la fréquence par défaut de l'agence pour les nouvelles factures et grilles de frais | **Paramètres → Facturation → Valeurs par défaut et frais** ([Configuration et paramètres de facturation](billing-setup)) |
+1. Choisissez la famille dans la liste.
+2. Pour modifier, choisissez une autre fréquence ou un autre jour et appuyez sur **Enregistrer le calendrier**. La prochaine date est recalculée à partir d'aujourd'hui.
+3. Pour arrêter, appuyez sur **Arrêter le calendrier** et confirmez. Plus aucune facture n'est émise; les factures déjà émises restent. La famille revient à votre facturation mensuelle habituelle.
+
+> ⚠️ Un calendrier enregistré avant l'automatisation affiche **Pas encore actif**. Il ne démarre que lorsque vous appuyez de nouveau sur **Enregistrer le calendrier**, pour que personne ne soit facturé par surprise.
 
 ## Qui peut faire quoi
 
-- **Administration de l'agence** et **administration de la plateforme** : définir, modifier et désactiver un calendrier pour n'importe quelle famille de l'agence (la plateforme, pour l'agence choisie dans le sélecteur de la barre du haut).
-- **Directions de centre** : la même chose, pour les familles de leurs propres centres. Une famille d'un autre centre ne peut pas être ouverte.
-- **Éducatrices** et **parents** : aucun accès à cet écran.
+- **Administrateurs d'agence** et **de plateforme** : établir, modifier et arrêter un calendrier pour toute famille de l'agence.
+- **Direction de centre** : la même chose pour les familles de ses propres centres.
+- **Personnel éducateur** et **parents** : pas d'accès à cet écran.
 
 ## Questions fréquentes
 
-??? La liste Famille indique « Could not load families ». | La liste n'a pas pu être récupérée. Rechargez la page ; l'administration de la plateforme doit d'abord choisir une agence dans le sélecteur de la barre du haut.
-??? J'ai appuyé sur Charger et je vois « Choose a family first. » | Choisissez une famille dans la liste Famille, puis appuyez sur Charger.
-??? Rien ne semble se passer quand j'appuie sur Enregistrer l’horaire. | Le formulaire se recharge sur place. Regardez la ligne Prochain prélèvement sous les champs : elle affiche la nouvelle date.
-??? La famille est-elle avisée du changement? | Non. Cet écran n'envoie ni courriel, ni texto, ni notification. Avisez la famille vous-même si son jour de facturation change.
-??? Est-ce que cela change le montant que paie la famille? | Non. Cela indique quand elle est facturée, pas combien. Les montants viennent de sa grille de frais et de ses factures.
-??? Pourquoi le grand livre n'affiche-t-il aucun montant pour la prochaine date? | Le montant n'est fixé qu'à l'émission de la facture ; le grand livre nomme donc la date et laisse le montant vide.
+??? Dois-je encore lancer la facturation mensuelle pour cette famille? | Non. La facturation mensuelle ignore une famille dont le mois est déjà couvert, et le calendrier ignore une période déjà facturée : une famille n'est jamais facturée deux fois.
+??? Le statut indique « Pas encore actif ». | Le calendrier date d'avant l'automatisation. Appuyez sur **Enregistrer le calendrier** pour le démarrer.
+??? Une exécution indique « Déjà facturé pour cette période ». | Une autre facture couvre déjà ces dates. Rien de plus n'a été émis.
+??? La famille est-elle avisée? | Oui, par notification et courriel, comme pour toute facture. Les agences de test n'envoient rien.
+??? Pourquoi la carte n'a-t-elle pas été débitée? | Pas de prélèvement automatique, fonction absente de votre forfait, ou aucun processeur de paiement connecté. La note l'indique; la facture reste ouverte.
 
-## Écrans connexes
+## Écrans liés
 
-[[open: #payment-plans | Plans de paiement]] [[open: #external-billing | Comptabilité]]
+[[open: #payment-plans | Échéanciers de paiement]] [[open: #payment-run | Traitement des paiements]] [[open: #external-billing | Comptabilité]]
 
-Voir aussi : [Plans de paiement](payment-plans) · [Prélèvement automatique](autopay) · [Grands livres des comptes](account-ledgers)
+Voir aussi : [Échéanciers de paiement](payment-plans) · [Prélèvement automatique](autopay) · [Grands livres](account-ledgers)

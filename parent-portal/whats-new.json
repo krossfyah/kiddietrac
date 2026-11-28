@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-28",
+            "icon": "🧮",
+            "title": "Billing schedules now raise invoices on their dates",
+            "body": "A family's weekly, every-two-weeks or monthly billing schedule now raises their invoice on its day by itself, emails it, and charges autopay families straight away. The form shows the next invoice date and what it covers, and Recent runs lists each date's result. Schedules saved before today start when you press Save schedule again.",
+            "roles": [
+                "agency_admin",
+                "centre_director",
+                "platform_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-28",
             "icon": "🚪",
             "title": "Tour emails to families",
             "body": "When you confirm, move or cancel a tour on the Tours screen, the family can now get an email about it (you choose each time). Admins can also turn on a thank-you email after a completed tour.",

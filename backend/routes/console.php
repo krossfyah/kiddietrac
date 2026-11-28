@@ -272,6 +272,10 @@ Schedule::command('invoices:apply-late-fees')
 // v22p51 — append these inside the closure in routes/console.php
 
 Schedule::command('invoices:autopay-charge')->dailyAt('03:00');
+/* Billing schedules (2026-11-28, App\Support\BillingSchedules): each family's scheduled invoice is raised on its date
+   (agency timezone) and charged by autopay where the family uses it. Hourly for each agency's own day; every family +
+   period is claimed once (billing_schedule_runs UNIQUE), so an hour with nothing due does nothing. */
+Schedule::command('billing:schedules')->hourlyAt(23)->withoutOverlapping(30)->onOneServer();
 /* Tuition increases (2026-11-28, App\Support\TuitionIncreases): families told on the notice day, new rates written on
    the effective date. Hourly because each agency's day starts in its own timezone; every step is recorded, so a
    run with nothing due does nothing. */

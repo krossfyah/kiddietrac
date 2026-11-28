@@ -6,65 +6,66 @@ roles: agency_admin, centre_director, platform_admin
 ---
 # Calendario de facturación
 
-**Finanzas → Calendario de facturación** registra con qué frecuencia se factura a una familia: cada semana, cada dos semanas o cada mes, y qué día. Úselo para una familia que acordó pagar por semana o por quincena en lugar de una vez al mes, para que toda la oficina vea su ritmo y su próxima fecha de facturación.
+**Finanzas → Calendario de facturación** factura a una familia a su propio ritmo: cada semana, cada dos semanas o cada mes, el día que elija. En cada fecha KiddieTrac emite sola la factura de colegiatura de la familia, la envía por correo y, si la familia paga con cobro automático, cobra su tarjeta guardada.
 
 [[open: #billing-schedule | Abrir Calendario de facturación]]
 
 ## Definir el calendario de una familia
 
-1. En el menú lateral, abra **Finanzas** y elija **Calendario de facturación**.
-2. Elija la familia por su nombre en la lista **Familia**. Su calendario se carga solo (o presione **Cargar**).
-3. Elija la **Frecuencia**: **Semanal**, **Quincenal** o **Mensual**. Una familia sin calendario muestra **Mensual**.
-4. Para semanal o quincenal, ingrese el **Day of week (0=Sun … 6=Sat)**. Por ejemplo, 1 es lunes y 5 es viernes.
-5. Para mensual, ingrese el **Day of month (1-31)**, por ejemplo 1 para el primer día del mes.
-6. Presione **Guardar horario**. El formulario se recarga y muestra **Próximo cargo** con la fecha calculada según lo que eligió.
+1. En el menú, abra **Finanzas** y elija **Calendario de facturación**.
+2. Elija la familia en la lista **Familia**. Su calendario se carga (o pulse **Cargar**).
+3. Elija **Frecuencia**: **Semanal**, **Cada dos semanas** o **Mensual**.
+4. Para semanal o cada dos semanas, elija el día en **Facturar el**. Para mensual, elija el día en **Facturar el día**.
+5. Lea la línea **Próxima factura**: la fecha de la primera factura y el periodo que cubre. Cambia con los campos.
+6. Pulse **Guardar calendario**. Desde entonces el calendario funciona.
 
-> 💡 Solo se usa el campo que corresponde a la frecuencia: el día de la semana para semanal y quincenal, el día del mes para mensual. Puede dejar el otro como está.
+### Qué cubre y cuesta cada factura
 
-### Cómo se calcula la próxima fecha
+| Frecuencia | La factura cubre | Monto por niño | Vence |
+|---|---|---|---|
+| Semanal | los 7 días desde la fecha de la factura | colegiatura mensual × 12 ÷ 52 | 7 días después |
+| Cada dos semanas | los 14 días desde la fecha de la factura | colegiatura mensual × 24 ÷ 52 | 7 días después |
+| Mensual | el día 1, ese mes; otro día, el mes **siguiente** (por adelantado) | la colegiatura mensual | 15 días después |
 
-- **Semanal**: la próxima vez que llegue ese día de la semana.
-- **Quincenal**: una semana después de la próxima vez que llegue ese día, así que la primera fecha cae dentro de 8 a 14 días.
-- **Mensual**: ese día del mes siguiente.
+Los subsidios y descuentos por hermanos se calculan como en la facturación mensual, proporcionales al periodo. Los días 29 a 31 usan el último día de un mes más corto (por ejemplo el 31 pasa a ser el 30 de abril). Todas las fechas siguen la zona horaria de su agencia.
 
-## Cambiar o desactivar un calendario
+## Qué pasa en cada fecha
 
-1. Elija la familia en la lista **Familia**.
-2. Para cambiarlo, elija otra **Frecuencia** u otro día y presione de nuevo **Guardar horario**. La nueva fecha reemplaza la anterior.
-3. Para detenerlo, presione **Desactivar**. La familia vuelve a la facturación habitual de su agencia.
+- Se emite la factura con una línea de colegiatura por niño inscrito, y la familia recibe una notificación y el correo de la factura.
+- Si la familia (o un tutor, en facturación dividida) tiene cobro automático, la tarjeta se cobra de inmediato por su proceso de pagos habitual, visible en **Finanzas → Proceso de pagos**.
+- No se emite nada, y el registro dice por qué, cuando: otra factura ya cubre esas fechas (la facturación mensual o la del socio), su centro está cerrado todo el periodo (cierres que afectan la facturación), o ningún niño tiene colegiatura.
+- Una fecha se factura una sola vez. Si una fecha pasó hace más de 3 días (falla del sistema), no se factura tarde; aparece como omitida y puede emitir esa factura a mano si hace falta.
 
-## Dónde aparece el calendario
+## Ejecuciones recientes
 
-El calendario activo de una familia aparece en su **libro de cuentas** (administradores de la agencia: **Finanzas → Libros de cuentas**), en **Próximamente**, como "Next weekly invoice" (o biweekly / monthly) con la fecha. Esa fila no tiene monto e indica que todavía no se emitió factura, porque el monto solo se decide al emitirla. Vea [Libros de cuentas](account-ledgers).
+Bajo el formulario, **Ejecuciones recientes** muestra las últimas 12 fechas: la fecha, el periodo, el resultado (**Facturada**, **Cobrada**, **Cobro rechazado**, **Omitida** o **Falló**), el monto, el número de factura y una nota.
 
-> ℹ️ Guardar un calendario de facturación no emite una factura ni cobra una tarjeta por sí solo. Las facturas siguen saliendo por sus vías habituales: la **Facturación masiva**, un **plan de pago** o una factura creada a mano. El pago automático cobra una tarjeta guardada cuando una factura vence. Vea [Pago automático](autopay).
+Si no se pudo emitir una factura o se rechazó la tarjeta, los administradores de agencia y la dirección del centro reciben la notificación **La facturación programada necesita atención**. Una tarjeta rechazada deja la factura abierta; se envían los correos habituales de pago rechazado.
 
-## ¿Qué herramienta necesito?
+## Cambiar o detener un calendario
 
-| Usted quiere… | Use |
-|---|---|
-| Registrar que una familia se factura cada semana, cada dos semanas o cada mes | **Calendario de facturación** (esta pantalla) |
-| Dividir un total acordado en pagos con fecha, cada uno con su factura | [Planes de pago](payment-plans) |
-| Elegir con qué tarjeta o cuenta paga una familia | La billetera de la familia y el [Pago automático](autopay) |
-| Fijar la frecuencia predeterminada de la agencia para nuevas facturas y planes de tarifas | **Ajustes → Facturación → Valores predeterminados y cargos** ([Configuración y ajustes de facturación](billing-setup)) |
+1. Elija la familia en la lista.
+2. Para cambiarlo, elija otra frecuencia o día y pulse **Guardar calendario**. La próxima fecha se calcula de nuevo desde hoy.
+3. Para detenerlo, pulse **Detener calendario** y confirme. No se emiten más facturas; las ya emitidas se quedan. La familia vuelve a su facturación mensual habitual.
+
+> ⚠️ Un calendario guardado antes de la automatización muestra **Aún no activo**. Solo empieza cuando vuelve a pulsar **Guardar calendario**, para que nadie reciba un cobro por sorpresa.
 
 ## Quién puede hacer qué
 
-- **Administradores de la agencia** y **administradores de la plataforma**: definir, cambiar y desactivar el calendario de cualquier familia de la agencia (la plataforma, para la agencia elegida en el selector de la barra superior).
-- **Directores de centro**: lo mismo, para las familias de sus propios centros. No se puede abrir una familia de otro centro.
-- **Educadores** y **padres**: sin acceso a esta pantalla.
+- **Administradores de agencia** y **de plataforma**: definir, cambiar y detener un calendario para cualquier familia de la agencia.
+- **Dirección de centro**: lo mismo, para las familias de sus propios centros.
+- **Personal educador** y **padres**: sin acceso a esta pantalla.
 
 ## Preguntas frecuentes
 
-??? La lista Familia dice "Could not load families". | No se pudo obtener la lista. Recargue la página; un administrador de la plataforma debe elegir primero una agencia en el selector de la barra superior.
-??? Presioné Cargar y veo "Choose a family first." | Elija una familia en la lista Familia y luego presione Cargar.
-??? No pareció pasar nada al presionar Guardar horario. | El formulario se recarga en el mismo lugar. Mire la línea Próximo cargo debajo de los campos: muestra la nueva fecha.
-??? ¿Se avisa a la familia del cambio? | No. Esta pantalla no envía correo, mensaje de texto ni notificación. Avise usted a la familia si cambia su día de facturación.
-??? ¿Esto cambia el monto que paga la familia? | No. Registra cuándo se le factura, no cuánto. Los montos vienen de su plan de tarifas y de sus facturas.
-??? ¿Por qué el libro no muestra monto para la próxima fecha? | El monto solo se fija cuando se emite la factura, así que el libro indica la fecha y deja el monto en blanco.
+??? ¿Sigo ejecutando la facturación mensual para esta familia? | No hace falta. La facturación mensual omite a una familia cuyo mes ya está cubierto, y el calendario omite un periodo ya facturado: nunca se factura dos veces.
+??? El estado dice «Aún no activo». | El calendario es de antes de la automatización. Pulse **Guardar calendario** para iniciarlo.
+??? Una ejecución dice «Ya facturado para este periodo». | Otra factura ya cubre esas fechas. No se emitió nada más.
+??? ¿Se avisa a la familia? | Sí, por notificación y correo, como cualquier factura. Las agencias de prueba no envían nada.
+??? ¿Por qué no se cobró la tarjeta? | No hay cobro automático, no está en su plan, o no hay procesador de pagos conectado. La nota lo indica; la factura queda abierta.
 
 ## Pantallas relacionadas
 
-[[open: #payment-plans | Planes de pago]] [[open: #external-billing | Contabilidad]]
+[[open: #payment-plans | Calendarios de pago]] [[open: #payment-run | Proceso de pagos]] [[open: #external-billing | Contabilidad]]
 
-Vea también: [Planes de pago](payment-plans) · [Pago automático](autopay) · [Libros de cuentas](account-ledgers)
+Vea también: [Calendarios de pago](payment-plans) · [Cobro automático](autopay) · [Libros de cuentas](account-ledgers)

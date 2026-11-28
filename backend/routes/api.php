@@ -3973,6 +3973,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::get   ('/billing/schedule/{familyId}',   [\App\Http\Controllers\Api\BillingScheduleController::class, 'get']);
         Route::post  ('/billing/schedule',              [\App\Http\Controllers\Api\BillingScheduleController::class, 'set']);
+        // The next invoice date for unsaved settings (2026-11-28, App\Support\BillingSchedules).
+        Route::post  ('/billing/schedule/preview',      [\App\Http\Controllers\Api\BillingScheduleController::class, 'preview']);
         Route::delete('/billing/schedule/{familyId}',   [\App\Http\Controllers\Api\BillingScheduleController::class, 'disable']);
     });
 

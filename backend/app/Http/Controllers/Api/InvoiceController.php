@@ -2254,58 +2254,13 @@ final class InvoiceController extends Controller
         $issueDate = Carbon::createFromDate($year, $month, 1);
         $dueDate = $issueDate->copy()->addDays(15);
 
-        // v22p9: load sibling-discount tiers from agency settings.
+        // v22p9: sibling-discount tiers from agency settings. The enrolment query and the per-family invoice now live in
+        // App\Support\FamilyInvoice (2026-11-28), shared with the automated billing schedules.
         $agencyId = DB::table("centres")->where("id", $centreId)->value("agency_id");
-        $siblingTiers = [];
-        if ($agencyId) {
-            $rawSettings = DB::table("agencies")->where("id", $agencyId)->value("settings");
-            $settings = $rawSettings ? json_decode($rawSettings, true) : [];
-            $siblingTiers = collect($settings["sibling_discounts"] ?? [])
-                ->sortBy("rank")
-                ->values()
-                ->all();
-        }
+        $siblingTiers = \App\Support\FamilyInvoice::siblingTiers($agencyId ? (int) $agencyId : null);
 
-
-        // Get all enrolled children at this centre with their families
-        $enrollments = DB::table('enrollments')
-            ->join('children', 'children.id', '=', 'enrollments.child_id')
-            ->join('families', 'families.id', '=', 'children.family_id')
-            ->leftJoin('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('families.centre_id', $centreId)
-            ->whereNull('enrollments.end_date')
-            ->where('children.enrollment_status', 'enrolled')
-            ->select(
-                'families.id as family_id',
-                'children.id as child_id',
-                'children.first_name',
-                'children.last_name',
-                'enrollments.monthly_fee',
-                'enrollments.schedule',
-                'rooms.name as room_name',
-            )
-            ->get()
-            /* ONE LINE PER CHILD, not per enrolment.
-               A child with a split week holds one open enrolment per provider — Mon-Thu
-               with one, Friday with another — and this query iterates ENROLMENTS, so it
-               would put that child on the invoice twice and bill the family double. The
-               fee is for the child's care, and splitting who delivers it does not double
-               what it costs.
-
-               Kept per child: the enrolment covering the most days, which is their main
-               provider and the fee the family agreed. Real money, so it fails toward
-               charging once. (2026-08-27) */
-            ->groupBy('child_id')
-            ->map(function ($rows) {
-                if ($rows->count() === 1) {
-                    return $rows->first();
-                }
-                return $rows->sortByDesc(function ($r) {
-                    return count(\App\Support\CareSchedule::daysOf($r->schedule ?? null));
-                })->first();
-            })
-            ->values()
-            ->groupBy('family_id');
+        // Get all enrolled children at this centre with their families (one line per child)
+        $enrollments = \App\Support\FamilyInvoice::enrollments(fn ($q) => $q->where('families.centre_id', $centreId));
 
         $generated = 0;
         $skipped = 0;
@@ -2346,170 +2301,11 @@ final class InvoiceController extends Controller
 
                $emailQueue by reference because it is filled here and read after the
                transaction commits. (2026-09-10) */
-            DB::transaction(function () use ($familyId, $childEnrollments, $centreId, $issueDate, $dueDate, $siblingTiers, &$emailQueue, &$generated) {
-                $subtotal = 0;
-                $subsidyTotal = 0;
-                $lineItems = [];
-
-                /* SUBSIDIES (2026-09-29): worked out ONCE PER CHILD by SubsidyAmount
-                   (monthly amount, or daily amount x scheduled care days this month),
-                   capped at that child's tuition, and spread across the child's lines.
-                   This looped per ENROLMENT, so a child split across two rooms or
-                   providers had the subsidy taken off twice, and a subsidy larger than
-                   the tuition drove the invoice negative. */
-                $childFee = [];
-                foreach ($childEnrollments as $en) {
-                    $childFee[$en->child_id] = ($childFee[$en->child_id] ?? 0) + (float) $en->monthly_fee;
-                }
-                $subsidyLeft = [];
-                $subsidyLabel = [];
-                foreach (array_keys($childFee) as $cid) {
-                    $sa = \App\Support\SubsidyAmount::forChildMonth((int) $cid, $issueDate->toDateString(), $issueDate->copy()->startOfMonth()->toDateString());
-                    $subsidyLeft[$cid] = $sa ? min($sa['amount'], $childFee[$cid]) : 0.0;
-                    $subsidyLabel[$cid] = $sa ? $sa['label'] : null;
-                }
-
-                foreach ($childEnrollments as $en) {
-                    $subtotal += (float) $en->monthly_fee;
-
-                    $subsidyAmount = round(min($subsidyLeft[$en->child_id] ?? 0, (float) $en->monthly_fee), 2);
-                    $subsidyLeft[$en->child_id] = ($subsidyLeft[$en->child_id] ?? 0) - $subsidyAmount;
-                    $subsidyTotal += $subsidyAmount;
-
-                    $lineItems[] = [
-                        'description' => "Tuition — {$en->first_name} {$en->last_name} ({$en->room_name})",
-                        'amount' => $en->monthly_fee,
-                        'subsidy' => $subsidyAmount,
-                        'subsidy_label' => $subsidyAmount > 0 ? ($subsidyLabel[$en->child_id] ?? 'Subsidy') : null,
-                        'net' => $en->monthly_fee - $subsidyAmount,
-                    ];
-                }
-
-                // v22p9: sibling discounts — apply per child by enrollment rank.
-                $discountTotal = 0.0;
-                $discountLines = [];
-                if (! empty($siblingTiers) && $childEnrollments->count() > 1) {
-                    // Rank by enrollment start_date asc (oldest = rank 1, no discount)
-                    $ranked = DB::table("enrollments")
-                        ->join("children", "children.id", "=", "enrollments.child_id")
-                        ->where("children.family_id", $familyId)
-                        ->whereNull("enrollments.end_date")
-                        ->orderBy("enrollments.start_date")
-                        ->select("children.id as child_id", "children.first_name", "enrollments.monthly_fee")
-                        ->get();
-                    $pos = 1;
-                    foreach ($ranked as $r) {
-                        $rank = $pos++;
-                        if ($rank <= 1) continue;
-                        // Pick the highest matching tier (rank >= tier.rank)
-                        $appliedTier = null;
-                        foreach ($siblingTiers as $t) {
-                            if ((int) $t["rank"] <= $rank) $appliedTier = $t;
-                        }
-                        if (! $appliedTier) continue;
-                        $pct = (float) $appliedTier["percent"];
-                        $disc = round((float) $r->monthly_fee * ($pct / 100), 2);
-                        $discountTotal += $disc;
-                        $discountLines[] = [
-                            "child_id" => $r->child_id,
-                            "description" => "Sibling discount (".$pct."%) — ".$r->first_name,
-                            "amount" => -$disc,
-                        ];
-                    }
-                }
-
-                $total = $subtotal - $subsidyTotal - $discountTotal;
-                /* Through the agency's numbering convention. This one carried NO
-                   sequence at all, so two batches for the same family in the same month
-                   produced the same string twice; InvoiceNumber::deduplicate() closes
-                   that even on a format without {SEQ}. */
-                $invoiceNumber = \App\Services\InvoiceNumber::next($numberingAgencyId, [
-                    'date' => now(), 'family_id' => $familyId,
-                ]);
-
-                // v22p42: invoices schema requires period_start + period_end NOT NULL.
-                // Pre-existing bug — generateBatch never set these so the first call
-                // 500'd with 'Field period_start doesn't have a default value'. Derive
-                // them from the issue date (= first of the billed month).
-                $periodStart = $issueDate->copy()->startOfMonth();
-                $periodEnd   = $issueDate->copy()->endOfMonth();
-
-                $invoiceId = DB::table('invoices')->insertGetId([
-                    'centre_id' => $centreId,
-                    'family_id' => $familyId,
-                    'invoice_number' => $invoiceNumber,
-                    'period_start' => $periodStart,
-                    'period_end' => $periodEnd,
-                    'issued_at' => $issueDate,
-                    'due_at' => $dueDate,
-                    'subtotal' => $subtotal,
-                    'subsidy_amount' => $subsidyTotal,
-                    'total' => $total,
-                    'balance_due' => $total,
-                    'status' => 'sent',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // v22p42: actual invoice_lines schema uses line_type +
-                // unit_amount + amount (no subsidy_amount/net_amount columns
-                // on the line itself — those aggregate up to the invoice).
-                // Emit two lines per family: gross tuition, and a separate
-                // subsidy adjustment row (negative-sign described).
-                foreach ($lineItems as $line) {
-                    DB::table('invoice_lines')->insert([
-                        'invoice_id' => $invoiceId,
-                        'description' => $line['description'],
-                        'line_type'   => 'tuition',
-                        'quantity'    => 1,
-                        'unit_amount' => $line['amount'],
-                        'amount'      => $line['amount'],
-                    ]);
-                    if (!empty($line['subsidy']) && (float) $line['subsidy'] > 0) {
-                        DB::table('invoice_lines')->insert([
-                            'invoice_id' => $invoiceId,
-                            'description' => 'CWELCC subsidy — ' . $line['description'],
-                            'line_type'   => 'subsidy',
-                            'quantity'    => 1,
-                            'unit_amount' => -1 * abs((float) $line['subsidy']),
-                            'amount'      => -1 * abs((float) $line['subsidy']),
-                        ]);
-                    }
-                }
-
-                // v22p9: also insert each sibling-discount line.
-                foreach ($discountLines as $dl) {
-                    DB::table("invoice_lines")->insert([
-                        "invoice_id" => $invoiceId,
-                        "child_id" => $dl["child_id"],
-                        "description" => $dl["description"],
-                        "line_type" => "adjustment",
-                        "quantity" => 1,
-                        "unit_amount" => $dl["amount"],
-                        "amount" => $dl["amount"],
-                    ]);
-                }
-
-                // Notify each guardian of the family that a new invoice is ready
-                // (drives the parent app's Billing badge + notifications inbox).
-                $invTitle = 'New invoice: ' . $invoiceNumber;
-                $invBody = 'Your invoice for $' . number_format($total, 2) . ' is ready. Due ' . $dueDate->format('M j, Y') . '.';
-                if (\App\Support\SplitInvoiceCopy::notifyIssued((int) $invoiceId) === 0)
-                foreach (DB::table('guardians')->where('family_id', $familyId)->pluck('user_id') as $gid) {
-                    \App\Support\Notify::write([
-                        'user_id' => $gid,
-                        'type' => 'invoice',
-                        'title' => $invTitle,
-                        'body' => $invBody,
-                        'data' => json_encode(['link' => '#billing', 'invoice_id' => $invoiceId]),
-                        'created_at' => now(),
-                    ]);
-                    try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, $invTitle, $invBody, '#billing'); } catch (\Throwable $e) {}
-                }
-
+            DB::transaction(function () use ($familyId, $childEnrollments, $centreId, $numberingAgencyId, $issueDate, $dueDate, $siblingTiers, &$emailQueue, &$generated) {
+                $invoiceId = \App\Support\FamilyInvoice::raise((int) $familyId, (int) $centreId, $numberingAgencyId, $childEnrollments,
+                    $issueDate, $dueDate, $siblingTiers, $issueDate->copy()->startOfMonth(), $issueDate->copy()->endOfMonth());
                 // …and email it, so a family without the app still hears about it.
                 $emailQueue[] = (int) $invoiceId;
-
                 $generated++;
             });
         }
@@ -2521,7 +2317,7 @@ final class InvoiceController extends Controller
         $emailed = 0;
         foreach ($emailQueue as $invId) {
             try {
-                if ($this->emailInvoiceToFamily($invId)) {
+                if (self::emailInvoiceToFamily($invId)) {
                     $emailed++;
                 }
             } catch (\Throwable $e) {
@@ -2548,7 +2344,8 @@ final class InvoiceController extends Controller
      * forwarded, quoted, and left open on shared screens, and a URL that can settle
      * somebody's invoice has no business living in one.
      */
-    private function emailInvoiceToFamily(int $invoiceId): bool
+    /* public static (2026-11-28): the automated billing schedules email their invoices the same way. */
+    public static function emailInvoiceToFamily(int $invoiceId): bool
     {
         $inv = DB::table('invoices')->where('id', $invoiceId)->first();
         if (! $inv) {

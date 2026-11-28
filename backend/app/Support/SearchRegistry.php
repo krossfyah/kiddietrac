@@ -241,6 +241,7 @@ final class SearchRegistry
         'payment_plans' => 'a plan; each instalment is issued as an invoice, which is searchable',
         'payment_plan_installments' => 'issued as invoices, which are searchable',
         'billing_schedules' => 'a schedule; the invoices it raises are searchable',
+        'billing_schedule_runs' => 'the log of each scheduled billing date; shown on the family\'s Billing schedule, and the invoices it raises are searchable',
         'tuition_increase_items' => 'what a tuition increase told each family and changed (old and new amount); shown in the increase\'s View popup, never searched',
         'tax_receipts' => 'annual receipts generated per family and year from the payments (which are searchable); opened from the family\'s billing',
         'etransfer_requests' => 'a request against an invoice; the invoice is searchable and shows it',
